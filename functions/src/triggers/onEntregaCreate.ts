@@ -3,25 +3,42 @@ import * as admin from 'firebase-admin';
 
 export const onEntregaCreate = functions.firestore
   .document('entregas/{entregaId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap) => {
     const entrega = snap.data();
     const db = admin.firestore();
     
     try {
-      // Update client balance if not paid
-      if (!entrega.pagado) {
-        const clienteRef = db.collection('clientes').doc(entrega.clienteId);
-        const clienteDoc = await clienteRef.get();
+      // Update client with last delivery data
+      const clienteRef = db.collection('clientes').doc(entrega.clienteId);
+      const clienteDoc = await clienteRef.get();
+      
+      if (clienteDoc.exists) {
+        const clienteData = clienteDoc.data();
+        let nuevoSaldo = clienteData?.saldoPendiente || 0;
         
-        if (clienteDoc.exists) {
-          const clienteData = clienteDoc.data();
-          const newBalance = (clienteData?.saldoPendiente || 0) + entrega.total;
-          
-          await clienteRef.update({
-            saldoPendiente: newBalance,
-            updatedAt: new Date()
-          });
+        // Handle balance logic
+        if (entrega.pagado) {
+          // If paid, reduce previous pending balance
+          nuevoSaldo = Math.max(0, nuevoSaldo - entrega.total);
+        } else {
+          // If not paid, add to pending balance
+          nuevoSaldo = nuevoSaldo + entrega.total;
         }
+        
+        // Update client with all last delivery data
+        await clienteRef.update({
+          // Last delivery data
+          bidones10: entrega.bidones10 || 0,
+          bidones20: entrega.bidones20 || 0,
+          sodas: entrega.sodas || 0,
+          envasesDevueltos: entrega.envasesDevueltos || 0,
+          total: entrega.total || 0,
+          pagado: entrega.pagado || false,
+          // Updated balance
+          saldoPendiente: nuevoSaldo,
+          // Update timestamp
+          updatedAt: new Date()
+        });
       }
       
       // Update vehicle inventory

@@ -6,7 +6,7 @@ import { Cliente } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 import { useNavigate, useParams } from 'react-router-dom';
 import { LoadingSpinner } from '../common/LoadingSpinner';
-import { User, Phone, Home, Clock, FileText } from 'lucide-react';
+import { User, Phone, Home, Clock, FileText, Package, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { FirebaseError } from 'firebase/app';
 
@@ -14,14 +14,15 @@ const schema = yup.object().shape({
   nombre: yup.string().required('Nombre requerido'),
   direccion: yup.string().required('Dirección requerida'),
   telefono: yup.string().required('Teléfono requerido'),
-  frecuenciaVisita: yup.string().oneOf(['diaria', 'semanal', 'bisemanal', 'mensual']).required('Frecuencia requerida'),
-  diaVisita: yup.string().oneOf(['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'])
-    .when('frecuenciaVisita', {
-      is: (val: string) => val !== 'diaria',
-      then: (schema) => schema.required('Día de visita requerido para frecuencias no diarias'),
-      otherwise: (schema) => schema.nullable(),
-    }),
+  frecuenciaVisita: yup.string().oneOf(['semanal', 'quincenal', 'mensual']).required('Frecuencia requerida'),
+  diaVisita: yup.string().oneOf(['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']).required('Día de visita requerido'),
   observaciones: yup.string(),
+  bidones10: yup.number().min(0, 'Cantidad inválida'),
+  bidones20: yup.number().min(0, 'Cantidad inválida'),
+  sodas: yup.number().min(0, 'Cantidad inválida'),
+  envasesDevueltos: yup.number().min(0, 'Cantidad inválida'),
+  total: yup.number().min(0, 'Importe inválido'),
+  pagado: yup.boolean(),
 });
 
 type ClienteFormData = yup.InferType<typeof schema>;
@@ -38,27 +39,64 @@ export const ClienteForm: React.FC = () => {
     handleSubmit,
     formState: { errors },
     setValue,
-    watch,
   } = useForm<ClienteFormData>({
     resolver: yupResolver(schema),
+    defaultValues: {
+      bidones10: 0,
+      bidones20: 0,
+      sodas: 0,
+      envasesDevueltos: 0,
+      total: 0,
+      pagado: false,
+    },
   });
 
   const loadCliente = useCallback(async (clienteId: string) => {
     setLoadingData(true);
     try {
+      console.log('🔄 Cargando cliente:', clienteId);
+      
+      // 1. Cargar datos básicos del cliente desde la colección 'clientes'
       const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
+      console.log('📊 Cliente cargado:', cliente?.nombre);
+      
+      // 2. Cargar la última entrega real desde la colección 'entregas'
+      const ultimaEntrega = await FirebaseService.getUltimaEntregaCliente(clienteId);
+      console.log('📦 Última entrega encontrada:', ultimaEntrega ? '✅ Sí' : '❌ No');
+      
       if (cliente) {
+        // Datos básicos del cliente
         setValue('nombre', cliente.nombre);
         setValue('direccion', cliente.direccion);
         setValue('telefono', cliente.telefono);
         setValue('frecuenciaVisita', cliente.frecuenciaVisita);
+        setValue('diaVisita', cliente.diaVisita);
         setValue('observaciones', cliente.observaciones || '');
-        if (cliente.diaVisita) {
-          setValue('diaVisita', cliente.diaVisita);
+        
+        // Datos de la última entrega real (si existe) o valores por defecto
+        if (ultimaEntrega) {
+          console.log('📦 Usando datos de última entrega');
+          setValue('bidones10', ultimaEntrega.bidones10);
+          setValue('bidones20', ultimaEntrega.bidones20);
+          setValue('sodas', ultimaEntrega.sodas);
+          setValue('envasesDevueltos', ultimaEntrega.envasesDevueltos);
+          setValue('total', ultimaEntrega.total);
+          setValue('pagado', ultimaEntrega.pagado);
+        } else {
+          console.log('📦 Usando valores por defecto (sin entregas)');
+          // Si no hay entregas previas, usar valores por defecto
+          setValue('bidones10', 0);
+          setValue('bidones20', 0);
+          setValue('sodas', 0);
+          setValue('envasesDevueltos', 0);
+          setValue('total', 0);
+          setValue('pagado', false);
         }
+        
+        console.log('✅ Formulario actualizado correctamente');
       }
     } catch (err) {
-      console.error('Error al cargar cliente:', err);
+      console.error('❌ Error al cargar cliente:', err);
       toast.error('Error al cargar cliente');
     } finally {
       setLoadingData(false);
@@ -129,119 +167,235 @@ export const ClienteForm: React.FC = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
           {isEdit ? 'Editar Cliente' : 'Nuevo Cliente'}
         </h1>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <User className="inline h-4 w-4 mr-2" />
-                Nombre
-              </label>
-              <input
-                {...register('nombre')}
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                placeholder="Nombre del cliente"
-              />
-              {errors.nombre && (
-                <p className="mt-1 text-sm text-red-600">{errors.nombre.message}</p>
-              )}
-            </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+          {/* Datos Básicos */}
+          <div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Datos Básicos
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <User className="inline h-4 w-4 mr-2" />
+                  Nombre
+                </label>
+                <input
+                  {...register('nombre')}
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Nombre del cliente"
+                />
+                {errors.nombre && (
+                  <p className="mt-1 text-sm text-red-600">{errors.nombre.message}</p>
+                )}
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <Phone className="inline h-4 w-4 mr-2" />
-                Teléfono
-              </label>
-              <input
-                {...register('telefono')}
-                type="tel"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                placeholder="Número de teléfono"
-              />
-              {errors.telefono && (
-                <p className="mt-1 text-sm text-red-600">{errors.telefono.message}</p>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Phone className="inline h-4 w-4 mr-2" />
+                  Teléfono
+                </label>
+                <input
+                  {...register('telefono')}
+                  type="tel"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Número de teléfono"
+                />
+                {errors.telefono && (
+                  <p className="mt-1 text-sm text-red-600">{errors.telefono.message}</p>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Home className="inline h-4 w-4 mr-2" />
+                  Dirección
+                </label>
+                <input
+                  {...register('direccion')}
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Dirección completa"
+                />
+                {errors.direccion && (
+                  <p className="mt-1 text-sm text-red-600">{errors.direccion.message}</p>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* Planificación */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <Home className="inline h-4 w-4 mr-2" />
-              Dirección
-            </label>
-            <input
-              {...register('direccion')}
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              placeholder="Dirección completa"
-            />
-            {errors.direccion && (
-              <p className="mt-1 text-sm text-red-600">{errors.direccion.message}</p>
-            )}
-          </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Planificación
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Clock className="inline h-4 w-4 mr-2" />
+                  Frecuencia de Visita
+                </label>
+                <select
+                  {...register('frecuenciaVisita')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                >
+                  <option value="">Seleccionar frecuencia</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="quincenal">Quincenal</option>
+                  <option value="mensual">Mensual</option>
+                </select>
+                {errors.frecuenciaVisita && (
+                  <p className="mt-1 text-sm text-red-600">{errors.frecuenciaVisita.message}</p>
+                )}
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <Clock className="inline h-4 w-4 mr-2" />
-              Frecuencia de Visita
-            </label>
-            <select
-              {...register('frecuenciaVisita')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            >
-              <option value="">Seleccionar frecuencia</option>
-              <option value="diaria">Diaria</option>
-              <option value="semanal">Semanal</option>
-              <option value="bisemanal">Bisemanal</option>
-              <option value="mensual">Mensual</option>
-            </select>
-            {errors.frecuenciaVisita && (
-              <p className="mt-1 text-sm text-red-600">{errors.frecuenciaVisita.message}</p>
-            )}
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Clock className="inline h-4 w-4 mr-2" />
+                  Día de Visita
+                </label>
+                <select
+                  {...register('diaVisita')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                >
+                  <option value="">Seleccionar día</option>
+                  <option value="lunes">Lunes</option>
+                  <option value="martes">Martes</option>
+                  <option value="miércoles">Miércoles</option>
+                  <option value="jueves">Jueves</option>
+                  <option value="viernes">Viernes</option>
+                  <option value="sábado">Sábado</option>
+                  <option value="domingo">Domingo</option>
+                </select>
+                {errors.diaVisita && (
+                  <p className="mt-1 text-sm text-red-600">{errors.diaVisita.message}</p>
+                )}
+              </div>
 
-          {watch('frecuenciaVisita') !== 'diaria' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <Clock className="inline h-4 w-4 mr-2" />
-                Día de Visita
-              </label>
-              <select
-                {...register('diaVisita')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              >
-                <option value="">Seleccionar día</option>
-                <option value="lunes">Lunes</option>
-                <option value="martes">Martes</option>
-                <option value="miercoles">Miércoles</option>
-                <option value="jueves">Jueves</option>
-                <option value="viernes">Viernes</option>
-                <option value="sabado">Sábado</option>
-                <option value="domingo">Domingo</option>
-              </select>
-              {errors.diaVisita && (
-                <p className="mt-1 text-sm text-red-600">{errors.diaVisita.message}</p>
-              )}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <FileText className="inline h-4 w-4 mr-2" />
+                  Observaciones
+                </label>
+                <textarea
+                  {...register('observaciones')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Observaciones adicionales"
+                  rows={3}
+                />
+              </div>
             </div>
-          )}
+          </div>
 
+          {/* Última Entrega */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <FileText className="inline h-4 w-4 mr-2" />
-              Observaciones
-            </label>
-            <textarea
-              {...register('observaciones')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              placeholder="Observaciones adicionales"
-              rows={3}
-            />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Última Entrega
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Package className="inline h-4 w-4 mr-2" />
+                  Bidones 10L
+                </label>
+                <input
+                  {...register('bidones10')}
+                  type="number"
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="0"
+                />
+                {errors.bidones10 && (
+                  <p className="mt-1 text-sm text-red-600">{errors.bidones10.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Package className="inline h-4 w-4 mr-2" />
+                  Bidones 20L
+                </label>
+                <input
+                  {...register('bidones20')}
+                  type="number"
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="0"
+                />
+                {errors.bidones20 && (
+                  <p className="mt-1 text-sm text-red-600">{errors.bidones20.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Package className="inline h-4 w-4 mr-2" />
+                  Sodas
+                </label>
+                <input
+                  {...register('sodas')}
+                  type="number"
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="0"
+                />
+                {errors.sodas && (
+                  <p className="mt-1 text-sm text-red-600">{errors.sodas.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Package className="inline h-4 w-4 mr-2" />
+                  Envases Devueltos
+                </label>
+                <input
+                  {...register('envasesDevueltos')}
+                  type="number"
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="0"
+                />
+                {errors.envasesDevueltos && (
+                  <p className="mt-1 text-sm text-red-600">{errors.envasesDevueltos.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <DollarSign className="inline h-4 w-4 mr-2" />
+                  Total
+                </label>
+                <input
+                  {...register('total')}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="0.00"
+                />
+                {errors.total && (
+                  <p className="mt-1 text-sm text-red-600">{errors.total.message}</p>
+                )}
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  {...register('pagado')}
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label className="ml-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Pagado
+                </label>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3">

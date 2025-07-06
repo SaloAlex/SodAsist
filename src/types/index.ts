@@ -1,14 +1,20 @@
 export interface Cliente {
-  id?: string;
+  id: string;
   nombre: string;
   direccion: string;
   telefono: string;
-  frecuenciaVisita: 'diaria' | 'semanal' | 'bisemanal' | 'mensual';
-  diaVisita?: 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | 'sabado' | 'domingo';
+  diaVisita: 'lunes' | 'martes' | 'miércoles' | 'jueves' | 'viernes' | 'sábado' | 'domingo';
+  frecuenciaVisita: 'semanal' | 'quincenal' | 'mensual';
   observaciones?: string;
   saldoPendiente: number;
-  createdAt?: Date;
-  updatedAt?: Date;
+  bidones10?: number;
+  bidones20?: number;
+  sodas?: number;
+  envasesDevueltos?: number;
+  total?: number;
+  pagado?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Entrega {

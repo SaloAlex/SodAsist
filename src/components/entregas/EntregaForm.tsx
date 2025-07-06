@@ -15,6 +15,14 @@ import {
 } from 'lucide-react';
 import { isValid } from 'date-fns';
 import toast from 'react-hot-toast';
+import {
+  collection,
+  doc,
+  writeBatch,
+  serverTimestamp,
+  getDoc
+} from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 const schema = yup.object().shape({
   clienteId: yup.string().required('Cliente requerido'),
@@ -90,24 +98,68 @@ export const EntregaForm: React.FC = () => {
         throw new Error('Error al generar la fecha');
       }
 
+      // Crear el objeto de entrega sin campos undefined
       const entregaData: Omit<Entrega, 'id'> = {
-        ...data,
+        clienteId: data.clienteId,
+        sodas: data.sodas,
+        bidones10: data.bidones10,
+        bidones20: data.bidones20,
+        envasesDevueltos: data.envasesDevueltos,
+        total: data.total,
+        pagado: data.pagado,
         fecha: now,
         createdAt: now,
-        medioPago: data.pagado ? data.medioPago as 'efectivo' | 'transferencia' | 'tarjeta' : undefined
+        // Solo incluir observaciones si tiene un valor válido
+        ...(data.observaciones && data.observaciones.trim() && { observaciones: data.observaciones }),
+        // Solo incluir medioPago si está pagado y tiene un valor válido
+        ...(data.pagado && data.medioPago && { medioPago: data.medioPago as 'efectivo' | 'transferencia' | 'tarjeta' })
       };
 
-      await FirebaseService.createDocument<Entrega>('entregas', entregaData);
-      
-      // Actualizar el saldo del cliente si la entrega no fue pagada
-      if (!data.pagado && data.clienteId) {
-        const cliente = clientes.find(c => c.id === data.clienteId);
-        if (cliente) {
-          const nuevoSaldo = (cliente.saldoPendiente || 0) + data.total;
-          await FirebaseService.updateDocument<Cliente>('clientes', data.clienteId, {
-            saldoPendiente: nuevoSaldo
-          });
-        }
+      // Obtener el saldo actual del cliente para calcular el nuevo saldo
+      const clienteRef = doc(db, 'clientes', data.clienteId);
+      const clienteDoc = await getDoc(clienteRef);
+      const clienteData = clienteDoc.data();
+      let nuevoSaldo = clienteData?.saldoPendiente || 0;
+
+      // Calcular el nuevo saldo pendiente
+      if (data.pagado) {
+        // Si está pagado, reducir el saldo pendiente anterior
+        nuevoSaldo = Math.max(0, nuevoSaldo - data.total);
+      } else {
+        // Si no está pagado, agregar al saldo pendiente
+        nuevoSaldo = nuevoSaldo + data.total;
+      }
+
+      // Crear batch para operación atómica
+      // Utilizamos writeBatch para actualizar tanto la entrega como el cliente
+      // de manera atómica. Esto evita dependencias de Cloud Functions y garantiza
+      // que los datos estén disponibles inmediatamente en el documento del cliente.
+      const batch = writeBatch(db);
+      const entregaRef = doc(collection(db, 'entregas')); // auto-id
+
+      // 1. Crear nueva entrega
+      batch.set(entregaRef, entregaData);
+
+      // 2. Actualizar cliente con snapshot de la entrega
+      batch.update(clienteRef, {
+        bidones10: data.bidones10,
+        bidones20: data.bidones20,
+        sodas: data.sodas,
+        envasesDevueltos: data.envasesDevueltos,
+        total: data.total,
+        pagado: data.pagado,
+        saldoPendiente: nuevoSaldo,
+        updatedAt: serverTimestamp(),
+      });
+
+      // Ejecutar operación atómica
+      await batch.commit();
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Batch completado exitosamente');
+        console.log('📦 Entrega creada:', entregaRef.id);
+        console.log('👤 Cliente actualizado:', data.clienteId);
+        console.log('💰 Nuevo saldo:', nuevoSaldo);
       }
 
       toast.success('Entrega registrada correctamente');

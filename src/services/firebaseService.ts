@@ -12,7 +12,10 @@ import {
   orderBy,
   onSnapshot,
   Timestamp,
-  QueryConstraint
+  QueryConstraint,
+  limit,
+  WhereFilterOp,
+  OrderByDirection
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Cliente, Entrega, User } from '../types';
@@ -188,5 +191,99 @@ export class FirebaseService {
   static async isFirstUser(): Promise<boolean> {
     const usersSnapshot = await getDocs(collection(db, 'users'));
     return usersSnapshot.empty;
+  }
+
+  // Método para consultas flexibles con filtros, ordenamiento y límites
+  static async queryCollection<T>(
+    collectionName: string,
+    filters?: Array<[string, WhereFilterOp, unknown]>,
+    orderByField?: string,
+    orderDirection?: OrderByDirection,
+    limitCount?: number
+  ): Promise<T[]> {
+    const constraints: QueryConstraint[] = [];
+    
+    // Aplicar filtros
+    if (filters && filters.length > 0) {
+      filters.forEach(([field, operator, value]) => {
+        constraints.push(where(field, operator, value));
+      });
+    }
+    
+    // Agregar ordenamiento si se especifica
+    if (orderByField) {
+      constraints.push(orderBy(orderByField, orderDirection || 'asc'));
+    }
+    
+    // Agregar límite si se especifica
+    if (limitCount) {
+      constraints.push(limit(limitCount));
+    }
+    
+    const q = constraints.length > 0 
+      ? query(collection(db, collectionName), ...constraints)
+      : collection(db, collectionName);
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...this.convertTimestamps(data)
+      } as T;
+    });
+  }
+
+  // Método específico para obtener la última entrega de un cliente
+  static async getUltimaEntregaCliente(clienteId: string): Promise<Entrega | null> {
+    const entregas = await this.queryCollection<Entrega>(
+      'entregas',
+      [['clienteId', '==', clienteId]],
+      'fecha',
+      'desc',
+      1
+    );
+    
+    return entregas.length > 0 ? entregas[0] : null;
+  }
+
+  // Método para obtener las últimas entregas de múltiples clientes de manera eficiente
+  static async getUltimasEntregasClientes(clienteIds: string[]): Promise<Map<string, Entrega>> {
+    const ultimasEntregas = new Map<string, Entrega>();
+    
+    if (clienteIds.length === 0) return ultimasEntregas;
+    
+    // Obtener todas las entregas recientes (últimos 30 días) para optimizar
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - 30);
+    
+    const entregas = await this.queryCollection<Entrega>(
+      'entregas',
+      [['fecha', '>=', Timestamp.fromDate(fechaLimite)]],
+      'fecha',
+      'desc'
+    );
+    
+    // Agrupar por cliente y tomar la más reciente de cada uno
+    const entregasPorCliente = new Map<string, Entrega[]>();
+    
+    entregas.forEach(entrega => {
+      if (clienteIds.includes(entrega.clienteId)) {
+        if (!entregasPorCliente.has(entrega.clienteId)) {
+          entregasPorCliente.set(entrega.clienteId, []);
+        }
+        entregasPorCliente.get(entrega.clienteId)?.push(entrega);
+      }
+    });
+    
+    // Obtener la más reciente de cada cliente
+    entregasPorCliente.forEach((entregas, clienteId) => {
+      const ultimaEntrega = entregas.reduce((latest, current) => 
+        current.fecha > latest.fecha ? current : latest
+      );
+      ultimasEntregas.set(clienteId, ultimaEntrega);
+    });
+    
+    return ultimasEntregas;
   }
 }
