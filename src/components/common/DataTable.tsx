@@ -6,6 +6,16 @@ interface Column<T> {
   label: string;
   sortable?: boolean;
   render?: (value: unknown, row: T) => React.ReactNode;
+  width?: string;
+}
+
+interface Action<T> {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: (row: T) => void;
+  show?: (row: T) => boolean;
+  className?: string;
+  tooltip?: string;
 }
 
 interface PaginationOptions {
@@ -17,17 +27,20 @@ interface PaginationOptions {
 interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
+  actions?: Action<T>[];
   searchable?: boolean;
   searchPlaceholder?: string;
   onRowClick?: (row: T) => void;
   className?: string;
   pagination?: PaginationOptions;
   emptyMessage?: string;
+  virtualScroll?: boolean;
 }
 
 export const DataTable = <T,>({
   data,
   columns,
+  actions,
   searchable = true,
   searchPlaceholder = 'Buscar...',
   onRowClick,
@@ -102,6 +115,37 @@ export const DataTable = <T,>({
     return String(value);
   };
 
+  const renderActions = (row: T) => {
+    if (!actions?.length) return null;
+
+    const visibleActions = actions.filter(action => !action.show || action.show(row));
+    if (!visibleActions.length) return null;
+
+    return (
+      <div className="flex items-center justify-end space-x-1">
+        {visibleActions.map((action, actionIndex) => (
+          <button
+            key={actionIndex}
+            onClick={(e) => {
+              e.stopPropagation();
+              action.onClick(row);
+            }}
+            className={`p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group relative ${
+              action.className || ''
+            }`}
+            title={action.tooltip || action.label}
+          >
+            <span className="sr-only">{action.label}</span>
+            {action.icon}
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+              {action.tooltip || action.label}
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg shadow ${className}`}>
       {searchable && (
@@ -119,63 +163,76 @@ export const DataTable = <T,>({
         </div>
       )}
       
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={String(column.key)}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400"
-                >
-                  {column.sortable ? (
-                    <button
-                      onClick={() => handleSort(column.key)}
-                      className="flex items-center space-x-1 hover:text-gray-700 dark:hover:text-gray-300"
-                    >
-                      <span>{column.label}</span>
-                      {sortKey === column.key && (
-                        sortDirection === 'asc' ? 
-                          <ChevronUp className="h-4 w-4" /> : 
-                          <ChevronDown className="h-4 w-4" />
-                      )}
-                    </button>
-                  ) : (
-                    column.label
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-            {paginatedData.map((row, index) => (
-              <tr
-                key={index}
-                onClick={() => onRowClick?.(row)}
-                className={`${
-                  onRowClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700' : ''
-                } transition-colors`}
-              >
+      <div className="min-w-full inline-block align-middle">
+        <div className="overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
                 {columns.map((column) => (
-                  <td
+                  <th
                     key={String(column.key)}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400"
+                    style={column.width ? { width: column.width } : undefined}
                   >
-                    {renderCellContent(row[column.key], column, row)}
-                  </td>
+                    {column.sortable ? (
+                      <button
+                        onClick={() => handleSort(column.key)}
+                        className="flex items-center space-x-1 hover:text-gray-700 dark:hover:text-gray-300"
+                      >
+                        <span>{column.label}</span>
+                        {sortKey === column.key && (
+                          sortDirection === 'asc' ? 
+                            <ChevronUp className="h-4 w-4" /> : 
+                            <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+                    ) : (
+                      column.label
+                    )}
+                  </th>
                 ))}
+                {actions?.length ? (
+                  <th className="px-3 py-3 text-right w-[110px]">
+                    Acciones
+                  </th>
+                ) : null}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+              {paginatedData.map((row, index) => (
+                <tr
+                  key={index}
+                  onClick={() => onRowClick?.(row)}
+                  className={`${
+                    onRowClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700' : ''
+                  } transition-colors`}
+                >
+                  {columns.map((column) => (
+                    <td
+                      key={String(column.key)}
+                      className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white"
+                    >
+                      {renderCellContent(row[column.key], column, row)}
+                    </td>
+                  ))}
+                  {actions?.length ? (
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {renderActions(row)}
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-      
+
       {sortedData.length === 0 ? (
         <div className="p-6 text-center text-gray-500 dark:text-gray-400">
           {emptyMessage}
         </div>
       ) : pagination && (
-        <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
+        <div className="px-3 py-4 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2">
             {pagination.showSizeChanger && (
               <select

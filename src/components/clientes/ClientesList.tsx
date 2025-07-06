@@ -6,8 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
-  Phone, MapPin, Clock,
-  Beer, Package, Check, X, StickyNote, Plus
+  Phone, MapPin, Clock, Plus, Package, Beer, Check, X,
+  Edit, Trash2, History, PhoneCall, MessageSquare, Box
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ClientesFilters } from './ClientesFilters';
@@ -164,14 +164,91 @@ export const ClientesList: React.FC = () => {
     });
   }, [clientes, filters]);
 
+  const handleDeleteCliente = async (cliente: Cliente) => {
+    if (window.confirm(`¿Estás seguro de eliminar a ${cliente.nombre}?`)) {
+      try {
+        await FirebaseService.deleteDocument('clientes', cliente.id);
+        toast.success('Cliente eliminado correctamente');
+        loadClientes();
+      } catch (error) {
+        console.error('Error al eliminar cliente:', error);
+        toast.error('Error al eliminar cliente');
+      }
+    }
+  };
+
+  const handleLlamar = (cliente: Cliente) => {
+    window.location.href = `tel:${cliente.telefono}`;
+  };
+
+  const handleWhatsApp = (cliente: Cliente) => {
+    const mensaje = encodeURIComponent('Hola, te contacto desde SodAsist...');
+    window.open(`https://wa.me/${cliente.telefono}?text=${mensaje}`, '_blank');
+  };
+
+  const handleNuevaEntrega = (cliente: Cliente) => {
+    navigate(`/entregas/nuevo?clienteId=${cliente.id}`);
+  };
+
+  const handleVerHistorial = (cliente: Cliente) => {
+    navigate(`/clientes/${cliente.id}/historial`);
+  };
+
+  const actions = [
+    {
+      label: 'Editar',
+      icon: <Edit className="h-5 w-5 text-blue-600" />,
+      onClick: (cliente: Cliente) => navigate(`/clientes/${cliente.id}`),
+      tooltip: 'Editar datos del cliente',
+    },
+    {
+      label: 'Nueva Entrega',
+      icon: <Box className="h-5 w-5 text-green-600" />,
+      onClick: handleNuevaEntrega,
+      tooltip: 'Registrar nueva entrega',
+    },
+    {
+      label: 'Ver Historial',
+      icon: <History className="h-5 w-5 text-purple-600" />,
+      onClick: handleVerHistorial,
+      tooltip: 'Ver historial de entregas',
+    },
+    {
+      label: 'Llamar',
+      icon: <PhoneCall className="h-5 w-5 text-green-600" />,
+      onClick: handleLlamar,
+      show: () => 'ontouchstart' in window,
+      tooltip: 'Llamar al cliente',
+    },
+    {
+      label: 'WhatsApp',
+      icon: <MessageSquare className="h-5 w-5 text-green-600" />,
+      onClick: handleWhatsApp,
+      tooltip: 'Enviar mensaje por WhatsApp',
+    },
+    {
+      label: 'Eliminar',
+      icon: <Trash2 className="h-5 w-5 text-red-600" />,
+      onClick: handleDeleteCliente,
+      className: 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10',
+      tooltip: 'Eliminar cliente',
+    },
+  ];
+
   const columns = [
     /* 1 ─ Nombre */
-    { key: 'nombre' as keyof Cliente, label: 'Nombre', sortable: true },
+    { 
+      key: 'nombre' as keyof Cliente, 
+      label: 'Nombre', 
+      sortable: true,
+      width: '25%'
+    },
 
-    /* 2 ─ Día de visita (útil para la ruta) */
+    /* 2 ─ Día de visita */
     {
       key: 'diaVisita' as keyof Cliente,
       label: 'Día',
+      width: '8%',
       render: (value: unknown) => (
         <div className="flex items-center space-x-1">
           <Clock className="h-4 w-4 text-gray-400" />
@@ -184,10 +261,11 @@ export const ClientesList: React.FC = () => {
     {
       key: 'direccion' as keyof Cliente,
       label: 'Dirección',
+      width: '30%',
       render: (value: unknown) => (
         <div className="flex items-center space-x-1">
           <MapPin className="h-4 w-4 text-gray-400" />
-          <span className="truncate max-w-[200px]">{String(value)}</span>
+          <span className="truncate max-w-[250px]">{String(value)}</span>
         </div>
       ),
     },
@@ -196,6 +274,7 @@ export const ClientesList: React.FC = () => {
     {
       key: 'telefono' as keyof Cliente,
       label: 'Teléfono',
+      width: '12%',
       render: (value: unknown) => (
         <div className="flex items-center space-x-1">
           <Phone className="h-4 w-4 text-gray-400" />
@@ -274,8 +353,9 @@ export const ClientesList: React.FC = () => {
     /* 11 ─ Saldo pendiente */
     {
       key: 'saldoPendiente' as keyof Cliente,
-      label: 'Saldo Pend.',
+      label: 'Saldo',
       sortable: true,
+      width: '15%',
       render: (value: unknown) => {
         const saldo = Number(value) || 0;
         return (
@@ -289,31 +369,18 @@ export const ClientesList: React.FC = () => {
       },
     },
 
-    /* 12 ─ Observaciones */
+    /* 12 ─ Última entrega */
     {
-      key: 'observaciones' as keyof Cliente,
-      label: 'Notas',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <StickyNote className="h-4 w-4 text-gray-400" />
-          <span className="truncate max-w-[150px]">{String(value) || '—'}</span>
-        </div>
-      ),
-    },
-
-    /* 13 ─ Fecha alta */
-    {
-      key: 'createdAt' as keyof Cliente,
-      label: 'Alta',
+      key: 'ultimaEntregaFecha' as keyof Cliente,
+      label: 'Últ. Entrega',
       sortable: true,
-      render: (value: unknown) =>
-        format(new Date(value as Date), 'dd/MM/yy', { locale: es }),
+      width: '10%',
+      render: (value: unknown) => {
+        if (!value) return '—';
+        return format(new Date(value as Date), 'dd/MM/yy', { locale: es });
+      },
     },
   ];
-
-  const handleRowClick = (cliente: Cliente) => {
-    navigate(`/clientes/${cliente.id}`);
-  };
 
   if (loading) {
     return (
@@ -347,7 +414,12 @@ export const ClientesList: React.FC = () => {
         <DataTable
           data={clientesFiltrados}
           columns={columns}
-          onRowClick={handleRowClick}
+          actions={actions}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50, 100]
+          }}
           emptyMessage="No se encontraron clientes que coincidan con los filtros"
         />
       </div>
