@@ -22,6 +22,7 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   className?: string;
   pagination?: PaginationOptions;
+  emptyMessage?: string;
 }
 
 export const DataTable = <T,>({
@@ -31,7 +32,8 @@ export const DataTable = <T,>({
   searchPlaceholder = 'Buscar...',
   onRowClick,
   className = '',
-  pagination
+  pagination,
+  emptyMessage = 'No se encontraron resultados'
 }: DataTableProps<T>) => {
   const [sortKey, setSortKey] = useState<keyof T | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -170,7 +172,7 @@ export const DataTable = <T,>({
       
       {sortedData.length === 0 ? (
         <div className="p-6 text-center text-gray-500 dark:text-gray-400">
-          No se encontraron resultados
+          {emptyMessage}
         </div>
       ) : pagination && (
         <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">

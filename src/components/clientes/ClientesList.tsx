@@ -1,20 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DataTable } from '../common/DataTable';
 import { Cliente } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Phone, MapPin, Clock,
-  Beer, Package, Check, X, StickyNote
+  Beer, Package, Check, X, StickyNote, Plus
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ClientesFilters } from './ClientesFilters';
 
 export const ClientesList: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [filters, setFilters] = useState<ClientesFilters>({
+    searchTerm: '',
+    diaVisita: '',
+    frecuenciaVisita: '',
+    mostrarDeudores: false,
+    mostrarEntregasRecientes: false,
+  });
 
   // Cargar clientes al montar el componente
   useEffect(() => {
@@ -67,6 +75,7 @@ export const ClientesList: React.FC = () => {
           envasesDevueltos: ultimaEntrega?.envasesDevueltos ?? cliente.envasesDevueltos ?? 0,
           total: ultimaEntrega?.total ?? cliente.total ?? 0,
           pagado: ultimaEntrega?.pagado ?? cliente.pagado ?? false,
+          ultimaEntregaFecha: ultimaEntrega?.fecha ?? null,
         };
       });
       
@@ -79,6 +88,81 @@ export const ClientesList: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Filtrar clientes basado en los criterios
+  const clientesFiltrados = useMemo(() => {
+    // Función para normalizar texto (quitar acentos y convertir a minúsculas)
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    };
+
+    // Función para calcular la similitud entre dos strings (tolerante a errores)
+    const calculateSimilarity = (str1: string, str2: string) => {
+      const norm1 = normalizeText(str1);
+      const norm2 = normalizeText(str2);
+      
+      // Si uno contiene al otro, es una coincidencia
+      if (norm1.includes(norm2) || norm2.includes(norm1)) {
+        return true;
+      }
+      
+      // Verificar si las palabras coinciden parcialmente
+      const words1 = norm1.split(' ');
+      const words2 = norm2.split(' ');
+      
+      return words1.some(word1 => 
+        words2.some(word2 => 
+          word1.length > 3 && word2.length > 3 && 
+          (word1.includes(word2) || word2.includes(word1))
+        )
+      );
+    };
+
+    return clientes.filter(cliente => {
+      // 1. Filtro por texto (nombre, dirección, teléfono)
+      if (filters.searchTerm) {
+        const searchTerm = filters.searchTerm.toLowerCase();
+        const matchNombre = calculateSimilarity(cliente.nombre, searchTerm);
+        const matchDireccion = calculateSimilarity(cliente.direccion, searchTerm);
+        const matchTelefono = cliente.telefono.includes(searchTerm);
+        
+        if (!matchNombre && !matchDireccion && !matchTelefono) {
+          return false;
+        }
+      }
+
+      // 2. Filtro por día de visita
+      if (filters.diaVisita && cliente.diaVisita !== filters.diaVisita) {
+        return false;
+      }
+
+      // 3. Filtro por frecuencia
+      if (filters.frecuenciaVisita && cliente.frecuenciaVisita !== filters.frecuenciaVisita) {
+        return false;
+      }
+
+      // 4. Filtro de deudores
+      if (filters.mostrarDeudores && cliente.saldoPendiente <= 0) {
+        return false;
+      }
+
+      // 5. Filtro de entregas recientes (últimos 7 días)
+      if (filters.mostrarEntregasRecientes) {
+        if (!cliente.ultimaEntregaFecha) {
+          return false;
+        }
+        const fechaLimite = subDays(new Date(), 7);
+        if (new Date(cliente.ultimaEntregaFecha) < fechaLimite) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [clientes, filters]);
 
   const columns = [
     /* 1 ─ Nombre */
@@ -245,38 +329,28 @@ export const ClientesList: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Clientes
         </h1>
-        <div className="flex space-x-3">
-          <button
-            onClick={() => {
-              console.log('🔄 Recarga manual solicitada');
-              loadClientes();
-            }}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700 disabled:opacity-50"
-          >
-            {loading ? '🔄 Cargando...' : '🔄 Actualizar'}
-          </button>
-          <button
-            onClick={() => navigate('/clientes/new')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Nuevo Cliente
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/clientes/nuevo')}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          <Plus className="h-5 w-5 mr-2" />
+          Nuevo Cliente
+        </button>
       </div>
 
-      <DataTable
-        data={clientes}
-        columns={columns}
-        onRowClick={handleRowClick}
-        searchable={true}
-        searchPlaceholder="Buscar cliente..."
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: true,
-          pageSizeOptions: [5, 10, 20, 50]
-        }}
+      <ClientesFilters
+        filters={filters}
+        onFiltersChange={setFilters}
       />
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <DataTable
+          data={clientesFiltrados}
+          columns={columns}
+          onRowClick={handleRowClick}
+          emptyMessage="No se encontraron clientes que coincidan con los filtros"
+        />
+      </div>
     </div>
   );
 };

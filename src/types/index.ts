@@ -15,6 +15,7 @@ export interface Cliente {
   pagado?: boolean;
   createdAt: Date;
   updatedAt: Date;
+  ultimaEntregaFecha?: Date | null;
 }
 
 export interface Entrega {
