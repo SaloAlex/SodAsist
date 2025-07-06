@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { Cliente } from '../../types';
-import { FirebaseService } from '../../services/firebaseService';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FirebaseService } from '../../services/firebaseService';
 import { LoadingSpinner } from '../common/LoadingSpinner';
-import { User, Phone, Home, Clock, FileText, Package, DollarSign } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { FirebaseError } from 'firebase/app';
+import { Cliente } from '../../types';
+import toast from 'react-hot-toast';
+import { User, Phone, Home, Clock, FileText, Package, DollarSign } from 'lucide-react';
 
 const schema = yup.object().shape({
   nombre: yup.string().required('Nombre requerido'),
@@ -54,54 +54,38 @@ export const ClienteForm: React.FC = () => {
   const loadCliente = useCallback(async (clienteId: string) => {
     setLoadingData(true);
     try {
-      console.log('🔄 Cargando cliente:', clienteId);
-      
-      // 1. Cargar datos básicos del cliente desde la colección 'clientes'
+      // Obtener el cliente
       const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
-      console.log('📊 Cliente cargado:', cliente?.nombre);
-      
-      // 2. Cargar la última entrega real desde la colección 'entregas'
-      const ultimaEntrega = await FirebaseService.getUltimaEntregaCliente(clienteId);
-      console.log('📦 Última entrega encontrada:', ultimaEntrega ? '✅ Sí' : '❌ No');
-      
-      if (cliente) {
-        // Datos básicos del cliente
-        setValue('nombre', cliente.nombre);
-        setValue('direccion', cliente.direccion);
-        setValue('telefono', cliente.telefono);
-        setValue('frecuenciaVisita', cliente.frecuenciaVisita);
-        setValue('diaVisita', cliente.diaVisita);
-        setValue('observaciones', cliente.observaciones || '');
-        
-        // Datos de la última entrega real (si existe) o valores por defecto
-        if (ultimaEntrega) {
-          console.log('📦 Usando datos de última entrega');
-          setValue('bidones10', ultimaEntrega.bidones10);
-          setValue('bidones20', ultimaEntrega.bidones20);
-          setValue('sodas', ultimaEntrega.sodas);
-          setValue('envasesDevueltos', ultimaEntrega.envasesDevueltos);
-          setValue('total', ultimaEntrega.total);
-          setValue('pagado', ultimaEntrega.pagado);
-        } else {
-          console.log('📦 Usando valores por defecto (sin entregas)');
-          // Si no hay entregas previas, usar valores por defecto
-          setValue('bidones10', 0);
-          setValue('bidones20', 0);
-          setValue('sodas', 0);
-          setValue('envasesDevueltos', 0);
-          setValue('total', 0);
-          setValue('pagado', false);
-        }
-        
-        console.log('✅ Formulario actualizado correctamente');
+      if (!cliente) {
+        throw new Error('Cliente no encontrado');
       }
+
+      // Cargar datos del cliente en el formulario
+      setValue('nombre', cliente.nombre);
+      setValue('telefono', cliente.telefono);
+      setValue('direccion', cliente.direccion);
+      setValue('frecuenciaVisita', cliente.frecuenciaVisita);
+      setValue('diaVisita', cliente.diaVisita);
+      setValue('observaciones', cliente.observaciones || '');
+      
+      // Cargar valores existentes del cliente o usar la última entrega
+      setValue('bidones10', cliente.bidones10 || 0);
+      setValue('bidones20', cliente.bidones20 || 0);
+      setValue('sodas', cliente.sodas || 0);
+      setValue('envasesDevueltos', cliente.envasesDevueltos || 0);
+      setValue('total', cliente.total || 0);
+      setValue('pagado', cliente.pagado || false);
+      
+      console.log('✅ Formulario actualizado correctamente');
+      
     } catch (err) {
       console.error('❌ Error al cargar cliente:', err);
-      toast.error('Error al cargar cliente');
+      toast.error('Error al cargar los datos del cliente');
+      navigate('/clientes');
     } finally {
       setLoadingData(false);
     }
-  }, [setValue]);
+  }, [setValue, navigate]);
 
   useEffect(() => {
     if (isEdit && id) {

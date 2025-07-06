@@ -7,14 +7,18 @@ import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Phone, MapPin, Clock, Plus, Package, Beer, Check, X,
-  Edit, Trash2, History, PhoneCall, MessageSquare, Box
+  Edit, Trash2, History, PhoneCall, MessageSquare, Box,
+  AlertCircle, FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ClientesFilters } from './ClientesFilters';
+import { LoadingSpinner } from '../common/LoadingSpinner';
 
 export const ClientesList: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
+  const [observacionesModalOpen, setObservacionesModalOpen] = useState(false);
+  const [observacionesCliente, setObservacionesCliente] = useState<{nombre: string, observaciones: string} | null>(null);
   const navigate = useNavigate();
   const [filters, setFilters] = useState<ClientesFilters>({
     searchTerm: '',
@@ -24,70 +28,27 @@ export const ClientesList: React.FC = () => {
     mostrarEntregasRecientes: false,
   });
 
-  // Cargar clientes al montar el componente
-  useEffect(() => {
-    loadClientes();
-  }, []);
-
-  // Recargar clientes cuando se enfoca la ventana (para múltiples usuarios)
-  useEffect(() => {
-    const handleFocus = () => {
-      console.log('🔄 Ventana enfocada - Recargando clientes...');
-      loadClientes();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
-
   const loadClientes = async () => {
+    setLoading(true);
     try {
-      console.log('🔄 Cargando clientes...');
-      setLoading(true);
-
-      // 1. Cargar datos básicos de clientes
-      const clientesData = await FirebaseService.getCollection<Cliente>('clientes');
-      console.log('📊 Clientes cargados:', clientesData.length);
-      
-      // 2. Obtener las últimas entregas de todos los clientes
-      const clienteIds = clientesData.map(cliente => cliente.id);
-      const ultimasEntregas = await FirebaseService.getUltimasEntregasClientes(clienteIds);
-      console.log('📦 Últimas entregas encontradas:', ultimasEntregas.size);
-      
-      // Debug: Mostrar qué clientes tienen entregas (solo en desarrollo)
-      if (process.env.NODE_ENV === 'development') {
-        clientesData.forEach(cliente => {
-          const tieneEntrega = ultimasEntregas.has(cliente.id);
-          console.log(`👤 ${cliente.nombre}: ${tieneEntrega ? '✅ Tiene entregas' : '❌ Sin entregas'}`);
-        });
-      }
-      
-      // 3. Combinar datos de clientes con datos de últimas entregas
-      const clientesCompletos = clientesData.map(cliente => {
-        const ultimaEntrega = ultimasEntregas.get(cliente.id);
-        
-        return {
-          ...cliente,
-          // Si existe última entrega, usar sus datos; si no, mantener los del cliente o usar 0
-          bidones10: ultimaEntrega?.bidones10 ?? cliente.bidones10 ?? 0,
-          bidones20: ultimaEntrega?.bidones20 ?? cliente.bidones20 ?? 0,
-          sodas: ultimaEntrega?.sodas ?? cliente.sodas ?? 0,
-          envasesDevueltos: ultimaEntrega?.envasesDevueltos ?? cliente.envasesDevueltos ?? 0,
-          total: ultimaEntrega?.total ?? cliente.total ?? 0,
-          pagado: ultimaEntrega?.pagado ?? cliente.pagado ?? false,
-          ultimaEntregaFecha: ultimaEntrega?.fecha ?? null,
-        };
-      });
-      
-      setClientes(clientesCompletos);
-      console.log('✅ Clientes actualizados con últimas entregas');
+      const data = await FirebaseService.getCollection<Cliente>('clientes');
+      setClientes(data);
     } catch (error) {
-      console.error('❌ Error al cargar clientes:', error);
-      toast.error('Error al cargar clientes');
+      console.error('Error al cargar clientes:', error);
+      toast.error('Error al cargar los clientes');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadClientes();
+
+    // Recargar cuando la ventana recupera el foco
+    const onFocus = () => loadClientes();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   // Filtrar clientes basado en los criterios
   const clientesFiltrados = useMemo(() => {
@@ -178,20 +139,34 @@ export const ClientesList: React.FC = () => {
   };
 
   const handleLlamar = (cliente: Cliente) => {
-    window.location.href = `tel:${cliente.telefono}`;
+    window.open(`tel:${cliente.telefono}`, '_blank');
   };
 
   const handleWhatsApp = (cliente: Cliente) => {
-    const mensaje = encodeURIComponent('Hola, te contacto desde SodAsist...');
+    const mensaje = encodeURIComponent('Hola, te contacto desde SodAsist');
     window.open(`https://wa.me/${cliente.telefono}?text=${mensaje}`, '_blank');
-  };
-
-  const handleNuevaEntrega = (cliente: Cliente) => {
-    navigate(`/entregas/nuevo?clienteId=${cliente.id}`);
   };
 
   const handleVerHistorial = (cliente: Cliente) => {
     navigate(`/clientes/${cliente.id}/historial`);
+  };
+
+  const handleVerObservaciones = async (cliente: Cliente) => {
+    try {
+      const clienteCompleto = await FirebaseService.getDocument<Cliente>('clientes', cliente.id);
+      if (clienteCompleto && clienteCompleto.observaciones) {
+        setObservacionesCliente({
+          nombre: clienteCompleto.nombre,
+          observaciones: clienteCompleto.observaciones
+        });
+        setObservacionesModalOpen(true);
+      } else {
+        toast.error('Este cliente no tiene observaciones registradas');
+      }
+    } catch (error) {
+      console.error('Error al cargar observaciones:', error);
+      toast.error('Error al cargar las observaciones');
+    }
   };
 
   const actions = [
@@ -204,7 +179,7 @@ export const ClientesList: React.FC = () => {
     {
       label: 'Nueva Entrega',
       icon: <Box className="h-5 w-5 text-green-600" />,
-      onClick: handleNuevaEntrega,
+      onClick: (cliente: Cliente) => navigate(`/entregas/nuevo?clienteId=${cliente.id}`),
       tooltip: 'Registrar nueva entrega',
     },
     {
@@ -241,7 +216,36 @@ export const ClientesList: React.FC = () => {
       key: 'nombre' as keyof Cliente, 
       label: 'Nombre', 
       sortable: true,
-      width: '25%'
+      width: '25%',
+      render: (value: unknown, row: Cliente) => (
+        <div className="flex items-center space-x-2">
+          <span>{String(value)}</span>
+          <button
+            onClick={() => handleVerObservaciones(row)}
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+            title="Ver observaciones"
+          >
+            <FileText className="h-5 w-5 text-blue-500" />
+          </button>
+          {row.saldoPendiente > 0 && (
+            <div className="group relative inline-block">
+              <AlertCircle 
+                className="h-5 w-5 text-red-500 cursor-help hover:text-red-600" 
+              />
+              <div className="hidden group-hover:block absolute z-[1000] w-48 p-3 bg-red-600 text-white text-sm rounded-lg shadow-lg -translate-x-1/2 left-1/2 mt-2">
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 border-8 border-transparent border-b-red-600"></div>
+                <div>Saldo pendiente:</div>
+                <div className="font-semibold">
+                  {new Intl.NumberFormat('es-AR', {
+                    style: 'currency',
+                    currency: 'ARS'
+                  }).format(row.saldoPendiente)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ),
     },
 
     /* 2 ─ Día de visita */
@@ -382,10 +386,47 @@ export const ClientesList: React.FC = () => {
     },
   ];
 
+  const ObservacionesModal = () => {
+    if (!observacionesModalOpen || !observacionesCliente) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 relative">
+          <button
+            onClick={() => setObservacionesModalOpen(false)}
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          
+          <div className="flex items-center mb-4">
+            <FileText className="h-5 w-5 text-blue-500 mr-2" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Observaciones de {observacionesCliente.nombre}
+            </h3>
+          </div>
+          
+          <div className="mt-4 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+            {observacionesCliente.observaciones}
+          </div>
+          
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => setObservacionesModalOpen(false)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
@@ -423,6 +464,8 @@ export const ClientesList: React.FC = () => {
           emptyMessage="No se encontraron clientes que coincidan con los filtros"
         />
       </div>
+
+      <ObservacionesModal />
     </div>
   );
 };

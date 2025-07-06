@@ -4,18 +4,18 @@ import {
   getDocs,
   getDoc,
   addDoc,
-  setDoc,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
-  onSnapshot,
-  Timestamp,
-  QueryConstraint,
   limit,
   WhereFilterOp,
-  OrderByDirection
+  OrderByDirection,
+  Timestamp,
+  onSnapshot,
+  QueryConstraint
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Cliente, Entrega, User } from '../types';
@@ -234,17 +234,43 @@ export class FirebaseService {
     });
   }
 
-  // Método específico para obtener la última entrega de un cliente
+  // Método para obtener la última entrega de un cliente
   static async getUltimaEntregaCliente(clienteId: string): Promise<Entrega | null> {
-    const entregas = await this.queryCollection<Entrega>(
-      'entregas',
-      [['clienteId', '==', clienteId]],
-      'fecha',
-      'desc',
-      1
-    );
-    
-    return entregas.length > 0 ? entregas[0] : null;
+    try {
+      const entregasRef = collection(db, 'entregas');
+      const q = query(
+        entregasRef,
+        where('clienteId', '==', clienteId),
+        orderBy('fecha', 'desc'),
+        limit(1)
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        const data = doc.data();
+        return {
+          id: doc.id,
+          clienteId: data.clienteId,
+          fecha: (data.fecha as Timestamp).toDate(),
+          sodas: data.sodas,
+          bidones10: data.bidones10,
+          bidones20: data.bidones20,
+          envasesDevueltos: data.envasesDevueltos,
+          total: data.total,
+          pagado: data.pagado,
+          medioPago: data.medioPago,
+          firmaURL: data.firmaURL,
+          fotoEntregaURL: data.fotoEntregaURL,
+          observaciones: data.observaciones,
+          createdAt: (data.createdAt as Timestamp).toDate()
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error al obtener última entrega:', error);
+      throw error;
+    }
   }
 
   // Método para obtener las últimas entregas de múltiples clientes de manera eficiente

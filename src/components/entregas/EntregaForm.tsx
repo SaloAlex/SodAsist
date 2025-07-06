@@ -4,7 +4,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { Entrega, Cliente } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { 
   Package, 
@@ -47,6 +47,7 @@ export const EntregaForm: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [precios] = useState({ soda: 50, bidon10: 300, bidon20: 500 });
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     register,
@@ -79,6 +80,40 @@ export const EntregaForm: React.FC = () => {
                   (bidones20 || 0) * precios.bidon20;
     setValue('total', total);
   }, [watchedValues, precios, setValue]);
+
+  useEffect(() => {
+    const loadClienteFromUrl = async () => {
+      const params = new URLSearchParams(location.search);
+      const clienteId = params.get('clienteId');
+      
+      if (clienteId) {
+        try {
+          // Cargar el cliente específico
+          const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
+          if (cliente) {
+            // Establecer el cliente en el formulario
+            setValue('clienteId', clienteId);
+            
+            // Si el cliente tiene una última entrega, usar esos valores como sugerencia
+            const ultimaEntrega = await FirebaseService.getUltimaEntregaCliente(clienteId);
+            if (ultimaEntrega) {
+              setValue('bidones10', ultimaEntrega.bidones10 || 0);
+              setValue('bidones20', ultimaEntrega.bidones20 || 0);
+              setValue('sodas', ultimaEntrega.sodas || 0);
+              setValue('envasesDevueltos', ultimaEntrega.envasesDevueltos || 0);
+            }
+          } else {
+            toast.error('No se encontró el cliente seleccionado');
+          }
+        } catch (error) {
+          console.error('Error al cargar cliente:', error);
+          toast.error('Error al cargar los datos del cliente');
+        }
+      }
+    };
+
+    loadClienteFromUrl();
+  }, [location.search, setValue]);
 
   const loadClientes = async () => {
     try {
