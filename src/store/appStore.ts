@@ -5,7 +5,7 @@ import { Cliente, Entrega, InventarioVehiculo } from '../types';
 interface AppState {
   // Theme
   theme: 'light' | 'dark';
-  toggleTheme: () => void;
+  setTheme: (theme: 'light' | 'dark') => void;
   
   // Clients
   clientes: Cliente[];
@@ -32,7 +32,15 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       theme: 'light',
-      toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
+      setTheme: (theme) => {
+        set({ theme });
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('theme', theme);
+      },
       
       clientes: [],
       setClientes: (clientes) => set({ clientes }),

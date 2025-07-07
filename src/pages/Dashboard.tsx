@@ -17,6 +17,7 @@ import { Entrega, Cliente } from '../types';
 import { format, isValid, parseISO, subDays, startOfDay, endOfDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 export const Dashboard: React.FC = () => {
   const [entregas, setEntregas] = useState<Entrega[]>([]);
@@ -24,6 +25,7 @@ export const Dashboard: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const navigate = useNavigate();
 
   const loadEntregasByDate = async (date: Date) => {
     try {
@@ -256,7 +258,7 @@ export const Dashboard: React.FC = () => {
           </h3>
           <div className="grid grid-cols-1 gap-3">
             <button
-              onClick={() => window.location.href = '/entregas/new'}
+              onClick={() => navigate('/entregas/new')}
               className="flex items-center space-x-3 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors"
             >
               <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />

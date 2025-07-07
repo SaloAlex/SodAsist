@@ -15,78 +15,94 @@ import {
   OrderByDirection,
   Timestamp,
   onSnapshot,
-  QueryConstraint
+  QueryConstraint,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { Cliente, Entrega, User } from '../types';
+import { Cliente, Entrega, User, InventarioVehiculo } from '../types';
 
 // Generic CRUD operations
 export class FirebaseService {
-  // Función auxiliar para convertir Timestamps a Dates
-  private static convertTimestamps(data: Record<string, unknown>): Record<string, unknown> {
-    if (!data) return data;
-    
-    const result = { ...data };
-    
-    for (const [key, value] of Object.entries(result)) {
-      // Si es un Timestamp, convertirlo a Date
-      if (value instanceof Timestamp) {
-        result[key] = value.toDate();
+  // Función mejorada para convertir Timestamps manteniendo tipos de datos
+  private static convertTimestamps<T>(input: T): T {
+    if (input instanceof Timestamp) return input.toDate() as unknown as T;
+    if (Array.isArray(input)) return input.map(this.convertTimestamps) as unknown as T;
+    if (input && typeof input === 'object') {
+      const obj = {} as Record<string, unknown>;
+      for (const [k, v] of Object.entries(input)) {
+        obj[k] = this.convertTimestamps(v);
       }
-      // Si es un objeto anidado, procesarlo recursivamente
-      else if (typeof value === 'object' && value !== null) {
-        result[key] = this.convertTimestamps(value as Record<string, unknown>);
-      }
+      return obj as T;
     }
-    
-    return result;
+    return input;
   }
 
   static async getCollection<T>(collectionName: string): Promise<T[]> {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
+    try {
+      const querySnapshot = await getDocs(collection(db, collectionName));
+      return querySnapshot.docs.map(doc => ({
         id: doc.id,
-        ...this.convertTimestamps(data)
-      } as T;
-    });
+        ...this.convertTimestamps(doc.data())
+      } as T));
+    } catch (error) {
+      console.error(`Error al obtener colección ${collectionName}:`, error);
+      throw error;
+    }
   }
 
   static async getDocument<T>(collectionName: string, id: string): Promise<T | null> {
-    const docRef = doc(db, collectionName, id);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...this.convertTimestamps(data)
-      } as T;
+    try {
+      const docRef = doc(db, collectionName, id);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return {
+          id: docSnap.id,
+          ...this.convertTimestamps(docSnap.data())
+        } as T;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error al obtener documento ${collectionName}/${id}:`, error);
+      throw error;
     }
-    return null;
   }
 
   static async createDocument<T>(collectionName: string, data: Omit<T, 'id'>): Promise<string> {
-    const docRef = await addDoc(collection(db, collectionName), {
-      ...data,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    });
-    return docRef.id;
+    try {
+      const docRef = await addDoc(collection(db, collectionName), {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return docRef.id;
+    } catch (error) {
+      console.error(`Error al crear documento en ${collectionName}:`, error);
+      throw error;
+    }
   }
 
   static async updateDocument<T>(collectionName: string, id: string, data: Partial<T>): Promise<void> {
-    const docRef = doc(db, collectionName, id);
-    await updateDoc(docRef, {
-      ...data,
-      updatedAt: Timestamp.now(),
-    });
+    try {
+      const docRef = doc(db, collectionName, id);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error(`Error al actualizar documento ${collectionName}/${id}:`, error);
+      throw error;
+    }
   }
 
   static async deleteDocument(collectionName: string, id: string): Promise<void> {
-    const docRef = doc(db, collectionName, id);
-    await deleteDoc(docRef);
+    try {
+      const docRef = doc(db, collectionName, id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      console.error(`Error al eliminar documento ${collectionName}/${id}:`, error);
+      throw error;
+    }
   }
 
   // Specific operations
@@ -161,21 +177,25 @@ export class FirebaseService {
   static subscribeToCollection<T>(
     collectionName: string,
     callback: (data: T[]) => void,
+    onError?: (error: Error) => void,
     queryConstraints?: QueryConstraint[]
   ): () => void {
     const q = queryConstraints 
       ? query(collection(db, collectionName), ...queryConstraints)
       : collection(db, collectionName);
 
-    return onSnapshot(q, (querySnapshot) => {
-      const data = querySnapshot.docs.map(doc => {
-        const docData = doc.data();
-        return {
+    return onSnapshot(q, {
+      next: (querySnapshot) => {
+        const data = querySnapshot.docs.map(doc => ({
           id: doc.id,
-          ...this.convertTimestamps(docData)
-        } as T;
-      });
-      callback(data);
+          ...this.convertTimestamps(doc.data())
+        } as T));
+        callback(data);
+      },
+      error: (error) => {
+        console.error(`Error en subscribeToCollection ${collectionName}:`, error);
+        if (onError) onError(error);
+      }
     });
   }
 
@@ -189,49 +209,58 @@ export class FirebaseService {
   }
 
   static async isFirstUser(): Promise<boolean> {
-    const usersSnapshot = await getDocs(collection(db, 'users'));
-    return usersSnapshot.empty;
+    try {
+      const usersSnapshot = await getDocs(query(collection(db, 'users'), limit(1)));
+      return usersSnapshot.empty;
+    } catch (error) {
+      console.error('Error al verificar primer usuario:', error);
+      throw error;
+    }
   }
 
-  // Método para consultas flexibles con filtros, ordenamiento y límites
+  // Método mejorado para consultas flexibles
   static async queryCollection<T>(
     collectionName: string,
-    filters?: Array<[string, WhereFilterOp, unknown]>,
-    orderByField?: string,
-    orderDirection?: OrderByDirection,
-    limitCount?: number
+    {
+      filters = [],
+      orderByField,
+      orderDirection = 'asc',
+      take
+    }: {
+      filters?: Array<[string, WhereFilterOp, unknown]>;
+      orderByField?: string;
+      orderDirection?: OrderByDirection;
+      take?: number;
+    } = {}
   ): Promise<T[]> {
-    const constraints: QueryConstraint[] = [];
-    
-    // Aplicar filtros
-    if (filters && filters.length > 0) {
+    try {
+      const constraints: QueryConstraint[] = [];
+      
       filters.forEach(([field, operator, value]) => {
         constraints.push(where(field, operator, value));
       });
-    }
-    
-    // Agregar ordenamiento si se especifica
-    if (orderByField) {
-      constraints.push(orderBy(orderByField, orderDirection || 'asc'));
-    }
-    
-    // Agregar límite si se especifica
-    if (limitCount) {
-      constraints.push(limit(limitCount));
-    }
-    
-    const q = constraints.length > 0 
-      ? query(collection(db, collectionName), ...constraints)
-      : collection(db, collectionName);
-    
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
+      
+      if (orderByField) {
+        constraints.push(orderBy(orderByField, orderDirection));
+      }
+      
+      if (take) {
+        constraints.push(limit(take));
+      }
+      
+      const q = constraints.length > 0 
+        ? query(collection(db, collectionName), ...constraints)
+        : collection(db, collectionName);
+      
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
         id: doc.id,
-        ...this.convertTimestamps(data)
-      } as T;
-    });
+        ...this.convertTimestamps(doc.data())
+      } as T));
+    } catch (error) {
+      console.error(`Error en queryCollection ${collectionName}:`, error);
+      throw error;
+    }
   }
 
   // Método para obtener la última entrega de un cliente
@@ -283,12 +312,11 @@ export class FirebaseService {
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() - 30);
     
-    const entregas = await this.queryCollection<Entrega>(
-      'entregas',
-      [['fecha', '>=', Timestamp.fromDate(fechaLimite)]],
-      'fecha',
-      'desc'
-    );
+    const entregas = await this.queryCollection<Entrega>('entregas', {
+      filters: [['fecha', '>=', Timestamp.fromDate(fechaLimite)]],
+      orderByField: 'fecha',
+      orderDirection: 'desc'
+    });
     
     // Agrupar por cliente y tomar la más reciente de cada uno
     const entregasPorCliente = new Map<string, Entrega[]>();
@@ -311,5 +339,39 @@ export class FirebaseService {
     });
     
     return ultimasEntregas;
+  }
+
+  // Método mejorado para obtener el inventario actual
+  static async getInventarioActual(): Promise<InventarioVehiculo | null> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const q = query(
+        collection(db, 'inventarioVehiculo'),
+        where('fecha', '>=', Timestamp.fromDate(today)),
+        orderBy('fecha', 'desc'),
+        limit(1)
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        const data = doc.data();
+        return {
+          id: doc.id,
+          fecha: data.fecha.toDate(),
+          sodas: data.sodas || 0,
+          bidones10: data.bidones10 || 0,
+          bidones20: data.bidones20 || 0,
+          envasesDevueltos: data.envasesDevueltos || 0,
+          updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error al obtener inventario:', error);
+      throw error;
+    }
   }
 }

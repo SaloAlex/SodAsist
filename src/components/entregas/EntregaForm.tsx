@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { Entrega, Cliente } from '../../types';
+import { Entrega, Cliente, InventarioVehiculo } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LoadingSpinner } from '../common/LoadingSpinner';
@@ -11,7 +11,9 @@ import {
   DollarSign,
   User,
   CreditCard,
-  FileText
+  FileText,
+  AlertTriangle,
+  Truck
 } from 'lucide-react';
 import { isValid } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -23,6 +25,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { PRECIOS } from '../../config/precios';
 
 const schema = yup.object().shape({
   clienteId: yup.string().required('Cliente requerido'),
@@ -45,7 +48,8 @@ type EntregaFormData = yup.InferType<typeof schema>;
 export const EntregaForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [precios] = useState({ soda: 50, bidon10: 300, bidon20: 500 });
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
+  const [inventario, setInventario] = useState<InventarioVehiculo | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -71,49 +75,72 @@ export const EntregaForm: React.FC = () => {
 
   useEffect(() => {
     loadClientes();
+    loadInventario();
   }, []);
 
   useEffect(() => {
     const [sodas, bidones10, bidones20] = watchedValues;
-    const total = (sodas || 0) * precios.soda + 
-                  (bidones10 || 0) * precios.bidon10 + 
-                  (bidones20 || 0) * precios.bidon20;
+    const total = (sodas || 0) * PRECIOS.soda + 
+                  (bidones10 || 0) * PRECIOS.bidon10 + 
+                  (bidones20 || 0) * PRECIOS.bidon20;
     setValue('total', total);
-  }, [watchedValues, precios, setValue]);
+  }, [watchedValues, setValue]);
 
-  useEffect(() => {
-    const loadClienteFromUrl = async () => {
-      const params = new URLSearchParams(location.search);
-      const clienteId = params.get('clienteId');
-      
-      if (clienteId) {
-        try {
-          // Cargar el cliente específico
-          const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
-          if (cliente) {
-            // Establecer el cliente en el formulario
-            setValue('clienteId', clienteId);
-            
-            // Si el cliente tiene una última entrega, usar esos valores como sugerencia
-            const ultimaEntrega = await FirebaseService.getUltimaEntregaCliente(clienteId);
-            if (ultimaEntrega) {
-              setValue('bidones10', ultimaEntrega.bidones10 || 0);
-              setValue('bidones20', ultimaEntrega.bidones20 || 0);
-              setValue('sodas', ultimaEntrega.sodas || 0);
-              setValue('envasesDevueltos', ultimaEntrega.envasesDevueltos || 0);
-            }
-          } else {
-            toast.error('No se encontró el cliente seleccionado');
-          }
-        } catch (error) {
-          console.error('Error al cargar cliente:', error);
-          toast.error('Error al cargar los datos del cliente');
+  const loadInventario = async () => {
+    try {
+      const inv = await FirebaseService.getInventarioActual();
+      setInventario(inv);
+    } catch (err) {
+      console.error('Error al cargar inventario:', err);
+      toast.error('Error al cargar inventario del vehículo');
+    }
+  };
+
+  const validarInventario = (data: EntregaFormData): boolean => {
+    if (!inventario) return false;
+
+    const suficienteSodas = (inventario.sodas || 0) >= data.sodas;
+    const suficienteBidones10 = (inventario.bidones10 || 0) >= data.bidones10;
+    const suficienteBidones20 = (inventario.bidones20 || 0) >= data.bidones20;
+
+    if (!suficienteSodas) {
+      toast.error(`Stock insuficiente: Solo quedan ${inventario.sodas} sodas`);
+    }
+    if (!suficienteBidones10) {
+      toast.error(`Stock insuficiente: Solo quedan ${inventario.bidones10} bidones de 10L`);
+    }
+    if (!suficienteBidones20) {
+      toast.error(`Stock insuficiente: Solo quedan ${inventario.bidones20} bidones de 20L`);
+    }
+
+    return suficienteSodas && suficienteBidones10 && suficienteBidones20;
+  };
+
+  const handleClienteChange = useCallback(async (clienteId: string) => {
+    if (!clienteId) {
+      setClienteSeleccionado(null);
+      return;
+    }
+
+    try {
+      const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
+      if (cliente) {
+        setClienteSeleccionado(cliente);
+        setValue('clienteId', clienteId);
+        
+        const ultimaEntrega = await FirebaseService.getUltimaEntregaCliente(clienteId);
+        if (ultimaEntrega) {
+          setValue('bidones10', ultimaEntrega.bidones10 || 0);
+          setValue('bidones20', ultimaEntrega.bidones20 || 0);
+          setValue('sodas', ultimaEntrega.sodas || 0);
+          setValue('envasesDevueltos', ultimaEntrega.envasesDevueltos || 0);
         }
       }
-    };
-
-    loadClienteFromUrl();
-  }, [location.search, setValue]);
+    } catch (error) {
+      console.error('Error al cargar cliente:', error);
+      toast.error('Error al cargar los datos del cliente');
+    }
+  }, [setValue]);
 
   const loadClientes = async () => {
     try {
@@ -124,7 +151,24 @@ export const EntregaForm: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const loadClienteFromUrl = async () => {
+      const params = new URLSearchParams(location.search);
+      const clienteId = params.get('clienteId');
+      
+      if (clienteId) {
+        await handleClienteChange(clienteId);
+      }
+    };
+
+    loadClienteFromUrl();
+  }, [location.search, handleClienteChange]);
+
   const onSubmit = async (data: EntregaFormData) => {
+    if (!validarInventario(data)) {
+      return;
+    }
+
     setLoading(true);
     try {
       // Crear la fecha actual y asegurarnos de que sea válida
@@ -187,6 +231,20 @@ export const EntregaForm: React.FC = () => {
         updatedAt: serverTimestamp(),
       });
 
+      // Actualizar el inventario después de la entrega
+      if (inventario) {
+        const nuevoInventario = {
+          ...inventario,
+          sodas: (inventario.sodas || 0) - data.sodas,
+          bidones10: (inventario.bidones10 || 0) - data.bidones10,
+          bidones20: (inventario.bidones20 || 0) - data.bidones20,
+          envasesDevueltos: (inventario.envasesDevueltos || 0) + data.envasesDevueltos,
+          updatedAt: serverTimestamp()
+        };
+
+        batch.update(doc(db, 'inventarioVehiculo', inventario.id), nuevoInventario);
+      }
+
       // Ejecutar operación atómica
       await batch.commit();
 
@@ -214,6 +272,30 @@ export const EntregaForm: React.FC = () => {
           Nueva Entrega
         </h1>
 
+        {/* Información del Inventario */}
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <div className="flex items-center space-x-2 mb-2">
+            <Truck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-lg font-semibold text-blue-800 dark:text-blue-300">
+              Inventario Disponible
+            </h2>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Sodas:</span>
+              <span className="ml-2 font-semibold">{inventario?.sodas || 0}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Bidones 10L:</span>
+              <span className="ml-2 font-semibold">{inventario?.bidones10 || 0}</span>
+            </div>
+            <div>
+              <span className="text-gray-600 dark:text-gray-400">Bidones 20L:</span>
+              <span className="ml-2 font-semibold">{inventario?.bidones20 || 0}</span>
+            </div>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -222,6 +304,7 @@ export const EntregaForm: React.FC = () => {
             </label>
             <select
               {...register('clienteId')}
+              onChange={(e) => handleClienteChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             >
               <option value="">Seleccionar cliente</option>
@@ -236,11 +319,35 @@ export const EntregaForm: React.FC = () => {
             )}
           </div>
 
+          {/* Información del Cliente Seleccionado */}
+          {clienteSeleccionado && (
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">
+                    {clienteSeleccionado.nombre}
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {clienteSeleccionado.direccion}
+                  </p>
+                </div>
+                {clienteSeleccionado.saldoPendiente > 0 && (
+                  <div className="flex items-center space-x-2 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-5 w-5" />
+                    <span className="font-semibold">
+                      Saldo pendiente: ${clienteSeleccionado.saldoPendiente}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Package className="inline h-4 w-4 mr-2" />
-                Sodas (${precios.soda} c/u)
+                Sodas (${PRECIOS.soda} c/u)
               </label>
               <input
                 {...register('sodas', { valueAsNumber: true })}
@@ -256,7 +363,7 @@ export const EntregaForm: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Package className="inline h-4 w-4 mr-2" />
-                Bidones 10L (${precios.bidon10} c/u)
+                Bidones 10L (${PRECIOS.bidon10} c/u)
               </label>
               <input
                 {...register('bidones10', { valueAsNumber: true })}
@@ -272,7 +379,7 @@ export const EntregaForm: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Package className="inline h-4 w-4 mr-2" />
-                Bidones 20L (${precios.bidon20} c/u)
+                Bidones 20L (${PRECIOS.bidon20} c/u)
               </label>
               <input
                 {...register('bidones20', { valueAsNumber: true })}

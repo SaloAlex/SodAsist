@@ -13,31 +13,41 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
     }
 
-    // Reglas para usuarios
+    function isSodero() {
+      return isAuthenticated()
+             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'sodero';
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol;
+    }
+
+    // Regla global para permitir acceso a usuarios autenticados
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Reglas específicas para usuarios
     match /users/{userId} {
-      // Permitir lectura si está autenticado
       allow read: if isAuthenticated();
-      
-      // Permitir crear su propio documento de usuario al registrarse
-      allow create: if isAuthenticated() && 
-                   request.auth.uid == userId &&
-                   request.resource.data.rol in ['admin', 'sodero'];
-      
-      // Solo admin puede actualizar roles
-      allow update: if isAuthenticated() && 
-                   request.auth.uid == userId || isAdmin();
+      allow create: if isAuthenticated()
+                   && request.auth.uid == userId
+                   && request.resource.data.rol in ['admin', 'sodero'];
+      allow update: if isAuthenticated()
+                   && (request.auth.uid == userId || isAdmin());
     }
 
     // Reglas para clientes
     match /clientes/{clienteId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAuthenticated() && (isAdmin() || isSodero());
     }
 
     // Reglas para entregas
     match /entregas/{entregaId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow write: if isAuthenticated() && (isAdmin() || isSodero());
     }
     
     // Pagos - authenticated users can read and write
@@ -45,15 +55,24 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
     
-    // Inventario - authenticated users can read and write
-    match /inventarioVehiculo/{inventarioId} {
-      allow read, write: if request.auth != null;
-    }
-    
     // KPIs - authenticated users can read, only functions can write
     match /kpis/{kpiId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.token.admin == true;
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ───────── inventarioVehiculo ─────────
+    match /inventarioVehiculo/{invId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() 
+                  && (isAdmin() || isSodero());
+    }
+
+    // Regla para inventarioVehiculo en cualquier subruta (por si acaso)
+    match /{path=**}/inventarioVehiculo/{invId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() 
+                  && (isAdmin() || isSodero());
     }
   }
 }

@@ -46,11 +46,13 @@ export interface Pago {
 }
 
 export interface InventarioVehiculo {
+  id: string;
   fecha: Date;
   sodas: number;
   bidones10: number;
   bidones20: number;
-  updatedAt: Date;
+  envasesDevueltos: number;
+  updatedAt?: Date;
 }
 
 export interface User {
