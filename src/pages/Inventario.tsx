@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useReducer, useCallback, useEffect, memo } from 'react';
 import { Package, Plus, Minus, RotateCcw, Clock, AlertTriangle, FileText } from 'lucide-react';
 import { InventarioVehiculo } from '../types';
 import { FirebaseService } from '../services/firebaseService';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import toast from 'react-hot-toast';
-import { collection, doc, setDoc, serverTimestamp, where, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { collection, doc, runTransaction, serverTimestamp, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import clsx from 'clsx';
 
 const INVENTARIO_INICIAL = {
   sodas: 100,
@@ -23,6 +24,55 @@ const NIVELES_CRITICOS = {
   envasesDevueltos: 0
 };
 
+type InventarioAction =
+  | { type: 'SET_DOC'; payload: InventarioVehiculo }
+  | { type: 'ADJUST'; field: keyof InventarioVehiculo; delta: number }
+  | { type: 'SET'; field: keyof InventarioVehiculo; value: number }
+  | { type: 'RESET' }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_SAVING'; payload: boolean }
+  | { type: 'SET_EDITING'; payload: keyof InventarioVehiculo | null };
+
+interface InventarioState {
+  data: InventarioVehiculo;
+  loading: boolean;
+  saving: boolean;
+  editingField: keyof InventarioVehiculo | null;
+}
+
+function inventarioReducer(state: InventarioState, action: InventarioAction): InventarioState {
+  switch (action.type) {
+    case 'SET_DOC':
+      return { ...state, data: action.payload };
+    case 'ADJUST': {
+      const currentValue = state.data[action.field] as number;
+      const newValue = Math.max(0, currentValue + action.delta);
+      return {
+        ...state,
+        data: { ...state.data, [action.field]: newValue, updatedAt: new Date() }
+      };
+    }
+    case 'SET':
+      return {
+        ...state,
+        data: { ...state.data, [action.field]: action.value, updatedAt: new Date() }
+      };
+    case 'RESET':
+      return {
+        ...state,
+        data: { ...state.data, ...INVENTARIO_INICIAL, updatedAt: new Date() }
+      };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+    case 'SET_SAVING':
+      return { ...state, saving: action.payload };
+    case 'SET_EDITING':
+      return { ...state, editingField: action.payload };
+    default:
+      return state;
+  }
+}
+
 interface StockItemProps {
   title: string;
   value: number;
@@ -36,7 +86,7 @@ interface StockItemProps {
   disabled: boolean;
 }
 
-const StockItem: React.FC<StockItemProps> = ({
+const StockItem = memo<StockItemProps>(({
   title,
   value,
   icon,
@@ -48,21 +98,27 @@ const StockItem: React.FC<StockItemProps> = ({
   nivelCritico,
   disabled
 }) => {
-  const [manualValue, setManualValue] = useState(value.toString());
+  const [manualValue, setManualValue] = React.useState(value.toString());
+  const isBajoStock = value <= nivelCritico;
+
+  useEffect(() => {
+    setManualValue(value.toString());
+  }, [value]);
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newValue = parseInt(manualValue);
+    const newValue = Number(manualValue);
     if (!isNaN(newValue) && newValue >= 0) {
       onManualUpdate(newValue);
       setIsEditing(false);
     }
   };
 
-  const isBajoStock = value <= nivelCritico;
-
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+    <div className={clsx(
+      'bg-white dark:bg-gray-800 rounded-lg shadow p-6',
+      { 'bg-amber-50 dark:bg-amber-900/20': isBajoStock }
+    )}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           {icon}
@@ -70,7 +126,7 @@ const StockItem: React.FC<StockItemProps> = ({
             {title}
           </h3>
           {isBajoStock && (
-            <div className="flex items-center" title="Stock bajo">
+            <div className="flex items-center" title="Stock bajo" role="alert">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
             </div>
           )}
@@ -84,19 +140,26 @@ const StockItem: React.FC<StockItemProps> = ({
               className="w-20 px-2 py-1 text-xl font-bold border rounded"
               min="0"
               autoFocus
+              aria-label={`Editar cantidad de ${title}`}
             />
             <button
               type="submit"
               className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+              aria-label="Confirmar cambio"
             >
               ✓
             </button>
           </form>
         ) : (
           <div
-            className="text-2xl font-bold text-gray-900 dark:text-white cursor-pointer"
+            className={clsx(
+              'text-2xl font-bold cursor-pointer',
+              isBajoStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'
+            )}
             onClick={() => setIsEditing(true)}
             title="Click para editar"
+            role="button"
+            tabIndex={0}
           >
             {value}
           </div>
@@ -107,6 +170,7 @@ const StockItem: React.FC<StockItemProps> = ({
           onClick={onDecrease}
           className="flex-1 p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50"
           disabled={disabled}
+          aria-label={`Disminuir ${title}`}
         >
           <Minus className="h-5 w-5 mx-auto" />
         </button>
@@ -114,84 +178,45 @@ const StockItem: React.FC<StockItemProps> = ({
           onClick={onIncrease}
           className="flex-1 p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
           disabled={disabled}
+          aria-label={`Aumentar ${title}`}
         >
           <Plus className="h-5 w-5 mx-auto" />
         </button>
       </div>
     </div>
   );
-};
+});
+
+StockItem.displayName = 'StockItem';
 
 export const Inventario: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [inventario, setInventario] = useState<InventarioVehiculo>({
-    id: '',
-    fecha: new Date(),
-    sodas: 0,
-    bidones10: 0,
-    bidones20: 0,
-    envasesDevueltos: 0,
-    updatedAt: new Date(),
+  const [state, dispatch] = useReducer(inventarioReducer, {
+    data: {
+      id: '',
+      fecha: new Date(),
+      sodas: 0,
+      bidones10: 0,
+      bidones20: 0,
+      envasesDevueltos: 0,
+      updatedAt: new Date(),
+    },
+    loading: true,
+    saving: false,
+    editingField: null
   });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [editingField, setEditingField] = useState<keyof InventarioVehiculo | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // Manejar la autenticación y redirección
+  const { data: inventario, loading, saving, editingField } = state;
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+
   useEffect(() => {
-    console.log('Estado de autenticación:', user);
     if (!user) {
       navigate('/login');
       return;
     }
-  }, [user, navigate]);
 
-  // Función para actualizar el inventario
-  const updateInventario = useCallback(async (
-    field: keyof InventarioVehiculo, 
-    value: number, 
-    currentInventario = inventario
-  ) => {
-    if (!user) {
-      console.error('No hay usuario autenticado');
-      toast.error('No hay usuario autenticado');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const updated = { 
-        ...currentInventario,
-        [field]: value,
-        updatedAt: new Date()
-      };
-      
-      await setDoc(doc(db, 'inventarioVehiculo', currentInventario.id), {
-        ...updated,
-        updatedAt: serverTimestamp()
-      });
-      setInventario(updated);
-      toast.success('Inventario actualizado');
-    } catch (error) {
-      console.error('Error al actualizar inventario:', error);
-      toast.error('Error al actualizar inventario');
-      setInventario(currentInventario);
-    } finally {
-      setSaving(false);
-    }
-  }, [inventario, user]);
-
-  // Suscripción al inventario cuando tenemos usuario
-  useEffect(() => {
-    if (!user) {
-      console.log('No hay usuario autenticado para cargar inventario');
-      return;
-    }
-
-    console.log('Iniciando suscripción a inventario...');
-    setLoading(true);
+    dispatch({ type: 'SET_LOADING', payload: true });
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -199,45 +224,48 @@ export const Inventario: React.FC = () => {
     const unsubscribe = FirebaseService.subscribeToCollection<InventarioVehiculo>(
       'inventarioVehiculo',
       async (docs) => {
-        console.log('Datos recibidos de Firestore:', docs);
         if (docs.length > 0) {
-          // Tomar el documento más reciente
           const latestDoc = docs.reduce((latest, current) => 
             current.fecha > latest.fecha ? current : latest
           );
-          console.log('Documento más reciente:', latestDoc);
-          setInventario(latestDoc);
+          dispatch({ type: 'SET_DOC', payload: latestDoc });
         } else {
-          console.log('No hay documentos, creando inventario inicial');
-          // Si no hay inventario, crear uno nuevo
           const newInventario: InventarioVehiculo = {
             id: doc(collection(db, 'inventarioVehiculo')).id,
             fecha: new Date(),
             ...INVENTARIO_INICIAL,
             updatedAt: new Date()
           };
-          setInventario(newInventario);
+          dispatch({ type: 'SET_DOC', payload: newInventario });
           try {
-            await setDoc(doc(db, 'inventarioVehiculo', newInventario.id), {
-              ...newInventario,
-              updatedAt: serverTimestamp()
+            await runTransaction(db, async (transaction) => {
+              transaction.set(doc(db, 'inventarioVehiculo', newInventario.id), {
+                ...newInventario,
+                updatedAt: serverTimestamp()
+              });
             });
           } catch (error) {
             console.error('Error al crear inventario inicial:', error);
-            toast.error('Error al crear inventario inicial');
+            toast.error('Error al crear inventario inicial', { 
+              ariaProps: { role: 'alert', 'aria-live': 'assertive' }
+            });
           }
         }
-        setLoading(false);
+        dispatch({ type: 'SET_LOADING', payload: false });
       },
       (error) => {
         console.error('Error en suscripción:', error);
         if (error instanceof Error && error.message.includes('permission')) {
-          toast.error('No tienes permisos para acceder al inventario');
+          toast.error('No tienes permisos para acceder al inventario', { 
+            ariaProps: { role: 'alert', 'aria-live': 'assertive' }
+          });
           navigate('/dashboard');
         } else {
-          toast.error('Error al cargar inventario');
+          toast.error('Error al cargar inventario', { 
+            ariaProps: { role: 'alert', 'aria-live': 'assertive' }
+          });
         }
-        setLoading(false);
+        dispatch({ type: 'SET_LOADING', payload: false });
       },
       [
         where('fecha', '>=', Timestamp.fromDate(today)),
@@ -246,18 +274,120 @@ export const Inventario: React.FC = () => {
       ]
     );
 
-    return () => {
-      console.log('Limpiando suscripción a inventario');
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [user, navigate]);
 
-  const handleManualUpdate = useCallback(async (
+  const updateInventario = useCallback(async (
     field: keyof InventarioVehiculo,
-    newValue: number
+    value: number
   ) => {
-    await updateInventario(field, newValue);
+    if (!user) return;
+
+    dispatch({ type: 'SET_SAVING', payload: true });
+    const previousValue = inventario[field];
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const docRef = doc(db, 'inventarioVehiculo', inventario.id);
+        transaction.update(docRef, {
+          [field]: value,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      dispatch({ type: field === 'reset' as keyof InventarioVehiculo ? 'RESET' : 'SET', field, value });
+      
+      const prevValue = previousValue as number;
+      toast.custom(
+        (t) => (
+          <div className="bg-green-100 text-green-800 p-4 rounded-lg shadow flex justify-between items-center">
+            <span>Inventario actualizado</span>
+            <button
+              onClick={() => {
+                updateInventario(field, prevValue);
+                toast.dismiss(t.id);
+              }}
+              className="text-green-600 hover:text-green-800 font-medium"
+            >
+              Deshacer
+            </button>
+          </div>
+        ),
+        { duration: 3000 }
+      );
+    } catch (error) {
+      console.error('Error al actualizar inventario:', error);
+      toast.error('Error al actualizar inventario', { 
+        ariaProps: { role: 'alert', 'aria-live': 'assertive' }
+      });
+      // Revertir cambio local
+      dispatch({ type: 'SET', field, value: previousValue as number });
+    } finally {
+      dispatch({ type: 'SET_SAVING', payload: false });
+    }
+  }, [dispatch, inventario, user]);
+
+  const adjustStock = useCallback((field: keyof InventarioVehiculo, delta: number) => {
+    const currentValue = inventario[field] as number;
+    const newValue = Math.max(0, currentValue + delta);
+    updateInventario(field, newValue);
+  }, [inventario, updateInventario]);
+
+  const handleManualUpdate = useCallback((field: keyof InventarioVehiculo, value: number) => {
+    updateInventario(field, value);
   }, [updateInventario]);
+
+  const resetInventario = useCallback(async () => {
+    if (!user) return;
+
+    dispatch({ type: 'SET_SAVING', payload: true });
+    const previousState = { ...inventario };
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const docRef = doc(db, 'inventarioVehiculo', inventario.id);
+        transaction.update(docRef, {
+          ...INVENTARIO_INICIAL,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      dispatch({ type: 'RESET' });
+      toast.custom(
+        (t) => (
+          <div className="bg-green-100 text-green-800 p-4 rounded-lg shadow flex justify-between items-center">
+            <span>Inventario restablecido</span>
+            <button
+              onClick={async () => {
+                dispatch({ type: 'SET_DOC', payload: previousState });
+                await runTransaction(db, async (transaction) => {
+                  const docRef = doc(db, 'inventarioVehiculo', inventario.id);
+                  transaction.update(docRef, {
+                    ...previousState,
+                    updatedAt: serverTimestamp()
+                  });
+                });
+                toast.dismiss(t.id);
+              }}
+              className="text-green-600 hover:text-green-800 font-medium"
+            >
+              Deshacer
+            </button>
+          </div>
+        ),
+        { duration: 5000 }
+      );
+    } catch (error) {
+      console.error('Error al restablecer inventario:', error);
+      toast.error('Error al restablecer inventario', { 
+        ariaProps: { role: 'alert', 'aria-live': 'assertive' }
+      });
+      dispatch({ type: 'SET_DOC', payload: previousState });
+    } finally {
+      dispatch({ type: 'SET_SAVING', payload: false });
+      setShowResetConfirm(false);
+    }
+  }, [dispatch, inventario, user]);
 
   const formatDate = (date: Date | undefined) => {
     if (!date) return '';
@@ -266,38 +396,6 @@ export const Inventario: React.FC = () => {
       timeStyle: 'short'
     }).format(date);
   };
-
-  const adjustStock = useCallback((field: keyof InventarioVehiculo, delta: number) => {
-    const currentValue = inventario[field] as number;
-    const newValue = Math.max(0, currentValue + delta);
-    updateInventario(field, newValue);
-  }, [inventario, updateInventario]);
-
-  const resetInventario = useCallback(async () => {
-    if (!user) return;
-
-    setSaving(true);
-    try {
-      const newInventario = {
-        ...inventario,
-        ...INVENTARIO_INICIAL,
-        updatedAt: new Date()
-      };
-      
-      await setDoc(doc(db, 'inventarioVehiculo', inventario.id), {
-        ...newInventario,
-        updatedAt: serverTimestamp()
-      });
-      
-      setInventario(newInventario);
-      toast.success('Inventario restablecido');
-    } catch (error) {
-      console.error('Error al restablecer inventario:', error);
-      toast.error('Error al restablecer inventario');
-    } finally {
-      setSaving(false);
-    }
-  }, [inventario, user]);
 
   if (loading) {
     return (
@@ -308,7 +406,7 @@ export const Inventario: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" id="print-section">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -319,12 +417,13 @@ export const Inventario: React.FC = () => {
             Última actualización: {formatDate(inventario.updatedAt)}
           </p>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 no-print">
           {saving && <LoadingSpinner size="sm" />}
           <button
             onClick={() => window.print()}
             className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
             title="Imprimir inventario"
+            aria-label="Imprimir inventario"
           >
             <FileText className="h-5 w-5" />
           </button>
@@ -340,7 +439,7 @@ export const Inventario: React.FC = () => {
           onDecrease={() => adjustStock('sodas', -1)}
           onManualUpdate={(value) => handleManualUpdate('sodas', value)}
           isEditing={editingField === 'sodas'}
-          setIsEditing={(value) => setEditingField(value ? 'sodas' : null)}
+          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'sodas' : null })}
           nivelCritico={NIVELES_CRITICOS.sodas}
           disabled={saving}
         />
@@ -353,7 +452,7 @@ export const Inventario: React.FC = () => {
           onDecrease={() => adjustStock('bidones10', -1)}
           onManualUpdate={(value) => handleManualUpdate('bidones10', value)}
           isEditing={editingField === 'bidones10'}
-          setIsEditing={(value) => setEditingField(value ? 'bidones10' : null)}
+          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'bidones10' : null })}
           nivelCritico={NIVELES_CRITICOS.bidones10}
           disabled={saving}
         />
@@ -366,7 +465,7 @@ export const Inventario: React.FC = () => {
           onDecrease={() => adjustStock('bidones20', -1)}
           onManualUpdate={(value) => handleManualUpdate('bidones20', value)}
           isEditing={editingField === 'bidones20'}
-          setIsEditing={(value) => setEditingField(value ? 'bidones20' : null)}
+          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'bidones20' : null })}
           nivelCritico={NIVELES_CRITICOS.bidones20}
           disabled={saving}
         />
@@ -379,21 +478,18 @@ export const Inventario: React.FC = () => {
           onDecrease={() => adjustStock('envasesDevueltos', -1)}
           onManualUpdate={(value) => handleManualUpdate('envasesDevueltos', value)}
           isEditing={editingField === 'envasesDevueltos'}
-          setIsEditing={(value) => setEditingField(value ? 'envasesDevueltos' : null)}
+          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'envasesDevueltos' : null })}
           nivelCritico={NIVELES_CRITICOS.envasesDevueltos}
           disabled={saving}
         />
       </div>
 
-      <div className="flex justify-end space-x-4">
+      <div className="flex justify-end space-x-4 no-print">
         {showResetConfirm ? (
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-600">¿Estás seguro?</span>
             <button
-              onClick={() => {
-                resetInventario();
-                setShowResetConfirm(false);
-              }}
+              onClick={resetInventario}
               className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
               disabled={saving}
             >
@@ -420,19 +516,95 @@ export const Inventario: React.FC = () => {
 
       <style>{`
         @media print {
+          @page {
+            size: A4;
+            margin: 2cm;
+          }
+          
+          body {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: white !important;
+          }
+
           body * {
             visibility: hidden;
           }
-          .inventory-section, .inventory-section * {
-            visibility: visible;
+
+          #print-section,
+          #print-section * {
+            visibility: visible !important;
+            color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
           }
-          .inventory-section {
+
+          #print-section {
             position: absolute;
             left: 0;
             top: 0;
+            width: 100%;
+            padding: 20px;
+            background: white !important;
           }
+
           .no-print {
             display: none !important;
+          }
+
+          /* Asegurar que los colores y fondos se impriman */
+          .bg-white {
+            background-color: white !important;
+            box-shadow: none !important;
+          }
+
+          .text-gray-900 {
+            color: black !important;
+          }
+
+          .text-gray-500 {
+            color: #666 !important;
+          }
+
+          /* Ajustar el grid para impresión */
+          .grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 1rem !important;
+          }
+
+          /* Estilos específicos para StockItem en impresión */
+          #print-section .rounded-lg {
+            border: 1px solid #ddd !important;
+            padding: 1rem !important;
+            margin-bottom: 1rem !important;
+            page-break-inside: avoid !important;
+          }
+
+          /* Asegurar que los iconos sean visibles */
+          svg {
+            color: currentColor !important;
+            fill: currentColor !important;
+          }
+
+          /* Ajustar el tamaño de fuente para mejor legibilidad */
+          h1 {
+            font-size: 24pt !important;
+            margin-bottom: 1rem !important;
+          }
+
+          h3 {
+            font-size: 14pt !important;
+          }
+
+          .text-2xl {
+            font-size: 16pt !important;
+          }
+
+          /* Asegurar que los valores críticos sean visibles */
+          .text-amber-500,
+          .text-amber-600 {
+            color: #d97706 !important;
           }
         }
       `}</style>
