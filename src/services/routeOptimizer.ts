@@ -1,95 +1,159 @@
-import { Cliente } from '../types';
+import { ClienteConRuta } from '../types';
 
-interface RoutePoint {
+interface LatLng {
   lat: number;
   lng: number;
-  cliente: Cliente;
+}
+
+interface RouteOptimizationResult {
+  optimizedOrder: number[];
+  distances: number[];
+  durations: number[];
+  totalDistance: number;
+  totalDuration: number;
 }
 
 export class RouteOptimizer {
-  private static calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-    const R = 6371; // Earth's radius in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+  private static readonly MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  private static geocodeCache = new Map<string, LatLng>();
+
+  static async optimizeRoute(clientes: ClienteConRuta[]): Promise<ClienteConRuta[]> {
+    try {
+      // Obtener coordenadas para cada cliente
+      const coordenadas = await Promise.all(
+        clientes.map(cliente => this.getCoordinates(cliente.direccion))
+      );
+
+      // Calcular matriz de distancias
+      const distanceMatrix = await this.calculateDistanceMatrix(coordenadas);
+
+      // Optimizar ruta usando el algoritmo del vecino más cercano
+      const result = this.nearestNeighborOptimization(distanceMatrix);
+
+      // Reordenar clientes según la optimización
+      return result.optimizedOrder.map(index => clientes[index]);
+    } catch (error) {
+      console.error('Error al optimizar ruta:', error);
+      throw new Error('No se pudo optimizar la ruta');
+    }
   }
 
-  static async optimizeRoute(clientes: Cliente[], startLat: number = -34.6037, startLng: number = -58.3816): Promise<Cliente[]> {
-    if (clientes.length === 0) return [];
-    
-    // Filter clients with coordinates
-    const clientesConCoords = clientes.filter(c => c.lat && c.lng);
-    
-    if (clientesConCoords.length === 0) return clientes;
-
-    // Simple nearest neighbor algorithm
-    const points: RoutePoint[] = clientesConCoords.map(c => ({
-      lat: c.lat!,
-      lng: c.lng!,
-      cliente: c
-    }));
-
-    const optimizedRoute: Cliente[] = [];
-    let currentLat = startLat;
-    let currentLng = startLng;
-    let remainingPoints = [...points];
-
-    while (remainingPoints.length > 0) {
-      let nearestIndex = 0;
-      let minDistance = this.calculateDistance(currentLat, currentLng, remainingPoints[0].lat, remainingPoints[0].lng);
-
-      for (let i = 1; i < remainingPoints.length; i++) {
-        const distance = this.calculateDistance(currentLat, currentLng, remainingPoints[i].lat, remainingPoints[i].lng);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestIndex = i;
-        }
-      }
-
-      const nearestPoint = remainingPoints[nearestIndex];
-      optimizedRoute.push(nearestPoint.cliente);
-      currentLat = nearestPoint.lat;
-      currentLng = nearestPoint.lng;
-      remainingPoints.splice(nearestIndex, 1);
+  private static async getCoordinates(direccion: string): Promise<LatLng> {
+    // Verificar cache
+    if (this.geocodeCache.has(direccion)) {
+      return this.geocodeCache.get(direccion)!;
     }
-
-    // Add clients without coordinates at the end
-    const clientesSinCoords = clientes.filter(c => !c.lat || !c.lng);
-    optimizedRoute.push(...clientesSinCoords);
-
-    return optimizedRoute;
-  }
-
-  static async getMapboxRoute(clientes: Cliente[]): Promise<any> {
-    const accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-    if (!accessToken) {
-      console.warn('Mapbox access token not configured');
-      return null;
-    }
-
-    const coordinates = clientes
-      .filter(c => c.lat && c.lng)
-      .map(c => `${c.lng},${c.lat}`)
-      .join(';');
-
-    if (!coordinates) return null;
 
     try {
       const response = await fetch(
-        `https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordinates}?access_token=${accessToken}&overview=full&geometries=geojson`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+          direccion
+        )}&key=${this.MAPS_API_KEY}`
       );
-      
-      if (!response.ok) throw new Error('Mapbox API error');
-      
-      return await response.json();
+
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results.length > 0) {
+        const { lat, lng } = data.results[0].geometry.location;
+        const coords = { lat, lng };
+        this.geocodeCache.set(direccion, coords);
+        return coords;
+      }
+
+      throw new Error(`No se pudo geocodificar la dirección: ${direccion}`);
     } catch (error) {
-      console.error('Error fetching Mapbox route:', error);
-      return null;
+      console.error('Error al obtener coordenadas:', error);
+      throw error;
     }
+  }
+
+  private static async calculateDistanceMatrix(
+    locations: LatLng[]
+  ): Promise<number[][]> {
+    try {
+      const origins = locations.map(loc => `${loc.lat},${loc.lng}`).join('|');
+      const destinations = origins;
+
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origins}&destinations=${destinations}&key=${this.MAPS_API_KEY}`
+      );
+
+      const data = await response.json();
+
+      if (data.status === 'OK') {
+        return data.rows.map((row: any) =>
+          row.elements.map((element: any) => element.distance.value)
+        );
+      }
+
+      throw new Error('Error al obtener matriz de distancias');
+    } catch (error) {
+      console.error('Error al calcular matriz de distancias:', error);
+      throw error;
+    }
+  }
+
+  private static nearestNeighborOptimization(
+    distanceMatrix: number[][]
+  ): RouteOptimizationResult {
+    const n = distanceMatrix.length;
+    const visited = new Set<number>();
+    const optimizedOrder: number[] = [];
+    const distances: number[] = [];
+    let totalDistance = 0;
+
+    // Comenzar desde el primer punto
+    let currentPoint = 0;
+    optimizedOrder.push(currentPoint);
+    visited.add(currentPoint);
+
+    // Encontrar el vecino más cercano para cada punto restante
+    while (visited.size < n) {
+      let minDistance = Infinity;
+      let nextPoint = -1;
+
+      // Buscar el punto más cercano no visitado
+      for (let i = 0; i < n; i++) {
+        if (!visited.has(i)) {
+          const distance = distanceMatrix[currentPoint][i];
+          if (distance < minDistance) {
+            minDistance = distance;
+            nextPoint = i;
+          }
+        }
+      }
+
+      if (nextPoint !== -1) {
+        optimizedOrder.push(nextPoint);
+        distances.push(minDistance);
+        totalDistance += minDistance;
+        visited.add(nextPoint);
+        currentPoint = nextPoint;
+      }
+    }
+
+    // Calcular duración estimada (asumiendo velocidad promedio de 30 km/h)
+    const durations = distances.map(distance => (distance / 1000) * (60 / 30)); // minutos
+    const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
+
+    return {
+      optimizedOrder,
+      distances,
+      durations,
+      totalDistance,
+      totalDuration
+    };
+  }
+
+  static async getDirectionsUrl(origen: LatLng, destino: LatLng): Promise<string> {
+    return `https://www.google.com/maps/dir/?api=1&origin=${origen.lat},${origen.lng}&destination=${destino.lat},${destino.lng}`;
+  }
+
+  static async getStaticMapUrl(puntos: LatLng[], width: number = 600, height: number = 400): Promise<string> {
+    const markers = puntos
+      .map((punto, index) => `markers=label:${index + 1}|${punto.lat},${punto.lng}`)
+      .join('&');
+
+    return `https://maps.googleapis.com/maps/api/staticmap?size=${width}x${height}&${markers}&key=${this.MAPS_API_KEY}`;
   }
 }

@@ -1,20 +1,21 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'sodero';
+  requiredRole?: 'admin' | 'sodero' | ('admin' | 'sodero')[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
   requiredRole 
 }) => {
-  const { user, userData, loading } = useAuthStore();
+  const { user, userData, loading, initialized } = useAuthStore();
+  const location = useLocation();
 
-  if (loading) {
+  if (!initialized || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <LoadingSpinner size="lg" />
@@ -22,12 +23,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  if (!user || !userData) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRole && userData?.rol !== requiredRole) {
-    return <Navigate to="/dashboard" replace />;
+  if (requiredRole) {
+    const hasAccess = Array.isArray(requiredRole)
+      ? requiredRole.includes(userData.rol)
+      : userData.rol === requiredRole;
+
+    if (!hasAccess) {
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return <>{children}</>;

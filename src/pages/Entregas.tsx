@@ -1,12 +1,6 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
-import { EntregaForm } from '../components/entregas/EntregaForm';
+import { Outlet } from 'react-router-dom';
 
 export const Entregas: React.FC = () => {
-  return (
-    <Routes>
-      <Route path="new" element={<EntregaForm />} />
-      <Route path="nuevo" element={<EntregaForm />} />
-    </Routes>
-  );
+  return <Outlet />;
 };

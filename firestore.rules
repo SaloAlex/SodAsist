@@ -8,9 +8,9 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
+      return isAuthenticated()
+             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
     }
 
     function isSodero() {
@@ -19,13 +19,14 @@ service cloud.firestore {
              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'sodero';
     }
 
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol;
+    function isAdminOrSodero() {
+      return isAuthenticated()
+             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol in ['admin', 'sodero']);
     }
 
-    // Regla global para permitir acceso a usuarios autenticados
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol;
     }
 
     // Reglas específicas para usuarios
@@ -40,19 +41,27 @@ service cloud.firestore {
 
     // Reglas para clientes
     match /clientes/{clienteId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (isAdmin() || isSodero());
+      allow read, write: if isAdminOrSodero();
     }
 
     // Reglas para entregas
     match /entregas/{entregaId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (isAdmin() || isSodero());
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Reglas para visitas
+    match /visitas/{visitaId} {
+      allow read, write: if isAdminOrSodero();
+    }
+
+    // Reglas para rutas
+    match /rutas/{rutaId} {
+      allow read, write: if isAdminOrSodero();
     }
     
     // Pagos - authenticated users can read and write
     match /pagos/{pagoId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
     
     // KPIs - authenticated users can read, only functions can write
@@ -63,16 +72,12 @@ service cloud.firestore {
 
     // ───────── inventarioVehiculo ─────────
     match /inventarioVehiculo/{invId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() 
-                  && (isAdmin() || isSodero());
+      allow read, write: if isAdminOrSodero();
     }
 
     // Regla para inventarioVehiculo en cualquier subruta (por si acaso)
     match /{path=**}/inventarioVehiculo/{invId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() 
-                  && (isAdmin() || isSodero());
+      allow read, write: if isAdminOrSodero();
     }
   }
 }

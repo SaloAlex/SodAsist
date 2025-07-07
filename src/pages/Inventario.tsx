@@ -154,7 +154,7 @@ const StockItem = memo<StockItemProps>(({
           <div
             className={clsx(
               'text-2xl font-bold cursor-pointer',
-              isBajoStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'
+              isBajoStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'
             )}
             onClick={() => setIsEditing(true)}
             title="Click para editar"

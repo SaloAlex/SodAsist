@@ -283,15 +283,15 @@ export const EntregaForm: React.FC = () => {
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <span className="text-gray-600 dark:text-gray-400">Sodas:</span>
-              <span className="ml-2 font-semibold">{inventario?.sodas || 0}</span>
+              <span className="ml-2 font-semibold text-gray-900 dark:text-gray-100">{inventario?.sodas || 0}</span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Bidones 10L:</span>
-              <span className="ml-2 font-semibold">{inventario?.bidones10 || 0}</span>
+              <span className="ml-2 font-semibold text-gray-900 dark:text-gray-100">{inventario?.bidones10 || 0}</span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Bidones 20L:</span>
-              <span className="ml-2 font-semibold">{inventario?.bidones20 || 0}</span>
+              <span className="ml-2 font-semibold text-gray-900 dark:text-gray-100">{inventario?.bidones20 || 0}</span>
             </div>
           </div>
         </div>
