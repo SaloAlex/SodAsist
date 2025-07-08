@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ClienteConRuta, RutaOptimizada, Visita, EstadoVisita, FirestoreTimestamp } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import { ClienteConRuta, RutaOptimizada, Visita, EstadoVisita } from '../types';
 import { FirebaseService } from '../services/firebaseService';
 import { RouteOptimizer } from '../services/routeOptimizer';
 import { collection, query, where, orderBy, getDocs, doc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -33,6 +33,47 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   const [error, setError] = useState<Error | null>(null);
   const [zonaSeleccionada, setZonaSeleccionada] = useState<string>('');
   const { userData, loading: authLoading } = useAuthStore();
+
+  // Mover filterClientesParaHoy a useCallback
+  const filterClientesParaHoy = useCallback((clientes: ClienteConRuta[]): ClienteConRuta[] => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const dayOfMonth = today.getDate();
+    const weekOfYear = Math.ceil(dayOfMonth / 7);
+    
+    const daysMap: Record<number, string> = {
+      0: 'domingo',
+      1: 'lunes',
+      2: 'martes',
+      3: 'miércoles',
+      4: 'jueves',
+      5: 'viernes',
+      6: 'sábado'
+    };
+    
+    const todayName = daysMap[dayOfWeek];
+    
+    return clientes.filter(cliente => {
+      if (zonaSeleccionada && cliente.zona !== zonaSeleccionada) {
+        return false;
+      }
+
+      if (cliente.diaVisita !== todayName) {
+        return false;
+      }
+      
+      switch (cliente.frecuenciaVisita) {
+        case 'semanal':
+          return true;
+        case 'quincenal':
+          return weekOfYear % 2 === 1;
+        case 'mensual':
+          return dayOfMonth <= 7;
+        default:
+          return false;
+      }
+    });
+  }, [zonaSeleccionada]); // Agregar zonaSeleccionada como dependencia
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -100,48 +141,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
     };
 
     cargarDatos();
-  }, [userData, authLoading]); // Agregar authLoading como dependencia
-
-  // Filtrar clientes para hoy
-  const filterClientesParaHoy = (clientes: ClienteConRuta[]): ClienteConRuta[] => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const dayOfMonth = today.getDate();
-    const weekOfYear = Math.ceil(dayOfMonth / 7);
-    
-    const daysMap: Record<number, string> = {
-      0: 'domingo',
-      1: 'lunes',
-      2: 'martes',
-      3: 'miércoles',
-      4: 'jueves',
-      5: 'viernes',
-      6: 'sábado'
-    };
-    
-    const todayName = daysMap[dayOfWeek];
-    
-    return clientes.filter(cliente => {
-      if (zonaSeleccionada && cliente.zona !== zonaSeleccionada) {
-        return false;
-      }
-
-      if (cliente.diaVisita !== todayName) {
-        return false;
-      }
-      
-      switch (cliente.frecuenciaVisita) {
-        case 'semanal':
-          return true;
-        case 'quincenal':
-          return weekOfYear % 2 === 1;
-        case 'mensual':
-          return dayOfMonth <= 7;
-        default:
-          return false;
-      }
-    });
-  };
+  }, [userData, authLoading, filterClientesParaHoy]); // Agregar filterClientesParaHoy a las dependencias
 
   // Optimizar ruta
   const optimizarRuta = async (clientesData: ClienteConRuta[]) => {
@@ -179,35 +179,62 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   // Marcar visita
   const marcarVisita = async (clienteId: string, estado: EstadoVisita, notas?: string) => {
     try {
-      const visita: Visita = {
-        id: doc(collection(db, 'visitas')).id,
+      if (estado === EstadoVisita.PENDIENTE) {
+        // Si cambiamos a pendiente, eliminamos la visita existente
+        const visitaExistente = visitasCompletadas.get(clienteId);
+        if (visitaExistente) {
+          await FirebaseService.deleteDocument('visitas', visitaExistente.id);
+          setVisitasCompletadas(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(clienteId);
+            return newMap;
+          });
+          toast.success('Visita marcada como pendiente');
+        }
+        return;
+      }
+
+      const visitaId = doc(collection(db, 'visitas')).id;
+      const visitaBase = {
+        id: visitaId,
         clienteId,
-        fecha: serverTimestamp() as unknown as FirestoreTimestamp,
         completada: estado === EstadoVisita.COMPLETADA,
-        notas,
         tiempoVisita: 0, // Se calculará
         ubicacionCompletado: { lat: 0, lng: 0 } // Se obtendrá la ubicación actual
       };
 
-      await setDoc(doc(db, 'visitas', visita.id), {
-        ...visita,
+      const visitaData = {
+        ...visitaBase,
+        ...(notas ? { notas } : {}), // Solo incluir notas si existe
         fecha: serverTimestamp()
-      });
+      };
+
+      await setDoc(doc(db, 'visitas', visitaId), visitaData);
 
       if (estado === EstadoVisita.COMPLETADA) {
-        setVisitasCompletadas(prev => new Map(prev).set(clienteId, visita));
+        // Esperar a que Firestore asigne el timestamp
+        const visitaCompleta: Visita = {
+          ...visitaBase,
+          ...(notas ? { notas } : {}),
+          fecha: {
+            seconds: Math.floor(Date.now() / 1000),
+            nanoseconds: 0
+          }
+        };
+        setVisitasCompletadas(prev => new Map(prev).set(clienteId, visitaCompleta));
+        toast.success('Visita marcada como completada');
       } else {
         setVisitasCompletadas(prev => {
           const newMap = new Map(prev);
           newMap.delete(clienteId);
           return newMap;
         });
+        toast.success(`Visita marcada como ${estado}`);
       }
-
-      toast.success(`Visita marcada como ${estado}`);
     } catch (err) {
       console.error('Error al marcar visita:', err);
       toast.error('Error al actualizar la visita');
+      throw err;
     }
   };
 

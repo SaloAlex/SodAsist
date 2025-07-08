@@ -2,6 +2,11 @@ export interface Cliente {
   id: string;
   nombre: string;
   direccion: string;
+  colonia?: string;
+  ciudad?: string;
+  estado?: string;
+  codigoPostal?: string;
+  pais?: string;
   telefono: string;
   diaVisita: 'lunes' | 'martes' | 'miércoles' | 'jueves' | 'viernes' | 'sábado' | 'domingo';
   frecuenciaVisita: 'semanal' | 'quincenal' | 'mensual';

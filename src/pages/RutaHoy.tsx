@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRutaHoy } from '../hooks/useRutaHoy';
 import { MapaRuta } from '../components/entregas/MapaRuta';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
-import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from '@hello-pangea/dnd';
 import { FaMapMarkedAlt, FaFileExport, FaUndo, FaExclamationTriangle } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { HistorialVisitas } from '../components/entregas/HistorialVisitas';
@@ -81,7 +81,7 @@ export const RutaHoy: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <LoadingSpinner size="lg" />
-        <p className="mt-4 text-gray-600">Cargando datos...</p>
+        <p className="mt-4 text-gray-600 dark:text-gray-300">Cargando datos...</p>
       </div>
     );
   }
@@ -106,8 +106,8 @@ export const RutaHoy: React.FC = () => {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold mb-4">Ruta de Hoy</h1>
-          <p className="text-gray-600">No hay clientes programados para hoy</p>
+          <h1 className="text-3xl font-bold mb-4 dark:text-white">Ruta de Hoy</h1>
+          <p className="text-gray-600 dark:text-gray-300">No hay clientes programados para hoy</p>
         </div>
       </div>
     );
@@ -116,7 +116,7 @@ export const RutaHoy: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Ruta de Hoy</h1>
+        <h1 className="text-3xl font-bold dark:text-white">Ruta de Hoy</h1>
         <div className="flex space-x-4">
           <button
             onClick={() => setMostrarMapa(!mostrarMapa)}
@@ -153,7 +153,7 @@ export const RutaHoy: React.FC = () => {
         <select
           value={zonaSeleccionada}
           onChange={(e) => handleFiltrarZona(e.target.value)}
-          className="w-full md:w-64 p-2 border rounded"
+          className="w-full md:w-64 p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
         >
           <option value="">Todas las zonas</option>
           {rutaOptimizada?.zonas.map((zona) => (
@@ -188,6 +188,7 @@ export const RutaHoy: React.FC = () => {
                       <ClienteDetalles
                         cliente={cliente}
                         visitaCompletada={visitasCompletadas.has(cliente.id!)}
+                        orden={index + 1}
                         onMarcarVisita={(estado) => marcarVisita(cliente.id!, estado)}
                         onVerHistorial={() => handleVerHistorial(cliente.id!)}
                         onAgregarNota={(nota) => agregarNota(cliente.id!, nota)}

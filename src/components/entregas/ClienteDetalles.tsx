@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ClienteConRuta, EstadoVisita } from '../../types';
-import { FaHistory } from 'react-icons/fa';
-import { MdDone, MdCancel } from 'react-icons/md';
+import { FaCheck, FaTimes, FaHistory, FaEdit, FaMapMarkerAlt, FaUndo } from 'react-icons/fa';
 import { NotasForm } from './NotasForm';
 
 interface ClienteDetallesProps {
   cliente: ClienteConRuta;
   visitaCompletada: boolean;
+  orden: number;
   onMarcarVisita: (estado: EstadoVisita) => void;
   onVerHistorial: () => void;
   onAgregarNota: (nota: string) => void;
@@ -15,73 +15,98 @@ interface ClienteDetallesProps {
 export const ClienteDetalles: React.FC<ClienteDetallesProps> = ({
   cliente,
   visitaCompletada,
+  orden,
   onMarcarVisita,
   onVerHistorial,
   onAgregarNota,
 }) => {
+  const [mostrarNotas, setMostrarNotas] = useState(false);
+
   return (
-    <div className="p-4 bg-white rounded-lg shadow-md">
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="text-xl font-semibold">{cliente.nombre}</h3>
-          <p className="text-gray-600">{cliente.direccion}</p>
-          <p className="text-gray-500">{cliente.telefono}</p>
-          {cliente.observaciones && (
-            <p className="text-gray-500 mt-2">
-              Notas: {cliente.observaciones}
+    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-4 relative ${
+      visitaCompletada ? 'border-l-4 border-green-500' : ''
+    }`}>
+      {/* Número de orden */}
+      <div className="absolute -left-4 -top-4 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold shadow-lg">
+        {orden}
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+        <div className="flex-1">
+          <h3 className="text-xl font-bold mb-2 dark:text-white">{cliente.nombre}</h3>
+          <div className="space-y-1 text-gray-600 dark:text-gray-300">
+            <p className="flex items-center">
+              <FaMapMarkerAlt className="mr-2" />
+              {cliente.direccion}
             </p>
-          )}
-          {cliente.saldoPendiente && cliente.saldoPendiente > 0 && (
-            <p className="text-red-500 mt-2">
-              Saldo pendiente: ${cliente.saldoPendiente.toFixed(2)}
-            </p>
-          )}
-          {cliente.productosFrecuentes && cliente.productosFrecuentes.length > 0 && (
-            <div className="mt-2">
-              <p className="text-sm font-semibold">Productos frecuentes:</p>
-              <ul className="list-disc list-inside text-sm text-gray-600">
-                {cliente.productosFrecuentes.map((producto, index) => (
-                  <li key={index}>
-                    {producto.producto}: {producto.cantidadPromedio} unidades (frecuencia: {producto.frecuencia}%)
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            <p>Teléfono: {cliente.telefono}</p>
+            <p>Zona: {cliente.zona}</p>
+            {cliente.observaciones && (
+              <p className="text-sm italic">Notas: {cliente.observaciones}</p>
+            )}
+          </div>
         </div>
-        <div className="flex space-x-2">
+
+        <div className="flex flex-col space-y-2 mt-4 md:mt-0 md:ml-4">
+          {!visitaCompletada ? (
+            <>
+              <button
+                onClick={() => onMarcarVisita(EstadoVisita.COMPLETADA)}
+                className="flex items-center px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              >
+                <FaCheck className="mr-2" />
+                Completar
+              </button>
+              <button
+                onClick={() => onMarcarVisita(EstadoVisita.CANCELADA)}
+                className="flex items-center px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                <FaTimes className="mr-2" />
+                No encontrado
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center text-green-500 font-semibold mb-2">
+                <FaCheck className="mr-2" />
+                Completado
+              </div>
+              <button
+                onClick={() => onMarcarVisita(EstadoVisita.PENDIENTE)}
+                className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                title="Deshacer visita completada"
+              >
+                <FaUndo className="mr-2" />
+                Deshacer
+              </button>
+            </>
+          )}
+          
           <button
             onClick={onVerHistorial}
-            className="p-2 text-blue-500 hover:bg-blue-100 rounded"
-            title="Ver historial"
+            className="flex items-center px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
-            <FaHistory />
+            <FaHistory className="mr-2" />
+            Historial
           </button>
+          
           <button
-            onClick={() => onMarcarVisita(EstadoVisita.COMPLETADA)}
-            className="p-2 text-green-500 hover:bg-green-100 rounded"
-            disabled={visitaCompletada}
-            title="Marcar como completada"
+            onClick={() => setMostrarNotas(true)}
+            className="flex items-center px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
           >
-            <MdDone />
-          </button>
-          <button
-            onClick={() => onMarcarVisita(EstadoVisita.CANCELADA)}
-            className="p-2 text-red-500 hover:bg-red-100 rounded"
-            title="Marcar como cancelada"
-          >
-            <MdCancel />
+            <FaEdit className="mr-2" />
+            Agregar Nota
           </button>
         </div>
       </div>
 
-      {visitaCompletada && (
-        <div className="mt-4">
-          <NotasForm
-            onSubmit={onAgregarNota}
-            className="mt-2"
-          />
-        </div>
+      {mostrarNotas && (
+        <NotasForm
+          onSubmit={(nota) => {
+            onAgregarNota(nota);
+            setMostrarNotas(false);
+          }}
+        />
       )}
     </div>
   );

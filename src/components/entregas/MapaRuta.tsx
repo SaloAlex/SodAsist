@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { GoogleMap, DirectionsRenderer, InfoWindow } from '@react-google-maps/api';
 import { ClienteConRuta } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 
@@ -7,188 +8,295 @@ interface MapaRutaProps {
   className?: string;
 }
 
-interface CustomWindow extends Window {
-  google: typeof google;
-  initMap: () => void;
-}
+const mapContainerStyle = {
+  width: '100%',
+  height: '400px',
+};
 
-declare const window: CustomWindow;
+const mapOptions = {
+  mapTypeControl: true,
+  streetViewControl: true,
+  zoomControl: true,
+  scaleControl: true,
+  fullscreenControl: true,
+  styles: [
+    {
+      featureType: 'poi',
+      elementType: 'labels',
+      stylers: [{ visibility: 'off' }]
+    }
+  ]
+};
 
-export const MapaRuta: React.FC<MapaRutaProps> = ({ clientes, className = '' }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(true);
+// Definir los límites geográficos por país
+const COUNTRY_BOUNDS = {
+  'Argentina': {
+    sw: { lat: -55.0577, lng: -73.5604 }, // Punto más al suroeste de Argentina
+    ne: { lat: -21.7799, lng: -53.6374 }  // Punto más al noreste de Argentina
+  },
+  'México': {
+    sw: { lat: 14.5321, lng: -118.4011 }, // Punto más al suroeste de México
+    ne: { lat: 32.7187, lng: -86.5924 }   // Punto más al noreste de México
+  }
+  // Agregar más países según sea necesario
+};
+
+// Función para formatear la dirección
+const formatearDireccion = (cliente: ClienteConRuta) => {
+  const partes = [];
+  
+  // Agregar cada parte de la dirección si existe
+  if (cliente.direccion) partes.push(cliente.direccion);
+  if (cliente.colonia) partes.push(cliente.colonia);
+  if (cliente.ciudad) partes.push(cliente.ciudad);
+  if (cliente.estado) partes.push(cliente.estado);
+  if (cliente.codigoPostal) partes.push(cliente.codigoPostal);
+  
+  // Agregar el país (por defecto Argentina si no está especificado)
+  const pais = cliente.pais || 'Argentina';
+  partes.push(pais);
+  
+  return {
+    direccionCompleta: partes.join(', '),
+    pais
+  };
+};
+
+export const MapaRuta: React.FC<MapaRutaProps> = React.memo(({ clientes, className = '' }) => {
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [selectedCliente, setSelectedCliente] = useState<ClienteConRuta | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const calculationInProgress = useRef(false);
+  const previousIdsRef = useRef<string[]>([]);
+  const previousDirectionsRef = useRef<google.maps.DirectionsResult | null>(null);
 
-  useEffect(() => {
-    const loadGoogleMaps = () => {
-      if (!import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
-        setError('API key no configurada');
-        setLoading(false);
-        return;
+  // Memoizar las opciones del mapa
+  const options = useMemo(() => ({
+    ...mapOptions,
+    gestureHandling: 'cooperative',
+  }), []);
+
+  // Memoizar el centro inicial
+  const initialCenter = useMemo(() => ({ 
+    lat: -34.6037, 
+    lng: -58.3816  // Centro de Buenos Aires
+  }), []);
+
+  // Función para crear el contenido del marcador
+  const createMarkerElement = useCallback((index: number, color: string) => {
+    const div = document.createElement('div');
+    div.className = 'marker-container';
+    div.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background-color: ${color};
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      border: 2px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    `;
+    div.textContent = (index + 1).toString();
+    return div;
+  }, []);
+
+  // Función para limpiar marcadores
+  const clearMarkers = useCallback(() => {
+    markersRef.current.forEach(marker => {
+      if (marker) {
+        marker.map = null;
       }
+    });
+    markersRef.current = [];
+  }, []);
 
-      // Verificar si la API ya está cargada
-      if (window.google?.maps) {
-        initializeMap();
-        return;
-      }
+  const calculateRoute = useCallback(async (clientesActuales: ClienteConRuta[]) => {
+    if (!map || !window.google) return;
+    if (clientesActuales.length < 1) return;
 
-      // Cargar la API de Google Maps
-      window.initMap = initializeMap;
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&callback=initMap`;
-      script.async = true;
-      script.onerror = () => {
-        setError('Error al cargar Google Maps');
-        setLoading(false);
-      };
-      document.head.appendChild(script);
+    try {
+      calculationInProgress.current = true;
+      setLoading(true);
+      setError(null);
+      clearMarkers();
 
-      return () => {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-        // Limpiar la función initMap
-        const customWindow = window as Partial<CustomWindow>;
-        if (customWindow.initMap) {
-          customWindow.initMap = undefined;
-        }
-      };
-    };
+      const geocoder = new google.maps.Geocoder();
+      const directionsService = new google.maps.DirectionsService();
+      const bounds = new google.maps.LatLngBounds();
 
-    const initializeMap = async () => {
-      if (!mapRef.current || clientes.length === 0) {
-        setLoading(false);
-        return;
-      }
+      // Geocodificar direcciones
+      const locations = await Promise.all(
+        clientesActuales.map(async (cliente, index) => {
+          const { direccionCompleta, pais } = formatearDireccion(cliente);
+          const countryBounds = COUNTRY_BOUNDS[pais as keyof typeof COUNTRY_BOUNDS];
 
-      try {
-        const geocoder = new google.maps.Geocoder();
-        const bounds = new google.maps.LatLngBounds();
-        const map = new google.maps.Map(mapRef.current, {
-          zoom: 12,
-          mapTypeId: google.maps.MapTypeId.ROADMAP,
-          mapTypeControl: true,
-          streetViewControl: true,
-          zoomControl: true,
-          scaleControl: true,
-        });
+          const result = await new Promise<google.maps.GeocoderResult>((resolve, reject) => {
+            geocoder.geocode(
+              {
+                address: direccionCompleta,
+                region: pais === 'México' ? 'MX' : 'AR',
+                ...(countryBounds && {
+                  bounds: new google.maps.LatLngBounds(
+                    new google.maps.LatLng(countryBounds.sw.lat, countryBounds.sw.lng),
+                    new google.maps.LatLng(countryBounds.ne.lat, countryBounds.ne.lng)
+                  )
+                })
+              },
+              (results, status) => {
+                if (status === 'OK' && results?.[0]) {
+                  const location = results[0].geometry.location;
+                  
+                  if (countryBounds) {
+                    const lat = location.lat();
+                    const lng = location.lng();
+                    const isWithinBounds = 
+                      lat >= countryBounds.sw.lat && lat <= countryBounds.ne.lat &&
+                      lng >= countryBounds.sw.lng && lng <= countryBounds.ne.lng;
 
-        // Geocodificar direcciones y añadir marcadores
-        const markers = await Promise.all(
-          clientes.map(async (cliente, index) => {
-            try {
-              const result = await new Promise<google.maps.GeocoderResult>((resolve, reject) => {
-                geocoder.geocode(
-                  { address: cliente.direccion },
-                  (results: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
-                    if (status === 'OK' && results && results[0]) {
-                      resolve(results[0]);
-                    } else {
-                      reject(new Error(`No se pudo geocodificar: ${cliente.direccion}`));
+                    if (!isWithinBounds) {
+                      reject(new Error(`La ubicación encontrada está fuera de ${pais}: ${direccionCompleta}`));
+                      return;
                     }
                   }
-                );
-              });
 
-              const position = result.geometry.location;
-              bounds.extend(position);
-
-              const marker = new google.maps.Marker({
-                position,
-                map,
-                label: (index + 1).toString(),
-                title: cliente.nombre,
-                animation: google.maps.Animation.DROP,
-              });
-
-              // Añadir ventana de información
-              const infoWindow = new google.maps.InfoWindow({
-                content: `
-                  <div class="p-2">
-                    <h3 class="font-bold">${cliente.nombre}</h3>
-                    <p>${cliente.direccion}</p>
-                    <p>Teléfono: ${cliente.telefono}</p>
-                    ${cliente.observaciones ? `<p>Notas: ${cliente.observaciones}</p>` : ''}
-                  </div>
-                `,
-              });
-
-              marker.addListener('click', () => {
-                infoWindow.open(map, marker);
-              });
-
-              return marker;
-            } catch (error) {
-              console.error(`Error al geocodificar ${cliente.direccion}:`, error);
-              return null;
-            }
-          })
-        );
-
-        // Dibujar la ruta entre los puntos
-        const directionsService = new google.maps.DirectionsService();
-        const directionsRenderer = new google.maps.DirectionsRenderer({
-          map,
-          suppressMarkers: true, // No mostrar marcadores automáticos
-        });
-
-        // Crear waypoints para la ruta
-        const validMarkers = markers.filter((marker): marker is google.maps.Marker => marker !== null);
-        if (validMarkers.length >= 2) {
-          const origin = validMarkers[0].getPosition();
-          const destination = validMarkers[validMarkers.length - 1].getPosition();
-          
-          // Primero filtramos los marcadores que tienen posición válida
-          const waypointMarkers = validMarkers
-            .slice(1, -1)
-            .filter(marker => marker.getPosition() !== null);
-
-          // Luego creamos los waypoints solo con las posiciones válidas
-          const waypoints: google.maps.DirectionsWaypoint[] = waypointMarkers
-            .map(marker => ({
-              location: marker.getPosition() as google.maps.LatLng,
-              stopover: true
-            }));
-
-          if (origin && destination) {
-            const request: google.maps.DirectionsRequest = {
-              origin,
-              destination,
-              waypoints,
-              optimizeWaypoints: true,
-              travelMode: google.maps.TravelMode.DRIVING,
-            };
-
-            directionsService.route(request, (result, status) => {
-              if (status === 'OK' && result) {
-                directionsRenderer.setDirections(result);
+                  resolve(results[0]);
+                } else {
+                  reject(new Error(`No se pudo geocodificar: ${direccionCompleta} (${status})`));
+                }
               }
-            });
+            );
+          });
+
+          const position = result.geometry.location;
+          bounds.extend(position);
+
+          // Crear marcador
+          const color = index === 0 ? '#4CAF50' : 
+                       index === clientesActuales.length - 1 ? '#F44336' : '#2196F3';
+
+          const marker = new google.maps.marker.AdvancedMarkerElement({
+            map,
+            position,
+            title: cliente.nombre,
+            content: createMarkerElement(index, color)
+          });
+
+          marker.addListener('click', () => {
+            setSelectedCliente(cliente);
+          });
+
+          markersRef.current.push(marker);
+          return position;
+        })
+      );
+
+      // Ajustar el mapa a los marcadores
+      map.fitBounds(bounds);
+
+      // Si solo hay un cliente, hacer zoom apropiado
+      if (clientesActuales.length === 1) {
+        map.setZoom(15);
+        return;
+      }
+
+      // Calcular la ruta
+      const result = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
+        directionsService.route(
+          {
+            origin: locations[0],
+            destination: locations[locations.length - 1],
+            waypoints: locations.slice(1, -1).map(location => ({
+              location,
+              stopover: true
+            })),
+            optimizeWaypoints: true,
+            travelMode: google.maps.TravelMode.DRIVING,
+          },
+          (response, status) => {
+            if (status === 'OK' && response) {
+              resolve(response);
+            } else {
+              reject(new Error(`Error al calcular la ruta: ${status}`));
+            }
           }
-        }
+        );
+      });
 
-        map.fitBounds(bounds);
+      // Verificar si la ruta ha cambiado antes de actualizar el estado
+      const routeChanged = !previousDirectionsRef.current || 
+        JSON.stringify(result.routes[0].overview_path) !== 
+        JSON.stringify(previousDirectionsRef.current.routes[0].overview_path);
 
-        // Ajustar zoom si hay un solo marcador
-        if (validMarkers.length === 1) {
-          map.setZoom(15);
-        }
-      } catch (err) {
-        console.error('Error al inicializar el mapa:', err);
-        setError('Error al inicializar el mapa');
-      } finally {
-        setLoading(false);
+      if (routeChanged) {
+        previousDirectionsRef.current = result;
+        setDirections(result);
+
+        // Mostrar información de la ruta
+        const route = result.routes[0];
+        const totalDistance = route.legs.reduce((acc, leg) => acc + (leg.distance?.value || 0), 0);
+        const totalDuration = route.legs.reduce((acc, leg) => acc + (leg.duration?.value || 0), 0);
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'bg-white p-2 rounded shadow absolute bottom-4 left-4 z-10';
+        infoDiv.innerHTML = `
+          <p class="font-semibold">Información de la ruta:</p>
+          <p>Distancia total: ${(totalDistance / 1000).toFixed(1)} km</p>
+          <p>Tiempo estimado: ${Math.round(totalDuration / 60)} minutos</p>
+        `;
+
+        map.controls[google.maps.ControlPosition.LEFT_BOTTOM].clear();
+        map.controls[google.maps.ControlPosition.LEFT_BOTTOM].push(infoDiv);
+      }
+
+    } catch (err) {
+      console.error('Error al calcular la ruta:', err);
+      setError(err instanceof Error ? err.message : 'Error al calcular la ruta');
+    } finally {
+      setLoading(false);
+      calculationInProgress.current = false;
+    }
+  }, [map, createMarkerElement, clearMarkers]);
+
+  // Efecto para calcular la ruta solo cuando cambian los IDs de los clientes
+  useEffect(() => {
+    if (!map) return;
+    if (calculationInProgress.current) return;
+
+    // Verificar si realmente cambió la lista de clientes
+    const ids = clientes.map(c => c.id!).sort();
+    if (
+      ids.length === previousIdsRef.current.length &&
+      ids.every((id, i) => id === previousIdsRef.current[i])
+    ) {
+      return; // mismos clientes, no recalculamos
+    }
+    previousIdsRef.current = ids;
+
+    calculateRoute(clientes);
+  }, [map, clientes, calculateRoute]);
+
+  // Limpieza al desmontar
+  useEffect(() => {
+    return () => {
+      clearMarkers();
+      if (map) {
+        map.controls[google.maps.ControlPosition.LEFT_BOTTOM].clear();
       }
     };
-
-    loadGoogleMaps();
-  }, [clientes]);
+  }, [map, clearMarkers]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner size="lg" />
+        <p className="ml-2">Calculando ruta...</p>
       </div>
     );
   }
@@ -210,9 +318,46 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({ clientes, className = '' }) 
   }
 
   return (
-    <div
-      ref={mapRef}
-      className={`w-full h-[400px] rounded-lg shadow-lg ${className}`}
-    />
+    <div className={`rounded-lg shadow-lg overflow-hidden ${className}`}>
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={initialCenter}
+        zoom={12}
+        onLoad={setMap}
+        onUnmount={() => setMap(null)}
+        options={options}
+      >
+        {directions && (
+          <DirectionsRenderer
+            directions={directions}
+            options={{
+              suppressMarkers: true,
+              polylineOptions: {
+                strokeColor: '#4A90E2',
+                strokeWeight: 4,
+              }
+            }}
+          />
+        )}
+
+        {selectedCliente && map && (
+          <InfoWindow
+            position={markersRef.current.find(marker => 
+              marker.title === selectedCliente.nombre
+            )?.position as google.maps.LatLng | undefined}
+            onCloseClick={() => setSelectedCliente(null)}
+          >
+            <div className="p-2">
+              <h3 className="font-bold">{selectedCliente.nombre}</h3>
+              <p>{selectedCliente.direccion}</p>
+              <p>Teléfono: {selectedCliente.telefono}</p>
+              {selectedCliente.observaciones && (
+                <p>Notas: {selectedCliente.observaciones}</p>
+              )}
+            </div>
+          </InfoWindow>
+        )}
+      </GoogleMap>
+    </div>
   );
-}; 
+});

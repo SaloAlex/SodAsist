@@ -14,4 +14,7 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  define: {
+    'process.env': process.env
+  }
 });

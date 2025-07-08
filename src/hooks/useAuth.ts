@@ -13,7 +13,6 @@ export const useAuth = () => {
     setLoading, 
     setError, 
     setInitialized,
-    loading,
     initialized
   } = useAuthStore();
 

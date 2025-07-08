@@ -5,12 +5,11 @@ interface LatLng {
   lng: number;
 }
 
-interface RouteOptimizationResult {
-  optimizedOrder: number[];
-  distances: number[];
-  durations: number[];
-  totalDistance: number;
-  totalDuration: number;
+declare global {
+  interface Window {
+    google: typeof google;
+    initMap: () => void;
+  }
 }
 
 export class RouteOptimizer {
@@ -19,130 +18,137 @@ export class RouteOptimizer {
 
   static async optimizeRoute(clientes: ClienteConRuta[]): Promise<ClienteConRuta[]> {
     try {
+      if (!clientes || clientes.length === 0) {
+        throw new Error('No hay clientes para optimizar la ruta');
+      }
+
+      if (clientes.length === 1) {
+        return clientes;
+      }
+
+      // Validar que todas las direcciones sean válidas
+      const direccionesInvalidas = clientes.filter(cliente => !cliente.direccion || cliente.direccion.trim() === '');
+      if (direccionesInvalidas.length > 0) {
+        throw new Error(`Los siguientes clientes no tienen dirección válida: ${direccionesInvalidas.map(c => c.nombre).join(', ')}`);
+      }
+
+      console.log('Obteniendo coordenadas para', clientes.length, 'clientes');
+      
       // Obtener coordenadas para cada cliente
-      const coordenadas = await Promise.all(
-        clientes.map(cliente => this.getCoordinates(cliente.direccion))
-      );
+      const coordenadasPromises = clientes.map(async cliente => {
+        try {
+          const coords = await this.getCoordinates(cliente.direccion);
+          return { cliente, coords, error: null };
+        } catch (error) {
+          return { cliente, coords: null, error };
+        }
+      });
 
-      // Calcular matriz de distancias
-      const distanceMatrix = await this.calculateDistanceMatrix(coordenadas);
+      const resultados = await Promise.all(coordenadasPromises);
+      
+      // Verificar errores de geocodificación
+      const erroresGeocoding = resultados.filter(r => r.error);
+      if (erroresGeocoding.length > 0) {
+        throw new Error(`No se pudieron obtener coordenadas para los clientes: ${erroresGeocoding.map(r => r.cliente.nombre).join(', ')}`);
+      }
 
-      // Optimizar ruta usando el algoritmo del vecino más cercano
-      const result = this.nearestNeighborOptimization(distanceMatrix);
+      // Filtrar clientes con coordenadas válidas
+      const clientesConCoordenadas = resultados
+        .filter(r => r.coords)
+        .map(r => ({ ...r.cliente, coords: r.coords! }));
+
+      console.log('Coordenadas obtenidas correctamente para todos los clientes');
+
+      // Crear el servicio de direcciones
+      const directionsService = new window.google.maps.DirectionsService();
+
+      // Preparar waypoints
+      const origin = clientesConCoordenadas[0].coords;
+      const destination = clientesConCoordenadas[clientesConCoordenadas.length - 1].coords;
+      const waypoints = clientesConCoordenadas.slice(1, -1).map(cliente => ({
+        location: new window.google.maps.LatLng(cliente.coords.lat, cliente.coords.lng),
+        stopover: true
+      }));
+
+      console.log('Solicitando optimización de ruta a Google Maps');
+
+      // Obtener la ruta optimizada
+      const result = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
+        directionsService.route({
+          origin: new window.google.maps.LatLng(origin.lat, origin.lng),
+          destination: new window.google.maps.LatLng(destination.lat, destination.lng),
+          waypoints: waypoints,
+          optimizeWaypoints: true,
+          travelMode: google.maps.TravelMode.DRIVING,
+          region: 'MX', // Optimizar para México
+          avoidHighways: false,
+          avoidTolls: false
+        }, (response, status) => {
+          if (status === 'OK' && response) {
+            resolve(response);
+          } else {
+            console.error('Error en DirectionsService:', status);
+            reject(new Error(`Error al obtener la ruta optimizada: ${status}`));
+          }
+        });
+      });
+
+      console.log('Ruta optimizada recibida correctamente');
 
       // Reordenar clientes según la optimización
-      return result.optimizedOrder.map(index => clientes[index]);
+      const waypointOrder = result.routes[0].waypoint_order;
+      const optimizedClientes = [
+        clientes[0], // Origen
+        ...waypointOrder.map(index => clientes[index + 1]), // Waypoints reordenados
+        clientes[clientes.length - 1] // Destino
+      ];
+
+      return optimizedClientes;
     } catch (error) {
       console.error('Error al optimizar ruta:', error);
-      throw new Error('No se pudo optimizar la ruta');
+      throw error instanceof Error ? error : new Error('Error desconocido al optimizar la ruta');
     }
   }
 
   private static async getCoordinates(direccion: string): Promise<LatLng> {
-    // Verificar cache
-    if (this.geocodeCache.has(direccion)) {
-      return this.geocodeCache.get(direccion)!;
-    }
-
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-          direccion
-        )}&key=${this.MAPS_API_KEY}`
-      );
-
-      const data = await response.json();
-
-      if (data.status === 'OK' && data.results.length > 0) {
-        const { lat, lng } = data.results[0].geometry.location;
-        const coords = { lat, lng };
-        this.geocodeCache.set(direccion, coords);
-        return coords;
+      // Verificar cache
+      if (this.geocodeCache.has(direccion)) {
+        return this.geocodeCache.get(direccion)!;
       }
 
-      throw new Error(`No se pudo geocodificar la dirección: ${direccion}`);
+      // Agregar ", México" si no está presente
+      const direccionCompleta = direccion.toLowerCase().includes('méxico') ? 
+        direccion : 
+        `${direccion}, México`;
+
+      const geocoder = new window.google.maps.Geocoder();
+      
+      return new Promise((resolve, reject) => {
+        geocoder.geocode(
+          { 
+            address: direccionCompleta,
+            region: 'MX' // Priorizar resultados en México
+          },
+          (results: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
+            if (status === 'OK' && results?.[0]) {
+              const location = results[0].geometry.location;
+              const coords = { 
+                lat: location.lat(), 
+                lng: location.lng() 
+              };
+              this.geocodeCache.set(direccion, coords);
+              resolve(coords);
+            } else {
+              reject(new Error(`No se pudo geocodificar la dirección: ${direccion} (${status})`));
+            }
+          }
+        );
+      });
     } catch (error) {
       console.error('Error al obtener coordenadas:', error);
-      throw error;
+      throw error instanceof Error ? error : new Error(`Error al geocodificar: ${direccion}`);
     }
-  }
-
-  private static async calculateDistanceMatrix(
-    locations: LatLng[]
-  ): Promise<number[][]> {
-    try {
-      const origins = locations.map(loc => `${loc.lat},${loc.lng}`).join('|');
-      const destinations = origins;
-
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origins}&destinations=${destinations}&key=${this.MAPS_API_KEY}`
-      );
-
-      const data = await response.json();
-
-      if (data.status === 'OK') {
-        return data.rows.map((row: any) =>
-          row.elements.map((element: any) => element.distance.value)
-        );
-      }
-
-      throw new Error('Error al obtener matriz de distancias');
-    } catch (error) {
-      console.error('Error al calcular matriz de distancias:', error);
-      throw error;
-    }
-  }
-
-  private static nearestNeighborOptimization(
-    distanceMatrix: number[][]
-  ): RouteOptimizationResult {
-    const n = distanceMatrix.length;
-    const visited = new Set<number>();
-    const optimizedOrder: number[] = [];
-    const distances: number[] = [];
-    let totalDistance = 0;
-
-    // Comenzar desde el primer punto
-    let currentPoint = 0;
-    optimizedOrder.push(currentPoint);
-    visited.add(currentPoint);
-
-    // Encontrar el vecino más cercano para cada punto restante
-    while (visited.size < n) {
-      let minDistance = Infinity;
-      let nextPoint = -1;
-
-      // Buscar el punto más cercano no visitado
-      for (let i = 0; i < n; i++) {
-        if (!visited.has(i)) {
-          const distance = distanceMatrix[currentPoint][i];
-          if (distance < minDistance) {
-            minDistance = distance;
-            nextPoint = i;
-          }
-        }
-      }
-
-      if (nextPoint !== -1) {
-        optimizedOrder.push(nextPoint);
-        distances.push(minDistance);
-        totalDistance += minDistance;
-        visited.add(nextPoint);
-        currentPoint = nextPoint;
-      }
-    }
-
-    // Calcular duración estimada (asumiendo velocidad promedio de 30 km/h)
-    const durations = distances.map(distance => (distance / 1000) * (60 / 30)); // minutos
-    const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
-
-    return {
-      optimizedOrder,
-      distances,
-      durations,
-      totalDistance,
-      totalDuration
-    };
   }
 
   static async getDirectionsUrl(origen: LatLng, destino: LatLng): Promise<string> {
