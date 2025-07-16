@@ -6,6 +6,7 @@ interface AppState {
   // Theme
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
+  toggleTheme: () => void;
   
   // Clients
   clientes: Cliente[];
@@ -41,6 +42,11 @@ export const useAppStore = create<AppState>()(
         }
         localStorage.setItem('theme', theme);
       },
+      toggleTheme: () => set((state) => {
+        const newTheme = state.theme === 'light' ? 'dark' : 'light';
+        state.setTheme(newTheme);
+        return { theme: newTheme };
+      }),
       
       clientes: [],
       setClientes: (clientes) => set({ clientes }),

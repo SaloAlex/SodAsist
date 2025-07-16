@@ -1,26 +1,63 @@
-export interface Cliente {
-  id: string;
-  nombre: string;
-  direccion: string;
+export interface DireccionDetalles {
+  placeId: string;
+  direccionCompleta: string;
+  direccionNormalizada: string;
+  calle?: string;
+  numero?: string;
   colonia?: string;
   ciudad?: string;
   estado?: string;
   codigoPostal?: string;
-  pais?: string;
+  pais: string;
+  coords: {
+    lat: number;
+    lng: number;
+  };
+  addressComponents?: {
+    long_name: string;
+    short_name: string;
+    types: string[];
+  }[];
+}
+
+export interface DireccionValidacion {
+  isValid: boolean;
+  error?: string;
+  partialMatch?: boolean;
+}
+
+export interface AreaServicio {
+  pais: string;
+  bounds: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  };
+}
+
+export interface Cliente {
+  id?: string;
+  nombre: string;
   telefono: string;
-  diaVisita: 'lunes' | 'martes' | 'miércoles' | 'jueves' | 'viernes' | 'sábado' | 'domingo';
+  direccion: string;
+  direccionDetalles?: DireccionDetalles;
+  coords?: {
+    lat: number;
+    lng: number;
+  };
   frecuenciaVisita: 'semanal' | 'quincenal' | 'mensual';
+  diaVisita: 'lunes' | 'martes' | 'miércoles' | 'jueves' | 'viernes' | 'sábado' | 'domingo';
   observaciones?: string;
-  saldoPendiente: number;
   bidones10?: number;
   bidones20?: number;
   sodas?: number;
   envasesDevueltos?: number;
   total?: number;
   pagado?: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  ultimaEntregaFecha?: Date | null;
+  saldoPendiente?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface Entrega {
@@ -125,6 +162,10 @@ export interface ClienteConRuta extends Cliente {
   prioridad?: 'baja' | 'media' | 'alta';
   tiempoPromedioVisita?: number; // en minutos
   zona?: string;
+  coords?: {
+    lat: number;
+    lng: number;
+  };
 }
 
 export interface NotificacionCliente {

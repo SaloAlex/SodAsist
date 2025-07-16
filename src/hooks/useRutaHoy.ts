@@ -147,18 +147,20 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   const optimizarRuta = async (clientesData: ClienteConRuta[]) => {
     setOptimizing(true);
     try {
-      const optimized = await RouteOptimizer.optimizeRoute(clientesData);
+      const optimizationResult = await RouteOptimizer.optimizeRoute(clientesData);
+      const { clientesOrdenados, stats } = optimizationResult;
+
       const rutaDoc: RutaOptimizada = {
         id: doc(collection(db, 'rutas')).id,
         fecha: new Date(),
-        clientes: optimized.map((cliente, index) => ({
+        clientes: clientesOrdenados.map((cliente, index) => ({
           clienteId: cliente.id!,
           orden: index,
-          distanciaAlSiguiente: 0, // Se calculará en el servicio
-          tiempoEstimado: 0 // Se calculará en el servicio
+          distanciaAlSiguiente: stats.distanciasIndividuales[index] || 0,
+          tiempoEstimado: stats.tiemposIndividuales[index] || 0
         })),
-        distanciaTotal: 0, // Se calculará en el servicio
-        tiempoEstimadoTotal: 0, // Se calculará en el servicio
+        distanciaTotal: stats.distanciaTotal,
+        tiempoEstimadoTotal: stats.tiempoTotal,
         zonas: Array.from(new Set(clientesData.map(c => c.zona).filter(Boolean))) as string[]
       };
       
@@ -168,6 +170,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
       });
 
       setRutaOptimizada(rutaDoc);
+      setClientes(clientesOrdenados);
     } catch (err) {
       console.error('Error al optimizar ruta:', err);
       toast.error('Error al optimizar la ruta');

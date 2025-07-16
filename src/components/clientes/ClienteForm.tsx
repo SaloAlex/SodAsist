@@ -9,20 +9,38 @@ import { FirebaseError } from 'firebase/app';
 import { Cliente } from '../../types';
 import toast from 'react-hot-toast';
 import { User, Phone, Home, Clock, FileText, Package, DollarSign } from 'lucide-react';
+import { DireccionInput } from '../common/DireccionInput';
+import { DireccionDetalles } from '../../types';
 
 const schema = yup.object().shape({
   nombre: yup.string().required('Nombre requerido'),
   direccion: yup.string().required('Dirección requerida'),
+  direccionDetalles: yup.object().shape({
+    placeId: yup.string().required('ID de lugar requerido'),
+    direccionCompleta: yup.string().required('Dirección completa requerida'),
+    direccionNormalizada: yup.string().required('Dirección normalizada requerida'),
+    calle: yup.string().optional(),
+    numero: yup.string().optional(),
+    colonia: yup.string().optional(),
+    ciudad: yup.string().optional(),
+    estado: yup.string().optional(),
+    codigoPostal: yup.string().optional(),
+    pais: yup.string().required('País requerido'),
+    coords: yup.object({
+      lat: yup.number().required('Latitud requerida'),
+      lng: yup.number().required('Longitud requerida')
+    }).required('Coordenadas requeridas')
+  }).required('Detalles de dirección requeridos'),
   telefono: yup.string().required('Teléfono requerido'),
   frecuenciaVisita: yup.string().oneOf(['semanal', 'quincenal', 'mensual']).required('Frecuencia requerida'),
   diaVisita: yup.string().oneOf(['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']).required('Día de visita requerido'),
-  observaciones: yup.string(),
-  bidones10: yup.number().min(0, 'Cantidad inválida'),
-  bidones20: yup.number().min(0, 'Cantidad inválida'),
-  sodas: yup.number().min(0, 'Cantidad inválida'),
-  envasesDevueltos: yup.number().min(0, 'Cantidad inválida'),
-  total: yup.number().min(0, 'Importe inválido'),
-  pagado: yup.boolean(),
+  observaciones: yup.string().optional(),
+  bidones10: yup.number().min(0, 'Cantidad inválida').optional(),
+  bidones20: yup.number().min(0, 'Cantidad inválida').optional(),
+  sodas: yup.number().min(0, 'Cantidad inválida').optional(),
+  envasesDevueltos: yup.number().min(0, 'Cantidad inválida').optional(),
+  total: yup.number().min(0, 'Importe inválido').optional(),
+  pagado: yup.boolean().optional(),
 });
 
 type ClienteFormData = yup.InferType<typeof schema>;
@@ -30,6 +48,8 @@ type ClienteFormData = yup.InferType<typeof schema>;
 export const ClienteForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [direccionError, setDireccionError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
@@ -39,6 +59,7 @@ export const ClienteForm: React.FC = () => {
     handleSubmit,
     formState: { errors },
     setValue,
+    watch,
   } = useForm<ClienteFormData>({
     resolver: yupResolver(schema),
     defaultValues: {
@@ -51,30 +72,36 @@ export const ClienteForm: React.FC = () => {
     },
   });
 
+  const direccion = watch('direccion');
+
   const loadCliente = useCallback(async (clienteId: string) => {
     setLoadingData(true);
     try {
-      // Obtener el cliente
       const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
       if (!cliente) {
         throw new Error('Cliente no encontrado');
       }
 
-      // Cargar datos del cliente en el formulario
       setValue('nombre', cliente.nombre);
       setValue('telefono', cliente.telefono);
       setValue('direccion', cliente.direccion);
       setValue('frecuenciaVisita', cliente.frecuenciaVisita);
       setValue('diaVisita', cliente.diaVisita);
       setValue('observaciones', cliente.observaciones || '');
-      
-      // Cargar valores existentes del cliente o usar la última entrega
       setValue('bidones10', cliente.bidones10 || 0);
       setValue('bidones20', cliente.bidones20 || 0);
       setValue('sodas', cliente.sodas || 0);
       setValue('envasesDevueltos', cliente.envasesDevueltos || 0);
       setValue('total', cliente.total || 0);
       setValue('pagado', cliente.pagado || false);
+
+      // Establecer los detalles de la dirección y coordenadas
+      if (cliente.direccionDetalles) {
+        setValue('direccionDetalles', cliente.direccionDetalles);
+        setCoords(cliente.direccionDetalles.coords);
+      } else if (cliente.coords) {
+        setCoords(cliente.coords);
+      }
       
       console.log('✅ Formulario actualizado correctamente');
       
@@ -93,19 +120,65 @@ export const ClienteForm: React.FC = () => {
     }
   }, [isEdit, id, loadCliente]);
 
+  const handleDireccionChange = (detalles: DireccionDetalles) => {
+    setValue('direccion', detalles.direccionCompleta);
+    setCoords(detalles.coords);
+    setDireccionError(null);
+    
+    // Guardar los detalles de la dirección
+    setValue('direccionDetalles', {
+      placeId: detalles.placeId,
+      direccionCompleta: detalles.direccionCompleta,
+      direccionNormalizada: detalles.direccionNormalizada,
+      calle: detalles.calle,
+      numero: detalles.numero,
+      colonia: detalles.colonia,
+      ciudad: detalles.ciudad,
+      estado: detalles.estado,
+      codigoPostal: detalles.codigoPostal,
+      pais: detalles.pais,
+      coords: detalles.coords
+    });
+  };
+
   const onSubmit = async (data: ClienteFormData) => {
+    if (!coords) {
+      setDireccionError('Por favor, selecciona una dirección válida del autocompletado');
+      return;
+    }
+
     setLoading(true);
     try {
-      const clienteData = {
-        ...data,
-        saldoPendiente: 0,
+      const clienteData: Omit<Cliente, 'id'> = {
+        nombre: data.nombre,
+        telefono: data.telefono,
+        direccion: data.direccion,
+        direccionDetalles: data.direccionDetalles || undefined,
+        coords,
+        frecuenciaVisita: data.frecuenciaVisita,
+        diaVisita: data.diaVisita,
+        observaciones: data.observaciones,
+        bidones10: data.bidones10,
+        bidones20: data.bidones20,
+        sodas: data.sodas,
+        envasesDevueltos: data.envasesDevueltos,
+        total: data.total,
+        pagado: data.pagado,
+        saldoPendiente: 0, // Este valor se establecerá después para actualizaciones
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       if (isEdit && id) {
+        // Obtener el cliente actual para mantener el saldoPendiente
+        const clienteActual = await FirebaseService.getDocument<Cliente>('clientes', id);
+        if (!clienteActual) {
+          throw new Error('Cliente no encontrado');
+        }
+
         await FirebaseService.updateDocument<Cliente>('clientes', id, {
           ...clienteData,
+          saldoPendiente: clienteActual.saldoPendiente || 0,
           updatedAt: new Date(),
         });
         toast.success('Cliente actualizado correctamente');
@@ -123,7 +196,6 @@ export const ClienteForm: React.FC = () => {
           data: data
         });
         
-        // Mensajes de error más específicos basados en el código de error de Firebase
         if (err.code === 'permission-denied') {
           toast.error('No tienes permisos para realizar esta acción');
         } else if (err.code === 'not-found') {
@@ -201,14 +273,23 @@ export const ClienteForm: React.FC = () => {
                   <Home className="inline h-4 w-4 mr-2" />
                   Dirección
                 </label>
-                <input
-                  {...register('direccion')}
-                  type="text"
+                <DireccionInput
+                  value={direccion}
+                  onChange={handleDireccionChange}
+                  onError={setDireccionError}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Dirección completa"
+                  placeholder="Buscar y seleccionar dirección"
                 />
                 {errors.direccion && (
                   <p className="mt-1 text-sm text-red-600">{errors.direccion.message}</p>
+                )}
+                {direccionError && (
+                  <p className="mt-1 text-sm text-red-600">{direccionError}</p>
+                )}
+                {coords && (
+                  <p className="mt-1 text-sm text-green-600">
+                    ✓ Dirección validada y geocodificada correctamente
+                  </p>
                 )}
               </div>
             </div>
