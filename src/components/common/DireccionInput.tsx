@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useLoadScript } from '@react-google-maps/api';
 import { DireccionDetalles, DireccionValidacion } from '../../types';
 import { LoadingSpinner } from './LoadingSpinner';
 import { normalizarDireccion, validarCoordenadas } from '../../utils/direccionUtils';
+import { useGoogleMaps } from './GoogleMapsProvider';
 
 type PaisValido = 'México' | 'Argentina';
 
@@ -50,11 +50,7 @@ export const DireccionInput: React.FC<DireccionInputProps> = ({
   const [inputValue, setInputValue] = useState(value);
   const [hasSelectedPlace, setHasSelectedPlace] = useState(!!value);
   const [loading, setLoading] = useState(false);
-
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: ['places']
-  });
+  const { isLoaded, loadError } = useGoogleMaps();
 
   // Actualizar el valor del input cuando cambia el valor de la prop
   useEffect(() => {

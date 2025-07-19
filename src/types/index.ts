@@ -152,20 +152,13 @@ export interface Visita {
 }
 
 export interface ClienteConRuta extends Cliente {
-  ultimaVisita?: Visita;
-  visitasRecientes?: Visita[];
-  productosFrecuentes?: {
-    producto: string;
-    cantidadPromedio: number;
-    frecuencia: number;
-  }[];
-  prioridad?: 'baja' | 'media' | 'alta';
-  tiempoPromedioVisita?: number; // en minutos
-  zona?: string;
-  coords?: {
-    lat: number;
-    lng: number;
-  };
+  coords?: LatLng;
+  orden?: number;
+  distanciaAlSiguiente?: number;
+  tiempoEstimado?: number;
+  notas?: string;
+  estado?: 'pendiente' | 'completado' | 'cancelado';
+  ultimaVisita?: Date;
 }
 
 export interface NotificacionCliente {
@@ -211,4 +204,16 @@ export interface ConfiguracionRuta {
   }[];
   zonaPredeterminada?: string;
   optimizacionPredeterminada: 'distancia' | 'tiempo' | 'mixta';
+}
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+export interface RouteStats {
+  distanciaTotal: number;
+  tiempoTotal: number;
+  distanciasIndividuales: number[];
+  tiemposIndividuales: number[];
 }

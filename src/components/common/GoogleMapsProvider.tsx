@@ -1,40 +1,42 @@
-import React from 'react';
-import { useLoadScript } from '@react-google-maps/api';
-import { LoadingSpinner } from './LoadingSpinner';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { useLoadScript, Libraries } from '@react-google-maps/api';
 
-// Definir las libraries como constante fuera del componente
-const libraries: ("places" | "geometry" | "marker")[] = ["places", "geometry", "marker"];
+// Definir las libraries como una constante global
+export const GOOGLE_MAPS_LIBRARIES: Libraries = ['places', 'routes'];
+
+interface GoogleMapsContextType {
+  isLoaded: boolean;
+  loadError: Error | undefined;
+}
+
+const GoogleMapsContext = createContext<GoogleMapsContextType>({
+  isLoaded: false,
+  loadError: undefined
+});
+
+export const useGoogleMaps = () => {
+  const context = useContext(GoogleMapsContext);
+  if (!context) {
+    throw new Error('useGoogleMaps debe ser usado dentro de un GoogleMapsProvider');
+  }
+  return context;
+};
 
 interface GoogleMapsProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-// Definir el componente usando function declaration para mayor claridad
-export function GoogleMapsProvider({ children }: GoogleMapsProviderProps): JSX.Element {
+export const GoogleMapsProvider: React.FC<GoogleMapsProviderProps> = ({ children }) => {
   const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
-    libraries,
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    id: 'google-maps-script',
+    version: 'weekly'
   });
 
-  if (loadError) {
-    return (
-      <div className="flex items-center justify-center h-64 text-red-500">
-        Error al cargar Google Maps: {loadError.message}
-      </div>
-    );
-  }
-
-  if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
-        <p className="ml-2">Cargando Google Maps...</p>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
-
-// Asegurarnos de que el displayName esté definido
-GoogleMapsProvider.displayName = 'GoogleMapsProvider'; 
+  return (
+    <GoogleMapsContext.Provider value={{ isLoaded, loadError }}>
+      {children}
+    </GoogleMapsContext.Provider>
+  );
+}; 
