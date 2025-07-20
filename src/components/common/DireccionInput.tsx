@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { DireccionDetalles, DireccionValidacion } from '../../types';
 import { LoadingSpinner } from './LoadingSpinner';
 import { normalizarDireccion, validarCoordenadas } from '../../utils/direccionUtils';
-import { useGoogleMaps } from './GoogleMapsProvider';
+import { useGoogleMaps } from './hooks/useGoogleMaps';
 
 type PaisValido = 'México' | 'Argentina';
 

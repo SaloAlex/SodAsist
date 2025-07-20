@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Filter, Calendar, Clock, DollarSign } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 export interface ClientesFilters {
   searchTerm: string;
@@ -12,11 +12,13 @@ export interface ClientesFilters {
 interface ClientesFiltersProps {
   filters: ClientesFilters;
   onFiltersChange: (filters: ClientesFilters) => void;
+  className?: string;
 }
 
 export const ClientesFilters: React.FC<ClientesFiltersProps> = ({
   filters,
   onFiltersChange,
+  className = ''
 }) => {
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -37,12 +39,12 @@ export const ClientesFilters: React.FC<ClientesFiltersProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+    <div className={className}>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Búsqueda por texto */}
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
+            <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
           </div>
           <input
             type="text"
@@ -50,20 +52,17 @@ export const ClientesFilters: React.FC<ClientesFiltersProps> = ({
             value={filters.searchTerm}
             onChange={handleInputChange}
             placeholder="Buscar por nombre, dirección..."
-            className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
           />
         </div>
 
         {/* Filtro por día de visita */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Calendar className="h-5 w-5 text-gray-400" />
-          </div>
+        <div>
           <select
             name="diaVisita"
             value={filters.diaVisita}
             onChange={handleInputChange}
-            className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           >
             <option value="">Todos los días</option>
             <option value="lunes">Lunes</option>
@@ -77,15 +76,12 @@ export const ClientesFilters: React.FC<ClientesFiltersProps> = ({
         </div>
 
         {/* Filtro por frecuencia */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Clock className="h-5 w-5 text-gray-400" />
-          </div>
+        <div>
           <select
             name="frecuenciaVisita"
             value={filters.frecuenciaVisita}
             onChange={handleInputChange}
-            className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           >
             <option value="">Todas las frecuencias</option>
             <option value="semanal">Semanal</option>
@@ -94,42 +90,44 @@ export const ClientesFilters: React.FC<ClientesFiltersProps> = ({
           </select>
         </div>
 
-        {/* Checkbox para mostrar solo deudores */}
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="mostrarDeudores"
-            name="mostrarDeudores"
-            checked={filters.mostrarDeudores}
-            onChange={handleCheckboxChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label
-            htmlFor="mostrarDeudores"
-            className="text-sm text-gray-700 dark:text-gray-300 flex items-center"
-          >
-            <DollarSign className="h-4 w-4 mr-1 text-gray-400" />
-            Solo deudores
+        {/* Filtros de checkboxes */}
+        <div className="flex flex-col space-y-2">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="mostrarDeudores"
+              checked={filters.mostrarDeudores}
+              onChange={handleCheckboxChange}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:checked:bg-blue-600 dark:checked:border-blue-600"
+            />
+            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Con deuda</span>
+          </label>
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="mostrarEntregasRecientes"
+              checked={filters.mostrarEntregasRecientes}
+              onChange={handleCheckboxChange}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:checked:bg-blue-600 dark:checked:border-blue-600"
+            />
+            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Entregas recientes</span>
           </label>
         </div>
 
-        {/* Checkbox para mostrar entregas recientes */}
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="mostrarEntregasRecientes"
-            name="mostrarEntregasRecientes"
-            checked={filters.mostrarEntregasRecientes}
-            onChange={handleCheckboxChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label
-            htmlFor="mostrarEntregasRecientes"
-            className="text-sm text-gray-700 dark:text-gray-300 flex items-center"
+        {/* Botón de limpiar filtros */}
+        <div>
+          <button
+            onClick={() => onFiltersChange({
+              searchTerm: '',
+              diaVisita: '',
+              frecuenciaVisita: '',
+              mostrarDeudores: false,
+              mostrarEntregasRecientes: false,
+            })}
+            className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
           >
-            <Filter className="h-4 w-4 mr-1 text-gray-400" />
-            Entregas recientes
-          </label>
+            Limpiar filtros
+          </button>
         </div>
       </div>
     </div>

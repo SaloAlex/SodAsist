@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { ClienteConRuta } from '../../types';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { ClienteConRuta, EstadoVisita } from '../../types';
 
 interface IniciarRutaProps {
   clientes: ClienteConRuta[];
   className?: string;
   onStartRoute?: () => void;
   onEndRoute?: () => void;
-  onUpdateCliente?: (clienteId: string, estado: 'pendiente' | 'completado' | 'cancelado') => void;
+  onUpdateCliente?: (clienteId: string, estado: EstadoVisita) => void;
   onReorderRoute?: (clientesOrdenados: ClienteConRuta[]) => void;
   ubicacionActual?: { lat: number; lng: number };
 }
@@ -16,6 +16,13 @@ interface PuntoRuta {
   coords: { lat: number; lng: number };
   nombre: string;
 }
+
+// Constantes
+const EARTH_RADIUS_KM = 6371;
+const RAD_CONVERSION = Math.PI / 180;
+
+// Funciones de utilidad
+const toRad = (value: number): number => value * RAD_CONVERSION;
 
 export const IniciarRuta: React.FC<IniciarRutaProps> = ({
   clientes,
@@ -42,7 +49,6 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
 
   // Función para calcular distancia entre dos puntos
   const calcularDistancia = useCallback((coord1: { lat: number; lng: number }, coord2: { lat: number; lng: number }): number => {
-    const R = 6371; // Radio de la Tierra en km
     const dLat = toRad(coord2.lat - coord1.lat);
     const dLon = toRad(coord2.lng - coord1.lng);
     const lat1 = toRad(coord1.lat);
@@ -51,12 +57,7 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  }, []);
-
-  // Función para convertir grados a radianes
-  const toRad = useCallback((value: number): number => {
-    return value * Math.PI / 180;
+    return EARTH_RADIUS_KM * c;
   }, []);
 
   // Función para ordenar clientes por distancia
@@ -122,6 +123,36 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
     }
   }, [puntoInicio, puntoFin, clientes, onReorderRoute, ordenarClientesPorDistancia]);
 
+  // URL de Google Maps memoizada
+  const googleMapsUrl = useMemo(() => {
+    if (!clientes.length) return '';
+
+    let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving';
+    
+    // Punto de inicio
+    if (puntoInicio) {
+      url += `&origin=${puntoInicio.coords.lat},${puntoInicio.coords.lng}`;
+    }
+
+    // Destino (último punto o punto final configurado)
+    const destino = puntoFin?.coords || clientes[clientes.length - 1].coords;
+    if (destino) {
+      url += `&destination=${destino.lat},${destino.lng}`;
+    }
+
+    // Waypoints (puntos intermedios)
+    const waypoints = clientes
+      .slice(0, -1)
+      .filter(c => c.coords)
+      .map(c => `${c.coords?.lat},${c.coords?.lng}`);
+    
+    if (waypoints.length > 0) {
+      url += `&waypoints=${waypoints.join('|')}`;
+    }
+
+    return url;
+  }, [clientes, puntoInicio, puntoFin]);
+
   const handleStartRoute = useCallback(() => {
     setShowConfigModal(true);
   }, []);
@@ -131,34 +162,11 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
     setShowConfigModal(false);
     onStartRoute?.();
 
-    // Construir la URL de Google Maps con waypoints
-    if (clientes.length > 0) {
-      let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving';
-      
-      // Punto de inicio
-      if (puntoInicio) {
-        url += `&origin=${puntoInicio.coords.lat},${puntoInicio.coords.lng}`;
-      }
-
-      // Destino (último punto o punto final configurado)
-      const destino = puntoFin?.coords || clientes[clientes.length - 1].coords;
-      if (destino) {
-        url += `&destination=${destino.lat},${destino.lng}`;
-      }
-
-      // Waypoints (puntos intermedios)
-      const waypoints = clientes
-        .slice(0, -1)
-        .filter(c => c.coords)
-        .map(c => `${c.coords?.lat},${c.coords?.lng}`);
-      
-      if (waypoints.length > 0) {
-        url += `&waypoints=${waypoints.join('|')}`;
-      }
-
-      window.open(url, '_blank');
+    // Abrir Google Maps si hay una URL válida
+    if (googleMapsUrl) {
+      window.open(googleMapsUrl, '_blank');
     }
-  }, [clientes, puntoInicio, puntoFin, onStartRoute]);
+  }, [googleMapsUrl, onStartRoute]);
 
   const handleEndRoute = useCallback(() => {
     setIsActive(false);
@@ -168,8 +176,8 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
   }, [onEndRoute]);
 
   const handleClienteCompletado = useCallback((cliente: ClienteConRuta) => {
-    if (cliente.estado !== 'completado' && cliente.id && onUpdateCliente) {
-      onUpdateCliente(cliente.id, 'completado');
+    if (cliente.estado !== EstadoVisita.COMPLETADA && cliente.id && onUpdateCliente) {
+      onUpdateCliente(cliente.id, EstadoVisita.COMPLETADA);
       setClientesCompletados(prev => prev + 1);
     }
   }, [onUpdateCliente]);
@@ -221,12 +229,12 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
             <div
               key={cliente.id}
               className={`flex items-center justify-between p-2 rounded-lg ${
-                cliente.estado === 'completado' ? 'bg-green-50' : 'bg-gray-50'
+                cliente.estado === EstadoVisita.COMPLETADA ? 'bg-green-50' : 'bg-gray-50'
               }`}
             >
               <div className="flex items-center space-x-3">
                 <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-sm ${
-                  cliente.estado === 'completado' 
+                  cliente.estado === EstadoVisita.COMPLETADA 
                     ? 'bg-green-100 text-green-800' 
                     : 'bg-blue-100 text-blue-800'
                 }`}>
@@ -256,15 +264,15 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                     <button
                       onClick={() => handleClienteCompletado(cliente)}
                       className={`p-1 ${
-                        cliente.estado === 'completado'
+                        cliente.estado === EstadoVisita.COMPLETADA
                           ? 'text-green-600 hover:text-green-800'
                           : 'text-gray-400 hover:text-gray-600'
                       }`}
                       title="Marcar como completado"
-                      disabled={cliente.estado === 'completado'}
+                      disabled={cliente.estado === EstadoVisita.COMPLETADA}
                     >
                       <span className="material-icons text-xl">
-                        {cliente.estado === 'completado' ? 'check_circle' : 'radio_button_unchecked'}
+                        {cliente.estado === EstadoVisita.COMPLETADA ? 'check_circle' : 'radio_button_unchecked'}
                       </span>
                     </button>
                   </>

@@ -58,6 +58,10 @@ export interface Cliente {
   saldoPendiente?: number;
   createdAt?: Date;
   updatedAt?: Date;
+  ultimaEntregaFecha?: Date;
+  consumoPromedioBidones?: number;
+  consumoPromedioSodas?: number;
+  zona?: string;
 }
 
 export interface Entrega {
@@ -121,12 +125,13 @@ export interface RutaOptimizada {
   clientes: {
     clienteId: string;
     orden: number;
-    distanciaAlSiguiente?: number; // en metros
-    tiempoEstimado?: number; // en minutos
+    distanciaAlSiguiente: number;
+    tiempoEstimado: number;
   }[];
-  distanciaTotal: number; // en metros
-  tiempoEstimadoTotal: number; // en minutos
+  distanciaTotal: number;
+  tiempoEstimadoTotal: number;
   zonas: string[];
+  ubicacionInicial?: LatLng;
 }
 
 export interface FirestoreTimestamp {
@@ -157,8 +162,9 @@ export interface ClienteConRuta extends Cliente {
   distanciaAlSiguiente?: number;
   tiempoEstimado?: number;
   notas?: string;
-  estado?: 'pendiente' | 'completado' | 'cancelado';
+  estado?: EstadoVisita;
   ultimaVisita?: Date;
+  zona?: string;
 }
 
 export interface NotificacionCliente {
@@ -175,10 +181,8 @@ export interface NotificacionCliente {
 // Enums para estados y tipos
 export enum EstadoVisita {
   PENDIENTE = 'pendiente',
-  EN_CAMINO = 'en_camino',
-  COMPLETADA = 'completada',
-  CANCELADA = 'cancelada',
-  REPROGRAMADA = 'reprogramada'
+  COMPLETADA = 'completado',
+  CANCELADA = 'cancelado'
 }
 
 export enum TipoNotificacion {

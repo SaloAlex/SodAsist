@@ -1,69 +1,42 @@
 import React from 'react';
-import { Bell, Settings, Sun, Moon, LogOut } from 'lucide-react';
-import { useAppStore } from '../../store/appStore';
 import { useAuthStore } from '../../store/authStore';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../config/firebase';
-import toast from 'react-hot-toast';
+import { useAppStore } from '../../store/appStore';
+import { Sun, Moon } from 'lucide-react';
 
-export const Header: React.FC = () => {
-  const { theme, toggleTheme } = useAppStore();
-  const { userData, logout } = useAuthStore();
+interface HeaderProps {
+  className?: string;
+}
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      logout();
-      toast.success('Sesión cerrada correctamente');
-    } catch (error) {
-      toast.error('Error al cerrar sesión');
-    }
+export const Header: React.FC<HeaderProps> = ({ className = '' }) => {
+  const { userData } = useAuthStore();
+  const { theme, setTheme } = useAppStore();
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
   };
 
   return (
-    <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Sistema Sodero
-          </h1>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            {theme === 'light' ? (
-              <Moon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            ) : (
-              <Sun className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            )}
-          </button>
-          
-          <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-            <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-          </button>
-          
-          <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-            <Settings className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-          </button>
-          
-          <div className="flex items-center space-x-3">
-            <div className="text-right">
-              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {userData?.nombre || 'Usuario'}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                {userData?.rol || 'Rol'}
-              </div>
-            </div>
-            
+    <header className={`bg-white dark:bg-gray-800 shadow-sm ${className}`}>
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center min-w-0 flex-1 ml-12 lg:ml-0">
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
+              {userData?.nombre || 'Usuario'}
+            </h1>
+          </div>
+          <div className="flex items-center ml-2">
             <button
-              onClick={handleLogout}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              onClick={toggleTheme}
+              className="p-2 rounded-lg text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 transition-colors"
+              aria-label={theme === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
             >
-              <LogOut className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              {theme === 'light' ? (
+                <Moon className="h-5 w-5" />
+              ) : (
+                <Sun className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>

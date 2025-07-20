@@ -3,10 +3,8 @@ import { DataTable } from '../common/DataTable';
 import { Cliente } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
 import { useNavigate } from 'react-router-dom';
-import { format, subDays } from 'date-fns';
-import { es } from 'date-fns/locale';
 import {
-  Phone, MapPin, Clock, Plus, Package, Beer, Check, X,
+  Phone, MapPin, Clock, Plus, Package, Beer,
   Edit, Trash2, History, PhoneCall, MessageSquare, Box,
   AlertCircle, FileText
 } from 'lucide-react';
@@ -106,8 +104,11 @@ export const ClientesList: React.FC = () => {
       }
 
       // 4. Filtro de deudores
-      if (filters.mostrarDeudores && cliente.saldoPendiente <= 0) {
-        return false;
+      if (filters.mostrarDeudores) {
+        const saldoPendiente = cliente.saldoPendiente ?? 0;
+        if (saldoPendiente <= 0) {
+          return false;
+        }
       }
 
       // 5. Filtro de entregas recientes (últimos 7 días)
@@ -115,7 +116,7 @@ export const ClientesList: React.FC = () => {
         if (!cliente.ultimaEntregaFecha) {
           return false;
         }
-        const fechaLimite = subDays(new Date(), 7);
+        const fechaLimite = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 días atrás
         if (new Date(cliente.ultimaEntregaFecha) < fechaLimite) {
           return false;
         }
@@ -126,6 +127,8 @@ export const ClientesList: React.FC = () => {
   }, [clientes, filters]);
 
   const handleDeleteCliente = async (cliente: Cliente) => {
+    if (!cliente.id) return;
+    
     if (window.confirm(`¿Estás seguro de eliminar a ${cliente.nombre}?`)) {
       try {
         await FirebaseService.deleteDocument('clientes', cliente.id);
@@ -139,19 +142,27 @@ export const ClientesList: React.FC = () => {
   };
 
   const handleLlamar = (cliente: Cliente) => {
-    window.open(`tel:${cliente.telefono}`, '_blank');
+    if (cliente.telefono) {
+      window.open(`tel:${cliente.telefono}`, '_blank');
+    }
   };
 
   const handleWhatsApp = (cliente: Cliente) => {
-    const mensaje = encodeURIComponent('Hola, te contacto desde SodAsist');
-    window.open(`https://wa.me/${cliente.telefono}?text=${mensaje}`, '_blank');
+    if (cliente.telefono) {
+      const mensaje = encodeURIComponent('Hola, te contacto desde SodAsist');
+      window.open(`https://wa.me/${cliente.telefono}?text=${mensaje}`, '_blank');
+    }
   };
 
   const handleVerHistorial = (cliente: Cliente) => {
-    navigate(`/clientes/${cliente.id}/historial`);
+    if (cliente.id) {
+      navigate(`${cliente.id}/historial`);
+    }
   };
 
   const handleVerObservaciones = async (cliente: Cliente) => {
+    if (!cliente.id) return;
+    
     try {
       const clienteCompleto = await FirebaseService.getDocument<Cliente>('clientes', cliente.id);
       if (clienteCompleto && clienteCompleto.observaciones) {
@@ -172,40 +183,40 @@ export const ClientesList: React.FC = () => {
   const actions = [
     {
       label: 'Editar',
-      icon: <Edit className="h-5 w-5 text-blue-600" />,
-      onClick: (cliente: Cliente) => navigate(`/clientes/${cliente.id}`),
+      icon: <Edit className="h-5 w-5 text-blue-600 dark:text-blue-400" />,
+      onClick: (cliente: Cliente) => navigate(`${cliente.id}`),
       tooltip: 'Editar datos del cliente',
     },
     {
       label: 'Nueva Entrega',
-      icon: <Box className="h-5 w-5 text-green-600" />,
+      icon: <Box className="h-5 w-5 text-green-600 dark:text-green-400" />,
       onClick: (cliente: Cliente) => navigate(`/entregas/nuevo?clienteId=${cliente.id}`),
       tooltip: 'Registrar nueva entrega',
     },
     {
       label: 'Ver Historial',
-      icon: <History className="h-5 w-5 text-purple-600" />,
+      icon: <History className="h-5 w-5 text-purple-600 dark:text-purple-400" />,
       onClick: handleVerHistorial,
       tooltip: 'Ver historial de entregas',
     },
     {
       label: 'Llamar',
-      icon: <PhoneCall className="h-5 w-5 text-green-600" />,
+      icon: <PhoneCall className="h-5 w-5 text-green-600 dark:text-green-400" />,
       onClick: handleLlamar,
       show: () => 'ontouchstart' in window,
       tooltip: 'Llamar al cliente',
     },
     {
       label: 'WhatsApp',
-      icon: <MessageSquare className="h-5 w-5 text-green-600" />,
+      icon: <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />,
       onClick: handleWhatsApp,
       tooltip: 'Enviar mensaje por WhatsApp',
     },
     {
       label: 'Eliminar',
-      icon: <Trash2 className="h-5 w-5 text-red-600" />,
+      icon: <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />,
       onClick: handleDeleteCliente,
-      className: 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10',
+      className: 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10',
       tooltip: 'Eliminar cliente',
     },
   ];
@@ -217,211 +228,106 @@ export const ClientesList: React.FC = () => {
       label: 'Nombre', 
       sortable: true,
       width: '25%',
-      render: (value: unknown, row: Cliente) => (
-        <div className="flex items-center space-x-2">
-          <span>{String(value)}</span>
-          <button
-            onClick={() => handleVerObservaciones(row)}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-            title="Ver observaciones"
-          >
-            <FileText className="h-5 w-5 text-blue-500" />
-          </button>
-          {row.saldoPendiente > 0 && (
-            <div className="group relative inline-block">
-              <AlertCircle 
-                className="h-5 w-5 text-red-500 cursor-help hover:text-red-600" 
-              />
-              <div className="hidden group-hover:block absolute z-[1000] w-48 p-3 bg-red-600 text-white text-sm rounded-lg shadow-lg -translate-x-1/2 left-1/2 mt-2">
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 border-8 border-transparent border-b-red-600"></div>
-                <div>Saldo pendiente:</div>
-                <div className="font-semibold">
-                  {new Intl.NumberFormat('es-AR', {
-                    style: 'currency',
-                    currency: 'ARS'
-                  }).format(row.saldoPendiente)}
+      priority: 1,
+      render: (value: unknown, row: Cliente) => {
+        const saldoPendiente = row.saldoPendiente ?? 0;
+        return (
+          <div className="flex items-center space-x-2">
+            <span className="text-gray-900 dark:text-white">{String(value)}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleVerObservaciones(row);
+              }}
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              title="Ver observaciones"
+            >
+              <FileText className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+            </button>
+            {saldoPendiente > 0 && (
+              <div className="group relative inline-block">
+                <AlertCircle 
+                  className="h-5 w-5 text-red-500 dark:text-red-400 cursor-help hover:text-red-600 dark:hover:text-red-300" 
+                />
+                <div className="hidden group-hover:block absolute z-[1000] w-48 p-3 bg-red-600 dark:bg-red-500 text-white text-sm rounded-lg shadow-lg -translate-x-1/2 left-1/2 mt-2">
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 border-8 border-transparent border-b-red-600 dark:border-b-red-500"></div>
+                  <div>Saldo pendiente:</div>
+                  <div className="font-semibold">
+                    {new Intl.NumberFormat('es-AR', {
+                      style: 'currency',
+                      currency: 'ARS'
+                    }).format(saldoPendiente)}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      ),
-    },
-
-    /* 2 ─ Día de visita */
-    {
-      key: 'diaVisita' as keyof Cliente,
-      label: 'Día',
-      width: '8%',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <Clock className="h-4 w-4 text-gray-400" />
-          <span className="capitalize">{String(value)}</span>
-        </div>
-      ),
-    },
-
-    /* 3 ─ Dirección */
-    {
-      key: 'direccion' as keyof Cliente,
-      label: 'Dirección',
-      width: '30%',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <MapPin className="h-4 w-4 text-gray-400" />
-          <span className="truncate max-w-[250px]">{String(value)}</span>
-        </div>
-      ),
-    },
-
-    /* 4 ─ Teléfono */
-    {
-      key: 'telefono' as keyof Cliente,
-      label: 'Teléfono',
-      width: '12%',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <Phone className="h-4 w-4 text-gray-400" />
-          <span>{String(value)}</span>
-        </div>
-      ),
-    },
-
-    /* 5 ─ Bidones 10 L */
-    {
-      key: 'bidones10' as keyof Cliente,
-      label: '10 L',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <Package className="h-4 w-4 text-gray-400" />
-          <span>{Number(value) || 0}</span>
-        </div>
-      ),
-    },
-
-    /* 6 ─ Bidones 20 L */
-    {
-      key: 'bidones20' as keyof Cliente,
-      label: '20 L',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <Package className="h-4 w-4 text-gray-400" />
-          <span>{Number(value) || 0}</span>
-        </div>
-      ),
-    },
-
-    /* 7 ─ Sodas */
-    {
-      key: 'sodas' as keyof Cliente,
-      label: 'Sodas',
-      render: (value: unknown) => (
-        <div className="flex items-center space-x-1">
-          <Beer className="h-4 w-4 text-gray-400" />
-          <span>{Number(value) || 0}</span>
-        </div>
-      ),
-    },
-
-    /* 8 ─ Envases devueltos */
-    {
-      key: 'envasesDevueltos' as keyof Cliente,
-      label: 'Env.',
-      render: (value: unknown) => <span>{Number(value) || 0}</span>,
-    },
-
-    /* 9 ─ Pagado */
-    {
-      key: 'pagado' as keyof Cliente,
-      label: 'Pagado',
-      render: (value: unknown) =>
-        value ? (
-          <Check className="h-4 w-4 text-green-600" />
-        ) : (
-          <X className="h-4 w-4 text-red-600" />
-        ),
-    },
-
-    /* 10 ─ Total último servicio */
-    {
-      key: 'total' as keyof Cliente,
-      label: 'Total $',
-      sortable: true,
-      render: (value: unknown) =>
-        new Intl.NumberFormat('es-AR', {
-          style: 'currency',
-          currency: 'ARS',
-        }).format(Number(value) || 0),
-    },
-
-    /* 11 ─ Saldo pendiente */
-    {
-      key: 'saldoPendiente' as keyof Cliente,
-      label: 'Saldo',
-      sortable: true,
-      width: '15%',
-      render: (value: unknown) => {
-        const saldo = Number(value) || 0;
-        return (
-          <span className={`font-medium ${saldo > 0 ? 'text-red-600' : 'text-green-600'}`}>
-            {new Intl.NumberFormat('es-AR', {
-              style: 'currency',
-              currency: 'ARS',
-            }).format(saldo)}
-          </span>
+            )}
+          </div>
         );
       },
     },
-
-    /* 12 ─ Última entrega */
-    {
-      key: 'ultimaEntregaFecha' as keyof Cliente,
-      label: 'Últ. Entrega',
-      sortable: true,
-      width: '10%',
-      render: (value: unknown) => {
-        if (!value) return '—';
-        return format(new Date(value as Date), 'dd/MM/yy', { locale: es });
-      },
+    /* 2 ─ Teléfono */
+    { 
+      key: 'telefono' as keyof Cliente, 
+      label: 'Teléfono',
+      width: '15%',
+      priority: 2,
+      render: (value: unknown) => (
+        <div className="flex items-center space-x-2">
+          <Phone className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <span className="text-gray-900 dark:text-white">{String(value)}</span>
+        </div>
+      ),
     },
-  ];
-
-  const ObservacionesModal = () => {
-    if (!observacionesModalOpen || !observacionesCliente) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 relative">
-          <button
-            onClick={() => setObservacionesModalOpen(false)}
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          
-          <div className="flex items-center mb-4">
-            <FileText className="h-5 w-5 text-blue-500 mr-2" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Observaciones de {observacionesCliente.nombre}
-            </h3>
+    /* 3 ─ Dirección */
+    { 
+      key: 'direccion' as keyof Cliente, 
+      label: 'Dirección',
+      width: '25%',
+      priority: 3,
+      render: (value: unknown) => (
+        <div className="flex items-center space-x-2">
+          <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <span className="truncate text-gray-900 dark:text-white">{String(value)}</span>
+        </div>
+      ),
+    },
+    /* 4 ─ Día y Frecuencia */
+    { 
+      key: 'diaVisita' as keyof Cliente, 
+      label: 'Visita',
+      width: '15%',
+      hideOnMobile: true,
+      render: (value: unknown, row: Cliente) => (
+        <div className="flex items-center space-x-2">
+          <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <span className="text-gray-900 dark:text-white">
+            {String(value).charAt(0).toUpperCase() + String(value).slice(1)}
+            <span className="text-gray-400 dark:text-gray-500"> • </span>
+            {row.frecuenciaVisita}
+          </span>
+        </div>
+      ),
+    },
+    /* 5 ─ Consumo */
+    { 
+      key: 'consumoPromedio' as keyof Cliente, 
+      label: 'Consumo',
+      width: '20%',
+      hideOnMobile: true,
+      render: (_: unknown, row: Cliente) => (
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-1">
+            <Package className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+            <span className="text-gray-900 dark:text-white">{row.consumoPromedioBidones || 0}</span>
           </div>
-          
-          <div className="mt-4 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
-            {observacionesCliente.observaciones}
-          </div>
-          
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={() => setObservacionesModalOpen(false)}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-            >
-              Cerrar
-            </button>
+          <div className="flex items-center space-x-1">
+            <Beer className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+            <span className="text-gray-900 dark:text-white">{row.consumoPromedioSodas || 0}</span>
           </div>
         </div>
-      </div>
-    );
-  };
+      ),
+    },
+  ];
 
   if (loading) {
     return (
@@ -432,14 +338,14 @@ export const ClientesList: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
           Clientes
-        </h1>
+        </h2>
         <button
-          onClick={() => navigate('/clientes/nuevo')}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          onClick={() => navigate('new')}
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-offset-gray-900"
         >
           <Plus className="h-5 w-5 mr-2" />
           Nuevo Cliente
@@ -449,23 +355,47 @@ export const ClientesList: React.FC = () => {
       <ClientesFilters
         filters={filters}
         onFiltersChange={setFilters}
+        className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4"
       />
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-        <DataTable
-          data={clientesFiltrados}
-          columns={columns}
-          actions={actions}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            pageSizeOptions: [10, 20, 50, 100]
-          }}
-          emptyMessage="No se encontraron clientes que coincidan con los filtros"
-        />
-      </div>
+      <DataTable
+        data={clientesFiltrados}
+        columns={columns}
+        actions={actions}
+        searchable={true}
+        searchPlaceholder="Buscar por nombre, dirección o teléfono..."
+        onRowClick={(cliente: Cliente) => cliente.id && navigate(`${cliente.id}`)}
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: true,
+          pageSizeOptions: [10, 20, 50, 100]
+        }}
+        className="overflow-hidden"
+      />
 
-      <ObservacionesModal />
+      {/* Modal de observaciones */}
+      {observacionesModalOpen && observacionesCliente && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                Observaciones de {observacionesCliente.nombre}
+              </h3>
+              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                {observacionesCliente.observaciones}
+              </p>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setObservacionesModalOpen(false)}
+                  className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -175,16 +175,17 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
           Dashboard
         </h1>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
+        <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center sm:space-x-4">
+          <div className="flex items-center justify-center space-x-2">
             <button
               onClick={handlePreviousDay}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              aria-label="Día anterior"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -194,26 +195,27 @@ export const Dashboard: React.FC = () => {
                 type="date"
                 value={format(selectedDate, 'yyyy-MM-dd')}
                 onChange={(e) => handleDateChange(parseISO(e.target.value))}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
               />
-              <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
+              <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4 pointer-events-none" />
             </div>
 
             <button
               onClick={handleNextDay}
               disabled={selectedDate >= startOfDay(new Date())}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-400 dark:disabled:text-gray-600"
+              aria-label="Día siguiente"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 text-center sm:text-left">
             {format(selectedDate, 'EEEE, d MMMM yyyy', { locale: es })}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <StatsCard
           title={selectedDate.toDateString() === new Date().toDateString() ? "Entregas Hoy" : "Entregas"}
           value={stats.entregasHoy}
@@ -242,7 +244,7 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         <ChartCard
           title="Ventas por Hora"
           data={chartData}
@@ -252,7 +254,7 @@ export const Dashboard: React.FC = () => {
           color="#3B82F6"
         />
         
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Acciones Rápidas
           </h3>
@@ -261,31 +263,31 @@ export const Dashboard: React.FC = () => {
               onClick={() => navigate('/entregas/new')}
               className="flex items-center space-x-3 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors"
             >
-              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              <span className="text-blue-700 dark:text-blue-300">Nueva Entrega</span>
+              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+              <span className="text-blue-700 dark:text-blue-300 text-sm sm:text-base">Nueva Entrega</span>
             </button>
             <button
               onClick={() => window.location.href = '/ruta-hoy'}
               className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900 rounded-lg hover:bg-green-100 dark:hover:bg-green-800 transition-colors"
             >
-              <MapPin className="h-5 w-5 text-green-600 dark:text-green-400" />
-              <span className="text-green-700 dark:text-green-300">Ver Ruta</span>
+              <MapPin className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <span className="text-green-700 dark:text-green-300 text-sm sm:text-base">Ver Ruta</span>
             </button>
             <button
               onClick={() => window.location.href = '/clientes'}
               className="flex items-center space-x-3 p-3 bg-purple-50 dark:bg-purple-900 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-800 transition-colors"
             >
-              <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              <span className="text-purple-700 dark:text-purple-300">Gestionar Clientes</span>
+              <Users className="h-5 w-5 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+              <span className="text-purple-700 dark:text-purple-300 text-sm sm:text-base">Gestionar Clientes</span>
             </button>
           </div>
         </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Entregas de Hoy
+            Entregas de {selectedDate.toDateString() === new Date().toDateString() ? 'Hoy' : format(selectedDate, 'd/MM/yyyy')}
           </h3>
         </div>
         <DataTable

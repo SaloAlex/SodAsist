@@ -8,7 +8,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { FirebaseError } from 'firebase/app';
 import { Cliente } from '../../types';
 import toast from 'react-hot-toast';
-import { User, Phone, Home, Clock, FileText, Package, DollarSign } from 'lucide-react';
+import { User, Phone, Home, Clock, FileText, Package } from 'lucide-react';
 import { DireccionInput } from '../common/DireccionInput';
 import { DireccionDetalles } from '../../types';
 
@@ -78,68 +78,32 @@ export const ClienteForm: React.FC = () => {
     setLoadingData(true);
     try {
       const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
-      if (!cliente) {
-        throw new Error('Cliente no encontrado');
-      }
+      if (cliente) {
+        setValue('nombre', cliente.nombre);
+        setValue('telefono', cliente.telefono);
+        setValue('direccion', cliente.direccion);
+        setValue('frecuenciaVisita', cliente.frecuenciaVisita);
+        setValue('diaVisita', cliente.diaVisita);
+        setValue('observaciones', cliente.observaciones || '');
 
-      setValue('nombre', cliente.nombre);
-      setValue('telefono', cliente.telefono);
-      setValue('direccion', cliente.direccion);
-      setValue('frecuenciaVisita', cliente.frecuenciaVisita);
-      setValue('diaVisita', cliente.diaVisita);
-      setValue('observaciones', cliente.observaciones || '');
-      setValue('bidones10', cliente.bidones10 || 0);
-      setValue('bidones20', cliente.bidones20 || 0);
-      setValue('sodas', cliente.sodas || 0);
-      setValue('envasesDevueltos', cliente.envasesDevueltos || 0);
-      setValue('total', cliente.total || 0);
-      setValue('pagado', cliente.pagado || false);
-
-      // Establecer los detalles de la dirección y coordenadas
-      if (cliente.direccionDetalles) {
-        setValue('direccionDetalles', cliente.direccionDetalles);
-        setCoords(cliente.direccionDetalles.coords);
-      } else if (cliente.coords) {
-        setCoords(cliente.coords);
+        if (cliente.direccionDetalles) {
+          setValue('direccionDetalles', cliente.direccionDetalles);
+          setCoords(cliente.direccionDetalles.coords);
+        }
       }
-      
-      console.log('✅ Formulario actualizado correctamente');
-      
-    } catch (err) {
-      console.error('❌ Error al cargar cliente:', err);
+    } catch (error) {
+      console.error('Error al cargar cliente:', error);
       toast.error('Error al cargar los datos del cliente');
-      navigate('/clientes');
     } finally {
       setLoadingData(false);
     }
-  }, [setValue, navigate]);
+  }, [setValue]);
 
   useEffect(() => {
-    if (isEdit && id) {
+    if (id) {
       loadCliente(id);
     }
-  }, [isEdit, id, loadCliente]);
-
-  const handleDireccionChange = (detalles: DireccionDetalles) => {
-    setValue('direccion', detalles.direccionCompleta);
-    setCoords(detalles.coords);
-    setDireccionError(null);
-    
-    // Guardar los detalles de la dirección
-    setValue('direccionDetalles', {
-      placeId: detalles.placeId,
-      direccionCompleta: detalles.direccionCompleta,
-      direccionNormalizada: detalles.direccionNormalizada,
-      calle: detalles.calle,
-      numero: detalles.numero,
-      colonia: detalles.colonia,
-      ciudad: detalles.ciudad,
-      estado: detalles.estado,
-      codigoPostal: detalles.codigoPostal,
-      pais: detalles.pais,
-      coords: detalles.coords
-    });
-  };
+  }, [id, loadCliente]);
 
   const onSubmit = async (data: ClienteFormData) => {
     if (!coords) {
@@ -223,19 +187,19 @@ export const ClienteForm: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6">
           {isEdit ? 'Editar Cliente' : 'Nuevo Cliente'}
         </h1>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 sm:space-y-8">
           {/* Datos Básicos */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-4">
               Datos Básicos
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <User className="inline h-4 w-4 mr-2" />
@@ -244,7 +208,7 @@ export const ClienteForm: React.FC = () => {
                 <input
                   {...register('nombre')}
                   type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   placeholder="Nombre del cliente"
                 />
                 {errors.nombre && (
@@ -260,25 +224,38 @@ export const ClienteForm: React.FC = () => {
                 <input
                   {...register('telefono')}
                   type="tel"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   placeholder="Número de teléfono"
                 />
                 {errors.telefono && (
                   <p className="mt-1 text-sm text-red-600">{errors.telefono.message}</p>
                 )}
               </div>
+            </div>
+          </div>
 
-              <div className="md:col-span-2">
+          {/* Dirección */}
+          <div>
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Dirección
+            </h3>
+            <div className="space-y-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <Home className="inline h-4 w-4 mr-2" />
                   Dirección
                 </label>
                 <DireccionInput
                   value={direccion}
-                  onChange={handleDireccionChange}
+                  onChange={(detalles: DireccionDetalles) => {
+                    setValue('direccion', detalles.direccionCompleta);
+                    setValue('direccionDetalles', detalles);
+                    setCoords(detalles.coords);
+                    setDireccionError(null);
+                  }}
                   onError={setDireccionError}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Buscar y seleccionar dirección"
+                  placeholder="Buscar dirección..."
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
                 {errors.direccion && (
                   <p className="mt-1 text-sm text-red-600">{errors.direccion.message}</p>
@@ -286,21 +263,16 @@ export const ClienteForm: React.FC = () => {
                 {direccionError && (
                   <p className="mt-1 text-sm text-red-600">{direccionError}</p>
                 )}
-                {coords && (
-                  <p className="mt-1 text-sm text-green-600">
-                    ✓ Dirección validada y geocodificada correctamente
-                  </p>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Planificación */}
+          {/* Configuración de Visitas */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Planificación
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Configuración de Visitas
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <Clock className="inline h-4 w-4 mr-2" />
@@ -308,7 +280,7 @@ export const ClienteForm: React.FC = () => {
                 </label>
                 <select
                   {...register('frecuenciaVisita')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 >
                   <option value="">Seleccionar frecuencia</option>
                   <option value="semanal">Semanal</option>
@@ -327,7 +299,7 @@ export const ClienteForm: React.FC = () => {
                 </label>
                 <select
                   {...register('diaVisita')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 >
                   <option value="">Seleccionar día</option>
                   <option value="lunes">Lunes</option>
@@ -342,141 +314,51 @@ export const ClienteForm: React.FC = () => {
                   <p className="mt-1 text-sm text-red-600">{errors.diaVisita.message}</p>
                 )}
               </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <FileText className="inline h-4 w-4 mr-2" />
-                  Observaciones
-                </label>
-                <textarea
-                  {...register('observaciones')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Observaciones adicionales"
-                  rows={3}
-                />
-              </div>
             </div>
           </div>
 
-          {/* Última Entrega */}
+          {/* Observaciones */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Última Entrega
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Información Adicional
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Package className="inline h-4 w-4 mr-2" />
-                  Bidones 10L
-                </label>
-                <input
-                  {...register('bidones10')}
-                  type="number"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="0"
-                />
-                {errors.bidones10 && (
-                  <p className="mt-1 text-sm text-red-600">{errors.bidones10.message}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Package className="inline h-4 w-4 mr-2" />
-                  Bidones 20L
-                </label>
-                <input
-                  {...register('bidones20')}
-                  type="number"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="0"
-                />
-                {errors.bidones20 && (
-                  <p className="mt-1 text-sm text-red-600">{errors.bidones20.message}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Package className="inline h-4 w-4 mr-2" />
-                  Sodas
-                </label>
-                <input
-                  {...register('sodas')}
-                  type="number"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="0"
-                />
-                {errors.sodas && (
-                  <p className="mt-1 text-sm text-red-600">{errors.sodas.message}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <Package className="inline h-4 w-4 mr-2" />
-                  Envases Devueltos
-                </label>
-                <input
-                  {...register('envasesDevueltos')}
-                  type="number"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="0"
-                />
-                {errors.envasesDevueltos && (
-                  <p className="mt-1 text-sm text-red-600">{errors.envasesDevueltos.message}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  <DollarSign className="inline h-4 w-4 mr-2" />
-                  Total
-                </label>
-                <input
-                  {...register('total')}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="0.00"
-                />
-                {errors.total && (
-                  <p className="mt-1 text-sm text-red-600">{errors.total.message}</p>
-                )}
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  {...register('pagado')}
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label className="ml-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Pagado
-                </label>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <FileText className="inline h-4 w-4 mr-2" />
+                Observaciones
+              </label>
+              <textarea
+                {...register('observaciones')}
+                rows={3}
+                className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
+                placeholder="Notas adicionales sobre el cliente..."
+              />
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={() => navigate('/clientes')}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-            >
-              Cancelar
-            </button>
+          {/* Botones */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none sm:min-w-[120px] flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? <LoadingSpinner size="sm" /> : isEdit ? 'Actualizar' : 'Crear'}
+              {loading ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                <>
+                  <Package className="h-4 w-4 mr-2" />
+                  {isEdit ? 'Actualizar' : 'Crear'} Cliente
+                </>
+              )}
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => navigate('/clientes')}
+              className="flex-1 sm:flex-none sm:min-w-[120px] flex items-center justify-center px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-300 dark:hover:bg-gray-500 transition-colors"
+            >
+              Cancelar
             </button>
           </div>
         </form>

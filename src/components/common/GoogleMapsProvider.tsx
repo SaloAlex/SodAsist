@@ -1,37 +1,17 @@
-import React, { createContext, useContext, ReactNode } from 'react';
-import { useLoadScript, Libraries } from '@react-google-maps/api';
+import React from 'react';
+import { useLoadScript } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LIBRARIES, GOOGLE_MAPS_OPTIONS } from './googleMapsConfig';
+import { GoogleMapsContext } from './contexts/googleMapsContext';
 
-// Definir las libraries como una constante global
-export const GOOGLE_MAPS_LIBRARIES: Libraries = ['places', 'routes'];
-
-interface GoogleMapsContextType {
-  isLoaded: boolean;
-  loadError: Error | undefined;
+interface Props {
+  children: React.ReactNode;
 }
 
-const GoogleMapsContext = createContext<GoogleMapsContextType>({
-  isLoaded: false,
-  loadError: undefined
-});
-
-export const useGoogleMaps = () => {
-  const context = useContext(GoogleMapsContext);
-  if (!context) {
-    throw new Error('useGoogleMaps debe ser usado dentro de un GoogleMapsProvider');
-  }
-  return context;
-};
-
-interface GoogleMapsProviderProps {
-  children: ReactNode;
-}
-
-export const GoogleMapsProvider: React.FC<GoogleMapsProviderProps> = ({ children }) => {
+export const GoogleMapsProvider: React.FC<Props> = ({ children }) => {
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries: GOOGLE_MAPS_LIBRARIES,
-    id: 'google-maps-script',
-    version: 'weekly'
+    ...GOOGLE_MAPS_OPTIONS
   });
 
   return (

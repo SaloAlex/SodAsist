@@ -8,8 +8,18 @@ import {
   BarChart3, 
   MapPin, 
   Plus,
-  Settings 
+  Settings,
+  LogOut 
 } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
+import { auth } from '../../config/firebase';
+import { signOut } from 'firebase/auth';
+import toast from 'react-hot-toast';
+
+interface SidebarProps {
+  className?: string;
+  onClose?: () => void;
+}
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -21,9 +31,28 @@ const navigation = [
   { name: 'Ajustes', href: '/ajustes', icon: Settings },
 ];
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => {
+  const { setUser, setUserData } = useAuthStore();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setUserData(null);
+      toast.success('Sesión cerrada correctamente');
+    } catch {
+      toast.error('Error al cerrar sesión');
+    }
+  };
+
+  const handleLinkClick = () => {
+    if (onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700">
+    <aside className={`w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 ${className}`}>
       <div className="p-6">
         <div className="flex items-center space-x-2">
           <Truck className="h-8 w-8 text-blue-600" />
@@ -39,6 +68,7 @@ export const Sidebar: React.FC = () => {
             <li key={item.name}>
               <NavLink
                 to={item.href}
+                onClick={handleLinkClick}
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive
@@ -54,6 +84,16 @@ export const Sidebar: React.FC = () => {
           ))}
         </ul>
       </nav>
+
+      <div className="absolute bottom-0 left-0 right-0 p-4">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors"
+        >
+          <LogOut className="h-5 w-5" />
+          <span>Cerrar Sesión</span>
+        </button>
+      </div>
     </aside>
   );
 };

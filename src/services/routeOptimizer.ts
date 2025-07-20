@@ -76,7 +76,9 @@ export class RouteOptimizer {
       // Validar direcciones
       this.validarDirecciones(clientes);
 
-      console.log('Obteniendo coordenadas para', clientes.length, 'clientes');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Obteniendo coordenadas para', clientes.length, 'clientes');
+      }
       
       // Obtener coordenadas en paralelo con rate limiting
       const clientesConCoordenadas = await this.obtenerCoordenadasParalelo(clientes);
@@ -88,7 +90,9 @@ export class RouteOptimizer {
 
       return await this.optimizarRutaSimple(clientesConCoordenadas, options);
     } catch (error) {
-      console.error('Error al optimizar ruta:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error al optimizar ruta:', error);
+      }
       throw error instanceof Error ? error : new Error('Error desconocido al optimizar la ruta');
     }
   }
@@ -112,7 +116,10 @@ export class RouteOptimizer {
         if (resultado.status === 'fulfilled') {
           return { ...batch[index], coords: resultado.value };
         } else {
-          console.error(`Error al geocodificar ${batch[index].nombre}:`, resultado.reason);
+          // Solo log en desarrollo, en producción solo contar errores
+          if (process.env.NODE_ENV === 'development') {
+            console.error(`Error al geocodificar ${batch[index].nombre}:`, resultado.reason);
+          }
           return null;
         }
       }).filter((cliente): cliente is ClienteConRuta & { coords: LatLng } => 
@@ -149,21 +156,68 @@ export class RouteOptimizer {
         throw new Error('Algunos clientes no tienen coordenadas válidas');
       }
 
-      // Calcular matriz de distancias si hay más de 2 clientes
-      if (clientesConCoordenadas.length > 2) {
-        const matrizDistancias = await this.calcularMatrizDistancias(clientesConCoordenadas);
-        const rutaOptima = this.encontrarRutaOptima(matrizDistancias, options.ubicacionInicial ? 0 : -1);
-        clientesConCoordenadas.splice(0, clientesConCoordenadas.length, 
-          ...rutaOptima.map(idx => clientesConCoordenadas[idx]));
+      // Si hay ubicación inicial, calcular distancias desde ella a todos los clientes
+      if (options.ubicacionInicial) {
+        const service = new window.google.maps.DistanceMatrixService();
+        const result = await this.reintentarOperacion(() => {
+          return new Promise<google.maps.DistanceMatrixResponse>((resolve, reject) => {
+            service.getDistanceMatrix({
+              origins: [new google.maps.LatLng(options.ubicacionInicial!.lat, options.ubicacionInicial!.lng)],
+              destinations: clientesConCoordenadas.map(c => 
+                new google.maps.LatLng(c.coords!.lat, c.coords!.lng)
+              ),
+              travelMode: google.maps.TravelMode.DRIVING,
+              drivingOptions: {
+                departureTime: new Date(Date.now() + 2 * 60 * 1000),
+                trafficModel: google.maps.TrafficModel.BEST_GUESS
+              }
+            }, (response, status) => {
+              if (status === 'OK' && response) {
+                resolve(response);
+              } else {
+                reject(new Error(`Error al obtener distancias: ${status}`));
+              }
+            });
+          });
+        });
+
+        // Ordenar clientes por distancia desde la ubicación inicial
+        const distancias = result.rows[0].elements.map(e => e.duration.value);
+        clientesConCoordenadas.sort((a, b) => {
+          const indexA = clientesConCoordenadas.indexOf(a);
+          const indexB = clientesConCoordenadas.indexOf(b);
+          return distancias[indexA] - distancias[indexB];
+        });
+      } else {
+        // Si no hay ubicación inicial, usar el algoritmo original
+        if (clientesConCoordenadas.length > 2) {
+          const matrizDistancias = await this.calcularMatrizDistancias(clientesConCoordenadas);
+          const rutaOptima = this.encontrarRutaOptima(matrizDistancias, -1);
+          clientesConCoordenadas.splice(0, clientesConCoordenadas.length, 
+            ...rutaOptima.map(idx => clientesConCoordenadas[idx]));
+        }
       }
 
-      // Usar ubicación inicial si está disponible, sino usar el primer cliente
-      const origin = options.ubicacionInicial || clientesConCoordenadas[0].coords!;
-      const destination = clientesConCoordenadas[clientesConCoordenadas.length - 1].coords!;
-      const waypoints = clientesConCoordenadas.slice(1, -1).map(cliente => ({
-        location: new window.google.maps.LatLng(cliente.coords!.lat, cliente.coords!.lng),
-        stopover: true
-      }));
+      // Siempre usar la ubicación inicial como origen si está disponible
+      const origin = options.ubicacionInicial 
+        ? { lat: options.ubicacionInicial.lat, lng: options.ubicacionInicial.lng }
+        : clientesConCoordenadas[0].coords!;
+
+      // Si hay ubicación inicial, todos los clientes son waypoints
+      const waypoints = options.ubicacionInicial
+        ? clientesConCoordenadas.map(cliente => ({
+            location: new window.google.maps.LatLng(cliente.coords!.lat, cliente.coords!.lng),
+            stopover: true
+          }))
+        : clientesConCoordenadas.slice(1, -1).map(cliente => ({
+            location: new window.google.maps.LatLng(cliente.coords!.lat, cliente.coords!.lng),
+            stopover: true
+          }));
+
+      // El destino es el último cliente si no hay ubicación inicial, o el último waypoint si la hay
+      const destination = options.ubicacionInicial
+        ? clientesConCoordenadas[clientesConCoordenadas.length - 1].coords!
+        : clientesConCoordenadas[clientesConCoordenadas.length - 1].coords!;
 
       // Calcular hora de salida considerando el tráfico actual
       const departureTime = new Date();
@@ -197,12 +251,24 @@ export class RouteOptimizer {
       // Calcular estadísticas detalladas
       const stats = this.calcularEstadisticasDetalladas(result);
 
+      // Si hay ubicación inicial, ajustar el orden de los clientes según el orden de los waypoints
+      if (options.ubicacionInicial && result.routes[0].waypoint_order) {
+        const ordenWaypoints = result.routes[0].waypoint_order;
+        const clientesReordenados = ordenWaypoints.map(index => clientesConCoordenadas[index]);
+        return {
+          clientesOrdenados: clientesReordenados,
+          stats
+        };
+      }
+
       return {
         clientesOrdenados: clientesConCoordenadas,
         stats
       };
     } catch (error) {
-      console.error('Error al optimizar ruta simple:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error al optimizar ruta simple:', error);
+      }
       throw error instanceof Error ? error : new Error('Error desconocido al optimizar la ruta simple');
     }
   }
@@ -489,7 +555,9 @@ export class RouteOptimizer {
       const results = await this.reintentarOperacion(geocodificar);
 
       if (results[0].partial_match) {
-        console.warn(`⚠️ Coincidencia parcial para la dirección: ${direccion}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`⚠️ Coincidencia parcial para la dirección: ${direccion}`);
+        }
       }
 
       const location = results[0].geometry.location;
@@ -501,7 +569,9 @@ export class RouteOptimizer {
       this.geocodeCache.set(normalizada, coords);
       return coords;
     } catch (error) {
-      console.error('Error al obtener coordenadas:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error al obtener coordenadas:', error);
+      }
       throw error instanceof Error ? error : new Error(`Error al geocodificar: ${direccion}`);
     }
   }

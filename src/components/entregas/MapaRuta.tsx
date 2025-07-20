@@ -1,65 +1,83 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useGoogleMaps } from '../common/GoogleMapsProvider';
-import { useGeolocation } from '../../hooks/useGeolocation';
+import { ClienteConRuta, EstadoVisita, LatLng } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
-import { ClienteConRuta } from '../../types';
-import { IniciarRuta } from './IniciarRuta';
+import { useGoogleMaps } from '../common/hooks/useGoogleMaps';
+import { FaExclamationTriangle, FaRoute, FaEye, FaEyeSlash } from 'react-icons/fa';
 
 interface MapaRutaProps {
   clientes: ClienteConRuta[];
-  className?: string;
-  onClienteClick?: (cliente: ClienteConRuta) => void;
-  onUpdateCliente?: (clienteId: string, estado: 'pendiente' | 'completado' | 'cancelado') => void;
-}
-
-interface GeolocationCoordinatesLike {
-  latitude: number;
-  longitude: number;
+  ubicacionActual?: LatLng | null;
+  onOptimizarRuta?: () => void;
+  optimizing?: boolean;
+  onToggleMapa?: () => void;
+  mostrarMapa?: boolean;
 }
 
 export const MapaRuta: React.FC<MapaRutaProps> = ({
-  clientes: clientesIniciales,
-  className = '',
-  onClienteClick,
-  onUpdateCliente
+  clientes,
+  ubicacionActual,
+  onOptimizarRuta,
+  optimizing = false,
+  onToggleMapa,
+  mostrarMapa = true
 }) => {
-  const mapRef = useRef<google.maps.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const [clientesInternos, setClientes] = useState<ClienteConRuta[]>(clientes);
   const [error, setError] = useState<string | null>(null);
-  const [clientes, setClientes] = useState(clientesIniciales);
-  const geolocation = useGeolocation();
-  const ubicacionActual = geolocation.coords as GeolocationCoordinatesLike | null;
   const { isLoaded, loadError } = useGoogleMaps();
   const [markerLibLoaded, setMarkerLibLoaded] = useState(false);
 
+  // Efecto para actualizar clientes cuando cambian los iniciales
+  useEffect(() => {
+    setClientes(clientes);
+  }, [clientes]);
+
   // Función para validar coordenadas
-  const isValidLatLng = useCallback((coords: { lat?: number; lng?: number } | null | undefined): boolean => {
-    if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
-      console.warn('Coordenadas no son números válidos:', coords);
+  const isValidLatLng = useCallback((coords: LatLng | null | undefined): boolean => {
+    if (!coords) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Coordenadas son null o undefined');
+      }
+      return false;
+    }
+
+    if (typeof coords.lat !== 'number' || typeof coords.lng !== 'number') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Coordenadas no son números válidos:', coords);
+      }
       return false;
     }
 
     if (coords.lat < -90 || coords.lat > 90 || coords.lng < -180 || coords.lng > 180) {
-      console.warn('Coordenadas fuera de rango:', coords);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Coordenadas fuera de rango:', coords);
+      }
       return false;
     }
 
     return true;
   }, []);
 
+  // Función para convertir coordenadas a formato LatLng
+  const coordsToLatLng = useCallback((coords: LatLng): LatLng => {
+    return coords;
+  }, []);
+
   // Función para crear un LatLng válido
-  const createLatLng = useCallback((coords: { lat?: number; lng?: number } | null | undefined): google.maps.LatLng | null => {
+  const createLatLng = useCallback((coords: LatLng | null | undefined): google.maps.LatLng | null => {
     try {
-      if (!isValidLatLng(coords)) return null;
-      return new google.maps.LatLng({
-        lat: coords!.lat!,
-        lng: coords!.lng!
-      });
+      if (!isValidLatLng(coords) || !coords) return null;
+
+      const latLng = coordsToLatLng(coords);
+      return new google.maps.LatLng(latLng.lat, latLng.lng);
     } catch (error) {
-      console.error('Error al crear LatLng:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error al crear LatLng:', error);
+      }
       return null;
     }
-  }, [isValidLatLng]);
+  }, [isValidLatLng, coordsToLatLng]);
 
   // Función para crear el contenido del marcador
   const createMarkerContent = useCallback((cliente: ClienteConRuta, index: number): HTMLElement => {
@@ -73,7 +91,7 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
     markerContent.style.cssText = `
       width: 36px;
       height: 36px;
-      background-color: ${cliente.estado === 'completado' ? '#10B981' : '#3B82F6'};
+      background-color: ${cliente.estado === EstadoVisita.COMPLETADA ? '#10B981' : '#3B82F6'};
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -121,25 +139,7 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
     return container;
   }, []);
 
-  // Efecto para actualizar clientes cuando cambian los iniciales
-  useEffect(() => {
-    const clientesString = JSON.stringify(clientesIniciales);
-    const clientesActualesString = JSON.stringify(clientes);
-    
-    if (clientesString !== clientesActualesString) {
-      setClientes(clientesIniciales);
-    }
-  }, [clientesIniciales, clientes]);
 
-  // Manejador para reordenar la ruta
-  const handleReorderRoute = useCallback((clientesOrdenados: ClienteConRuta[]) => {
-    const clientesOrdenadosString = JSON.stringify(clientesOrdenados);
-    const clientesActualesString = JSON.stringify(clientes);
-    
-    if (clientesOrdenadosString !== clientesActualesString) {
-      setClientes(clientesOrdenados);
-    }
-  }, [clientes]);
 
   // Efecto para cargar la biblioteca de marcadores
   useEffect(() => {
@@ -162,31 +162,49 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
   useEffect(() => {
     if (!isLoaded || !markerLibLoaded || !mapContainerRef.current) return;
 
-    try {
-      const map = new google.maps.Map(mapContainerRef.current, {
-        center: { lat: 19.4326, lng: -99.1332 },
-        zoom: 12,
-        mapId: 'YOUR_MAP_ID',
-        disableDefaultUI: false,
-        clickableIcons: false,
-        mapTypeControl: false,
-        fullscreenControl: false,
-        streetViewControl: false
-      });
+    let mounted = true;
+    const markers: google.maps.marker.AdvancedMarkerElement[] = [];
 
-      mapRef.current = map;
-
-      // Crear marcadores para los clientes
-      const bounds = new google.maps.LatLngBounds();
-      let hasValidLocations = false;
-
-      // Agregar ubicación actual si está disponible
-      if (ubicacionActual) {
-        const currentLocation = createLatLng({
-          lat: ubicacionActual.latitude,
-          lng: ubicacionActual.longitude
+    const initializeMap = async () => {
+      try {
+        const map = new google.maps.Map(mapContainerRef.current!, {
+          center: { lat: 19.4326, lng: -99.1332 },
+          zoom: 12,
+          mapId: 'YOUR_MAP_ID',
+          disableDefaultUI: false,
+          clickableIcons: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          streetViewControl: false,
+          gestureHandling: 'cooperative',
+          isFractionalZoomEnabled: true,
+          // Configuraciones adicionales para mejorar rendimiento
+          keyboardShortcuts: false,
+          scrollwheel: true,
+          draggable: true,
+          zoomControl: true,
+          scaleControl: false,
         });
-        if (currentLocation) {
+
+        mapRef.current = map;
+
+        // Configurar opciones de gestos táctiles para evitar warnings de rendimiento
+        const mapDiv = mapContainerRef.current;
+        if (mapDiv) {
+          // Aplicar estilos CSS para mejorar rendimiento táctil
+          mapDiv.style.touchAction = 'pan-x pan-y zoom-in zoom-out';
+          mapDiv.style.overscrollBehavior = 'contain';
+          // @ts-expect-error - webkit prefix no está en tipos estándar
+          mapDiv.style.webkitOverflowScrolling = 'touch';
+        }
+
+        // Crear marcadores para los clientes
+        const bounds = new google.maps.LatLngBounds();
+        let hasValidLocations = false;
+
+        // Agregar ubicación actual si está disponible
+        if (ubicacionActual) {
+          const currentLocation = new google.maps.LatLng(ubicacionActual.lat, ubicacionActual.lng);
           bounds.extend(currentLocation);
           hasValidLocations = true;
 
@@ -201,71 +219,70 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
           `;
 
-          new google.maps.marker.AdvancedMarkerElement({
+          const currentLocationMarker = new google.maps.marker.AdvancedMarkerElement({
             map,
             position: currentLocation,
             title: 'Tu ubicación actual',
             content: currentLocationDiv
           });
+          markers.push(currentLocationMarker);
         }
-      }
 
-      // Crear marcadores para cada cliente
-      clientes.forEach((cliente, index) => {
-        if (!cliente.coords) return;
+        // Crear marcadores para cada cliente
+        clientesInternos.forEach((cliente, index) => {
+          if (!cliente.coords) return;
 
-        const position = createLatLng(cliente.coords);
-        if (!position) return;
+          const position = new google.maps.LatLng(cliente.coords.lat, cliente.coords.lng);
+          bounds.extend(position);
+          hasValidLocations = true;
 
-        bounds.extend(position);
-        hasValidLocations = true;
+          const marker = new google.maps.marker.AdvancedMarkerElement({
+            map,
+            position,
+            title: cliente.nombre,
+            content: createMarkerContent(cliente, index)
+          });
 
-        // Crear el marcador
-        const marker = new google.maps.marker.AdvancedMarkerElement({
-          map,
-          position,
-          title: cliente.nombre,
-          content: createMarkerContent(cliente, index)
+          marker.addListener('click', () => {
+            // if (onClienteClick) {
+            //   onClienteClick(cliente);
+            // }
+          });
+
+          markers.push(marker);
         });
 
-        marker.addListener('click', () => {
-          if (onClienteClick) {
-            onClienteClick(cliente);
+        // Ajustar el mapa para mostrar todos los marcadores
+        if (hasValidLocations) {
+          map.fitBounds(bounds);
+          const zoom = map.getZoom();
+          if (zoom !== undefined && zoom > 15) {
+            map.setZoom(15);
           }
-        });
-      });
-
-      // Ajustar el mapa para mostrar todos los marcadores
-      if (hasValidLocations) {
-        map.fitBounds(bounds);
-        const zoom = map.getZoom();
-        if (zoom !== undefined && zoom > 15) {
-          map.setZoom(15);
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error al inicializar el mapa:', error);
+        }
+        if (mounted) {
+          setError('Error al inicializar el mapa. Por favor, recarga la página.');
         }
       }
+    };
 
-    } catch (error) {
-      console.error('Error al inicializar el mapa:', error);
-      setError('Error al inicializar el mapa. Por favor, recarga la página.');
-    }
-  }, [isLoaded, markerLibLoaded, clientes, ubicacionActual, onClienteClick, createLatLng, isValidLatLng, createMarkerContent]);
+    initializeMap();
 
-  // Manejadores para la ruta
-  const handleStartRoute = useCallback(() => {
-    // Centrar el mapa en la ubicación actual si está disponible
-    if (ubicacionActual && mapRef.current) {
-      const currentLocation = createLatLng({
-        lat: ubicacionActual.latitude,
-        lng: ubicacionActual.longitude
+    return () => {
+      mounted = false;
+      markers.forEach(marker => {
+        if (marker) {
+          marker.map = null;
+        }
       });
-      if (currentLocation) {
-        mapRef.current.panTo(currentLocation);
-      }
-    }
-  }, [ubicacionActual, createLatLng]);
+    };
+  }, [isLoaded, markerLibLoaded, clientesInternos, ubicacionActual, createMarkerContent]);
 
-  const handleEndRoute = useCallback(() => {
-    // Ajustar el mapa para mostrar todos los marcadores
+  const centrarMapa = useCallback(() => {
     if (mapRef.current) {
       const bounds = new google.maps.LatLngBounds();
       let hasValidLocations = false;
@@ -273,8 +290,8 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
       // Agregar ubicación actual si está disponible
       if (ubicacionActual) {
         const currentLocation = createLatLng({
-          lat: ubicacionActual.latitude,
-          lng: ubicacionActual.longitude
+          lat: ubicacionActual.lat,
+          lng: ubicacionActual.lng
         });
         if (currentLocation) {
           bounds.extend(currentLocation);
@@ -283,7 +300,7 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
       }
 
       // Agregar ubicaciones de clientes
-      clientes.forEach(cliente => {
+      clientesInternos.forEach(cliente => {
         if (cliente.coords) {
           const position = createLatLng(cliente.coords);
           if (position) {
@@ -301,44 +318,105 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
         }
       }
     }
-  }, [clientes, ubicacionActual, createLatLng]);
+  }, [clientesInternos, ubicacionActual, createLatLng]);
 
   if (loadError) {
-    return <div className="text-red-500">Error al cargar el mapa: {loadError.message}</div>;
+    return (
+      <div className="text-red-500 p-4 bg-red-50 rounded-lg border border-red-200">
+        <div className="flex items-center mb-2">
+          <FaExclamationTriangle className="text-xl mr-2" />
+          <span className="font-semibold">Error al cargar el mapa</span>
+        </div>
+        <p>{loadError.message}</p>
+      </div>
+    );
   }
 
   if (!isLoaded || !markerLibLoaded) {
-    return <div className="flex justify-center items-center h-full">
-      <LoadingSpinner className="w-8 h-8" />
-    </div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-full min-h-[400px] bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <LoadingSpinner className="w-8 h-8 mb-4" />
+        <p className="text-gray-600 dark:text-gray-300">Cargando mapa...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className={`relative ${className}`}>
-        <div 
-          ref={mapContainerRef}
-          className="w-full h-full min-h-[400px] rounded-lg overflow-hidden"
-        />
-        {error && (
-          <div className="absolute bottom-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-            {error}
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Mapa de Ruta
+            {ubicacionActual && (
+              <span className="text-sm text-green-600 dark:text-green-400 ml-2">
+                📍 Ubicación activa
+              </span>
+            )}
+          </h3>
+          <div className="flex gap-2">
+            {onOptimizarRuta && (
+              <button
+                onClick={onOptimizarRuta}
+                disabled={optimizing || clientes.length === 0}
+                className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+              >
+                {optimizing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                    Optimizando...
+                  </>
+                ) : (
+                  <>
+                    <FaRoute />
+                    Optimizar Ruta
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              onClick={centrarMapa}
+              className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 flex items-center gap-1 transition-colors"
+            >
+              Centrar
+            </button>
+            
+            {onToggleMapa && (
+              <button
+                onClick={onToggleMapa}
+                className="px-3 py-1 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 flex items-center gap-1 transition-colors"
+              >
+                {mostrarMapa ? (
+                  <>
+                    <FaEyeSlash />
+                    Ocultar
+                  </>
+                ) : (
+                  <>
+                    <FaEye />
+                    Mostrar
+                  </>
+                )}
+              </button>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      <IniciarRuta
-        clientes={clientes}
-        onStartRoute={handleStartRoute}
-        onEndRoute={handleEndRoute}
-        onUpdateCliente={onUpdateCliente}
-        onReorderRoute={handleReorderRoute}
-        ubicacionActual={ubicacionActual ? {
-          lat: ubicacionActual.latitude,
-          lng: ubicacionActual.longitude
-        } : undefined}
-        className="mt-4"
+      <div 
+        ref={mapContainerRef}
+        className="w-full h-96"
+        style={{
+          touchAction: 'pan-x pan-y zoom-in zoom-out',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain'
+        }}
       />
+      
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border-t border-red-200 dark:border-red-800">
+          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+        </div>
+      )}
     </div>
   );
 };

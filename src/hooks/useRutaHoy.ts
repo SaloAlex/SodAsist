@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ClienteConRuta, RutaOptimizada, Visita, EstadoVisita } from '../types';
 import { FirebaseService } from '../services/firebaseService';
 import { RouteOptimizer } from '../services/routeOptimizer';
-import { collection, query, where, orderBy, getDocs, doc, setDoc, updateDoc, serverTimestamp, Timestamp, limit } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { ExportService, ExportData } from '../services/exportService';
+import { collection, query, where, orderBy, getDocs, doc, Timestamp, limit } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { useAuthStore } from '../store/authStore';
 import { useGeolocation } from './useGeolocation';
 import toast from 'react-hot-toast';
@@ -18,13 +19,14 @@ interface UseRutaHoyReturn {
   ubicacionActual: { lat: number; lng: number; } | null;
   errorUbicacion: string | null;
   reoptimizarRuta: () => Promise<void>;
-  marcarVisita: (clienteId: string, estado: EstadoVisita, notas?: string) => Promise<void>;
+  marcarVisita: (clienteId: string, estado: EstadoVisita) => Promise<void>;
   agregarNota: (clienteId: string, nota: string) => Promise<void>;
   obtenerHistorialVisitas: (clienteId: string) => Promise<Visita[]>;
   actualizarOrdenManual: (nuevoOrden: string[]) => Promise<void>;
   filtrarPorZona: (zona: string) => void;
   exportarRuta: () => Promise<Blob>;
   enviarNotificacion: (clienteId: string, mensaje: string) => Promise<void>;
+  zonaActual: string | null;
 }
 
 export const useRutaHoy = (): UseRutaHoyReturn => {
@@ -34,100 +36,31 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   const [optimizing, setOptimizing] = useState(false);
   const [visitasCompletadas, setVisitasCompletadas] = useState<Map<string, Visita>>(new Map());
   const [error, setError] = useState<Error | null>(null);
-  const [zonaSeleccionada, setZonaSeleccionada] = useState<string>('');
+  const [zonaSeleccionada, setZonaSeleccionada] = useState<string | null>(null);
+
   const { userData, loading: authLoading } = useAuthStore();
-  const { coords: ubicacionActual, error: errorUbicacion } = useGeolocation();
+  
+  // Integrar geolocalización de forma segura
+  const { coords: ubicacionActual, error: errorUbicacion, loading: loadingLocation } = useGeolocation();
+  
+  const hasLoadedRef = useRef(false);
 
-  // Mover filterClientesParaHoy a useCallback
-  const filterClientesParaHoy = useCallback((clientes: ClienteConRuta[]): ClienteConRuta[] => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const dayOfMonth = today.getDate();
-    const weekOfYear = Math.ceil(dayOfMonth / 7);
-    
-    const daysMap: Record<number, string> = {
-      0: 'domingo',
-      1: 'lunes',
-      2: 'martes',
-      3: 'miércoles',
-      4: 'jueves',
-      5: 'viernes',
-      6: 'sábado'
-    };
-    
-    const todayName = daysMap[dayOfWeek];
-    
-    return clientes.filter(cliente => {
-      if (zonaSeleccionada && cliente.zona !== zonaSeleccionada) {
-        return false;
-      }
-
-      if (cliente.diaVisita !== todayName) {
-        return false;
-      }
-      
-      switch (cliente.frecuenciaVisita) {
-        case 'semanal':
-          return true;
-        case 'quincenal':
-          return weekOfYear % 2 === 1;
-        case 'mensual':
-          return dayOfMonth <= 7;
-        default:
-          return false;
-      }
-    });
-  }, [zonaSeleccionada]);
-
-  // Optimizar ruta
-  const optimizarRuta = useCallback(async (clientesData: ClienteConRuta[]) => {
-    setOptimizing(true);
-    try {
-      const optimizationResult = await RouteOptimizer.optimizeRoute(clientesData, {
-        ubicacionInicial: ubicacionActual || undefined
-      });
-      const { clientesOrdenados, stats } = optimizationResult;
-
-      const rutaDoc: RutaOptimizada = {
-        id: doc(collection(db, 'rutas')).id,
-        fecha: new Date(),
-        clientes: clientesOrdenados.map((cliente, index) => ({
-          clienteId: cliente.id!,
-          orden: index,
-          distanciaAlSiguiente: stats.distanciasIndividuales[index] || 0,
-          tiempoEstimado: stats.tiemposIndividuales[index] || 0
-        })),
-        distanciaTotal: stats.distanciaTotal,
-        tiempoEstimadoTotal: stats.tiempoTotal,
-        zonas: Array.from(new Set(clientesData.map(c => c.zona).filter(Boolean))) as string[]
-      };
-      
-      await setDoc(doc(db, 'rutas', rutaDoc.id), {
-        ...rutaDoc,
-        fecha: serverTimestamp()
-      });
-
-      setRutaOptimizada(rutaDoc);
-      setClientes(clientesOrdenados);
-    } catch (err) {
-      console.error('Error al optimizar ruta:', err);
-      toast.error('Error al optimizar la ruta');
-    } finally {
-      setOptimizing(false);
-    }
-  }, [ubicacionActual, setOptimizing, setRutaOptimizada, setClientes]);
-
-  // Cargar datos iniciales
+  // Monitor cambios en geolocalización - solo para desarrollo
   useEffect(() => {
-    // Si todavía está cargando la autenticación, esperar
-    if (authLoading) {
-      return;
+    if (ubicacionActual && !hasLoadedRef.current) {
+      // Solo en modo desarrollo
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📍 Ubicación obtenida:', {
+          lat: ubicacionActual.lat.toFixed(6),
+          lng: ubicacionActual.lng.toFixed(6)
+        });
+      }
     }
+  }, [ubicacionActual, errorUbicacion, loadingLocation]);
 
-    // Si no hay usuario autenticado o userData después de cargar, mostrar error
-    if (!auth.currentUser || !userData) {
-      setError(new Error('No hay usuario autenticado'));
-      setLoading(false);
+  // Cargar datos solo una vez - SIN mountedRef
+  useEffect(() => {
+    if (hasLoadedRef.current || authLoading || !userData) {
       return;
     }
 
@@ -136,12 +69,10 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         setLoading(true);
         setError(null);
 
-        // Verificar permisos
         if (!['admin', 'sodero'].includes(userData.rol)) {
           throw new Error('No tienes permisos para ver esta información');
         }
 
-        // Cargar clientes y visitas del día
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -166,37 +97,160 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         });
         setVisitasCompletadas(visitasMap);
 
-        // Filtrar y procesar clientes
-        const clientesFiltrados = filterClientesParaHoy(clientesData);
+        // Filtrar clientes para hoy
+        const today2 = new Date();
+        const dayOfWeek = today2.getDay();
+        const dayOfMonth = today2.getDate();
+        const weekOfYear = Math.ceil(dayOfMonth / 7);
+        
+        const daysMap: Record<number, string> = {
+          0: 'domingo', 1: 'lunes', 2: 'martes', 3: 'miércoles',
+          4: 'jueves', 5: 'viernes', 6: 'sábado'
+        };
+        
+        const todayName = daysMap[dayOfWeek];
+        
+        const clientesFiltrados = clientesData.filter(cliente => {
+          if (cliente.diaVisita !== todayName) return false;
+          
+          switch (cliente.frecuenciaVisita) {
+            case 'semanal': return true;
+            case 'quincenal': return weekOfYear % 2 === 1;
+            case 'mensual': return dayOfMonth <= 7;
+            default: return false;
+          }
+        });
+
         setClientes(clientesFiltrados);
 
+        // Crear ruta básica
         if (clientesFiltrados.length > 0) {
-          await optimizarRuta(clientesFiltrados);
+          const rutaBase: RutaOptimizada = {
+            id: doc(collection(db, 'rutas')).id,
+            fecha: new Date(),
+            clientes: clientesFiltrados.map((cliente, index) => ({
+              clienteId: cliente.id!,
+              orden: index,
+              distanciaAlSiguiente: 0,
+              tiempoEstimado: 0
+            })),
+            distanciaTotal: 0,
+            tiempoEstimadoTotal: 0,
+            zonas: Array.from(new Set(clientesFiltrados.map(c => c.zona).filter(Boolean))) as string[]
+          };
+          setRutaOptimizada(rutaBase);
         }
+
+        hasLoadedRef.current = true;
+
       } catch (err) {
-        console.error('Error al cargar datos:', err);
         setError(err instanceof Error ? err : new Error('Error desconocido'));
-        toast.error(err instanceof Error ? err.message : 'Error al cargar los datos');
+        toast.error('Error al cargar los datos');
       } finally {
         setLoading(false);
       }
     };
 
     cargarDatos();
-  }, [userData, authLoading, filterClientesParaHoy, ubicacionActual, optimizarRuta]);
+  }, [authLoading, userData]);
 
-  // Reoptimizar ruta
+  // Funciones implementadas
   const reoptimizarRuta = async () => {
-    if (clientes.length === 0) {
-      toast.error('No hay clientes para optimizar la ruta');
-      return;
+    try {
+      if (clientes.length === 0) {
+        toast.error('No hay clientes para optimizar');
+        return;
+      }
+
+      // Activar estado de optimización
+      setOptimizing(true);
+      
+      // Mostrar toast de carga
+      const loadingToast = toast.loading('Optimizando ruta...', { duration: Infinity });
+
+      // Filtrar solo clientes no completados
+      const clientesPendientes = clientes.filter(cliente => 
+        !visitasCompletadas.has(cliente.id!)
+      );
+
+      if (clientesPendientes.length === 0) {
+        toast.dismiss(loadingToast);
+        toast.success('¡Todos los clientes ya han sido visitados!');
+        return;
+      }
+
+      // Usar ubicación actual si está disponible
+      const options = ubicacionActual ? {
+        ubicacionInicial: ubicacionActual
+      } : {};
+
+      // Optimizar la ruta
+      const resultado = await RouteOptimizer.optimizeRoute(clientesPendientes, options);
+      
+      // Actualizar el estado con la ruta optimizada
+      const rutaOptimizada: RutaOptimizada = {
+        id: doc(collection(db, 'rutas')).id,
+        fecha: new Date(),
+        clientes: resultado.clientesOrdenados.map((cliente, index) => ({
+          clienteId: cliente.id!,
+          orden: index,
+          distanciaAlSiguiente: resultado.stats.distanciasIndividuales[index] || 0,
+          tiempoEstimado: resultado.stats.tiemposIndividuales[index] || 0
+        })),
+        distanciaTotal: resultado.stats.distanciaTotal,
+        tiempoEstimadoTotal: resultado.stats.tiempoTotal,
+        zonas: Array.from(new Set(resultado.clientesOrdenados.map(c => c.zona).filter(Boolean))) as string[]
+      };
+
+      // Actualizar estados
+      setClientes(resultado.clientesOrdenados);
+      setRutaOptimizada(rutaOptimizada);
+
+      // Mostrar estadísticas
+      const distanciaKm = (resultado.stats.distanciaTotal / 1000).toFixed(1);
+      const tiempoHoras = Math.floor(resultado.stats.tiempoTotal / 3600);
+      const tiempoMinutos = Math.floor((resultado.stats.tiempoTotal % 3600) / 60);
+
+      toast.dismiss(loadingToast);
+      
+      if (ubicacionActual) {
+        toast.success(
+          `🚗 Ruta optimizada desde tu ubicación\n` +
+          `📏 Distancia: ${distanciaKm} km\n` +
+          `⏱️ Tiempo estimado: ${tiempoHoras}h ${tiempoMinutos}m`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(
+          `🚗 Ruta optimizada\n` +
+          `📏 Distancia: ${distanciaKm} km\n` +
+          `⏱️ Tiempo estimado: ${tiempoHoras}h ${tiempoMinutos}m`,
+          { duration: 6000 }
+        );
+      }
+
+    } catch (err) {
+      
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+      
+      if (errorMessage.includes('OVER_QUERY_LIMIT')) {
+        toast.error('Límite de consultas excedido. Intenta más tarde.');
+      } else if (errorMessage.includes('REQUEST_DENIED')) {
+        toast.error('Error de permisos de Google Maps. Verifica la configuración.');
+      } else if (errorMessage.includes('geocodificar')) {
+        toast.error('Error al obtener coordenadas de algunas direcciones.');
+      } else {
+        toast.error('Error al optimizar la ruta: ' + errorMessage);
+      }
+    } finally {
+      // Siempre desactivar estado de optimización
+      setOptimizing(false);
     }
-    await optimizarRuta(clientes);
   };
 
-  // Marcar visita
-  const marcarVisita = async (clienteId: string, estado: EstadoVisita, notas?: string) => {
+  const marcarVisita = async (clienteId: string, estado: EstadoVisita) => {
     try {
+      
       if (estado === EstadoVisita.PENDIENTE) {
         // Si cambiamos a pendiente, eliminamos la visita existente
         const visitaExistente = visitasCompletadas.get(clienteId);
@@ -213,33 +267,50 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
       }
 
       const visitaId = doc(collection(db, 'visitas')).id;
-      const visitaBase = {
+      
+      // Usar ubicación real si está disponible
+      let ubicacionCompletado = { lat: 0, lng: 0 };
+      if (ubicacionActual) {
+        ubicacionCompletado = {
+          lat: ubicacionActual.lat,
+          lng: ubicacionActual.lng
+        };
+      } else {
+        if (errorUbicacion) {
+          toast('No se pudo obtener tu ubicación actual', {
+            icon: '⚠️',
+            duration: 4000
+          });
+        }
+      }
+      
+      const visitaData = {
         id: visitaId,
         clienteId,
         completada: estado === EstadoVisita.COMPLETADA,
         tiempoVisita: 0,
-        ubicacionCompletado: ubicacionActual || { lat: 0, lng: 0 } // Usar ubicación actual si está disponible
+        ubicacionCompletado,
+        fecha: new Date()
       };
 
-      const visitaData = {
-        ...visitaBase,
-        ...(notas ? { notas } : {}),
-        fecha: serverTimestamp()
-      };
-
-      await setDoc(doc(db, 'visitas', visitaId), visitaData);
+      await FirebaseService.createDocument('visitas', visitaData);
 
       if (estado === EstadoVisita.COMPLETADA) {
         const visitaCompleta: Visita = {
-          ...visitaBase,
-          ...(notas ? { notas } : {}),
+          ...visitaData,
           fecha: {
             seconds: Math.floor(Date.now() / 1000),
             nanoseconds: 0
           }
         };
         setVisitasCompletadas(prev => new Map(prev).set(clienteId, visitaCompleta));
-        toast.success('Visita marcada como completada');
+        
+        // Mensaje diferente dependiendo si tenemos ubicación
+        if (ubicacionActual) {
+          toast.success('Visita completada con ubicación registrada');
+        } else {
+          toast.success('Visita completada (sin ubicación)');
+        }
       } else {
         setVisitasCompletadas(prev => {
           const newMap = new Map(prev);
@@ -248,38 +319,35 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         });
         toast.success(`Visita marcada como ${estado}`);
       }
-    } catch (err) {
-      console.error('Error al marcar visita:', err);
+    } catch {
       toast.error('Error al marcar la visita');
     }
   };
 
-  // Agregar nota
   const agregarNota = async (clienteId: string, nota: string) => {
     try {
       const visitaExistente = visitasCompletadas.get(clienteId);
       if (!visitaExistente) {
-        throw new Error('No existe una visita para este cliente');
+        toast.error('Primero debe marcar la visita como completada');
+        return;
       }
+
+      await FirebaseService.updateDocument('visitas', visitaExistente.id, {
+        notas: nota
+      });
 
       const visitaActualizada = {
         ...visitaExistente,
         notas: nota
       };
 
-      await updateDoc(doc(db, 'visitas', visitaExistente.id), {
-        notas: nota
-      });
-
       setVisitasCompletadas(prev => new Map(prev).set(clienteId, visitaActualizada));
       toast.success('Nota agregada correctamente');
-    } catch (err) {
-      console.error('Error al agregar nota:', err);
+    } catch {
       toast.error('Error al agregar la nota');
     }
   };
 
-  // Obtener historial de visitas
   const obtenerHistorialVisitas = async (clienteId: string): Promise<Visita[]> => {
     try {
       const visitasQuery = query(
@@ -290,24 +358,29 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
       );
 
       const querySnapshot = await getDocs(visitasQuery);
-      return querySnapshot.docs.map(doc => ({
+      const visitas = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Visita));
-    } catch (err) {
-      console.error('Error al obtener historial:', err);
-      throw err;
+      
+      return visitas;
+    } catch {
+      toast.error('Error al obtener el historial');
+      return [];
     }
   };
 
-  // Actualizar orden manual
   const actualizarOrdenManual = async (nuevoOrden: string[]) => {
     try {
+      
+      // Reordenar los clientes según el nuevo orden
       const clientesOrdenados = nuevoOrden.map(id => 
         clientes.find(c => c.id === id)!
-      );
+      ).filter(Boolean);
+      
       setClientes(clientesOrdenados);
 
+      // Actualizar la ruta si existe
       if (rutaOptimizada) {
         const rutaActualizada: RutaOptimizada = {
           ...rutaOptimizada,
@@ -319,41 +392,45 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
           }))
         };
 
-        await setDoc(doc(db, 'rutas', rutaActualizada.id), rutaActualizada);
         setRutaOptimizada(rutaActualizada);
+        toast.success('Orden de ruta actualizado');
       }
-    } catch (err) {
-      console.error('Error al actualizar orden:', err);
+    } catch {
       toast.error('Error al actualizar el orden de la ruta');
     }
   };
 
-  // Filtrar por zona
   const filtrarPorZona = (zona: string) => {
-    setZonaSeleccionada(zona);
+    setZonaSeleccionada(zona || null);
+    // TODO: Implementar refiltrado de clientes
   };
 
-  // Exportar ruta
   const exportarRuta = async (): Promise<Blob> => {
-    if (!rutaOptimizada || clientes.length === 0) {
-      throw new Error('No hay ruta para exportar');
-    }
+    try {
+      const exportData: ExportData = {
+        clientes,
+        rutaOptimizada,
+        visitasCompletadas,
+        ubicacionActual,
+        fechaRuta: new Date(),
+        sodero: userData?.nombre || 'Sodero'
+      };
 
-    // Aquí iría la lógica de exportación
-    // Por ahora retornamos un blob vacío
-    return new Blob([''], { type: 'text/plain' });
+      // Por defecto exportamos el reporte completo en PDF
+      const blob = await ExportService.exportToPDF(exportData);
+      toast.success('Reporte exportado exitosamente');
+      return blob;
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error al exportar:', error);
+      }
+      toast.error('Error al generar el reporte');
+      return new Blob(['Error al generar el reporte'], { type: 'text/plain' });
+    }
   };
 
-  // Enviar notificación
-  const enviarNotificacion = async (clienteId: string, mensaje: string) => {
-    try {
-      // Aquí iría la lógica de notificación
-      console.log(`Enviando notificación al cliente ${clienteId}: ${mensaje}`);
-      toast.success(`Notificación enviada: ${mensaje}`);
-    } catch (err) {
-      console.error('Error al enviar notificación:', err);
-      toast.error('Error al enviar la notificación');
-    }
+  const enviarNotificacion = async () => {
+    toast.success('Función de notificaciones pendiente');
   };
 
   return {
@@ -363,8 +440,8 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
     optimizing,
     visitasCompletadas,
     error,
-    ubicacionActual,
-    errorUbicacion,
+    ubicacionActual, // Ahora devuelve la ubicación real
+    errorUbicacion, // Ahora devuelve el error real
     reoptimizarRuta,
     marcarVisita,
     agregarNota,
@@ -372,6 +449,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
     actualizarOrdenManual,
     filtrarPorZona,
     exportarRuta,
-    enviarNotificacion
+    enviarNotificacion,
+    zonaActual: zonaSeleccionada
   };
 }; 

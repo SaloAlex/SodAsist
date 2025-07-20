@@ -137,14 +137,14 @@ const StockItem = memo<StockItemProps>(({
               type="number"
               value={manualValue}
               onChange={(e) => setManualValue(e.target.value)}
-              className="w-20 px-2 py-1 text-xl font-bold border rounded"
+              className="w-20 px-2 py-1 text-xl font-bold border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               min="0"
               autoFocus
               aria-label={`Editar cantidad de ${title}`}
             />
             <button
               type="submit"
-              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
               aria-label="Confirmar cambio"
             >
               ✓
@@ -168,7 +168,7 @@ const StockItem = memo<StockItemProps>(({
       <div className="flex space-x-2">
         <button
           onClick={onDecrease}
-          className="flex-1 p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50"
+          className="flex-1 p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800 transition-colors disabled:opacity-50"
           disabled={disabled}
           aria-label={`Disminuir ${title}`}
         >
@@ -176,7 +176,7 @@ const StockItem = memo<StockItemProps>(({
         </button>
         <button
           onClick={onIncrease}
-          className="flex-1 p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+          className="flex-1 p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800 transition-colors disabled:opacity-50"
           disabled={disabled}
           aria-label={`Aumentar ${title}`}
         >
