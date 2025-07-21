@@ -52,8 +52,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => 
   };
 
   return (
-    <aside className={`w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 ${className}`}>
-      <div className="p-6">
+    <aside className={`w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col ${className}`}>
+      <div className="flex-none p-6">
         <div className="flex items-center space-x-2">
           <Truck className="h-8 w-8 text-blue-600" />
           <span className="text-xl font-bold text-gray-900 dark:text-white">
@@ -62,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => 
         </div>
       </div>
       
-      <nav className="mt-6">
+      <nav className="flex-1 mt-6">
         <ul className="space-y-1 px-3">
           {navigation.map((item) => (
             <li key={item.name}>
@@ -85,13 +85,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => 
         </ul>
       </nav>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4">
+      <div className="flex-none p-4">
         <button
           onClick={handleLogout}
           className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors"
         >
           <LogOut className="h-5 w-5" />
-          <span>Cerrar Sesión</span>
+            <span className="truncate">Cerrar Sesión</span>
         </button>
       </div>
     </aside>

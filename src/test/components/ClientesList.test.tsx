@@ -1,20 +1,21 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { describe, it, expect, vi } from 'vitest';
 import { ClientesList } from '../../components/clientes/ClientesList';
 
 // Mock Firebase service
-jest.mock('../../services/firebaseService', () => ({
+vi.mock('../../services/firebaseService', () => ({
   FirebaseService: {
-    getCollection: jest.fn(() => Promise.resolve([])),
+    getCollection: vi.fn(() => Promise.resolve([])),
   },
 }));
 
 // Mock react-hot-toast
-jest.mock('react-hot-toast', () => ({
+vi.mock('react-hot-toast', () => ({
   toast: {
-    error: jest.fn(),
-    success: jest.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
   },
 }));
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRutaHoy } from '../hooks/useRutaHoy';
 import { MapaRuta } from '../components/entregas/MapaRuta';
 import { ClienteDetalles } from '../components/entregas/ClienteDetalles';
+import { IniciarRuta } from '../components/entregas/IniciarRuta';
 import { useAuthStore } from '../store/authStore';
 import { EstadoVisita, ClienteConRuta, Visita } from '../types';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -185,7 +186,6 @@ export const RutaHoy: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-4 lg:py-8">
-      
       {/* Header Desktop */}
       <div className="hidden lg:flex justify-between items-center">
         <div>
@@ -420,7 +420,7 @@ export const RutaHoy: React.FC = () => {
 
         {/* Mapa */}
         {mostrarMapa && (
-          <div className="lg:sticky lg:top-8">
+          <div className="lg:sticky lg:top-8 space-y-4">
             <MapaRuta
               clientes={clientes}
               ubicacionActual={ubicacionActual}
@@ -428,6 +428,14 @@ export const RutaHoy: React.FC = () => {
               optimizing={optimizing}
               onToggleMapa={() => setMostrarMapa(!mostrarMapa)}
               mostrarMapa={mostrarMapa}
+            />
+            {/* Botón para comenzar ruta debajo del mapa */}
+            <IniciarRuta
+              clientes={clientes}
+              ubicacionActual={ubicacionActual || undefined}
+              onUpdateCliente={(clienteId, estado) => marcarVisita(clienteId, estado)}
+              onReorderRoute={(clientesOrdenados) => actualizarOrdenManual(clientesOrdenados.map(c => c.id!))}
+              className="w-full"
             />
           </div>
         )}

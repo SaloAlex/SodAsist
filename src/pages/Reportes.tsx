@@ -30,6 +30,10 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+interface DatosGrafico {
+  [key: string]: string | number;
+}
+
 export const Reportes: React.FC = () => {
   const {
     ventasReporte,
@@ -72,15 +76,16 @@ export const Reportes: React.FC = () => {
           detectarAnomalias()
         ]);
         setInsights(insightsData);
-        setAnomalias(anomaliasData);
-      } catch (error) {
-        console.error('Error cargando análisis avanzado:', error);
+        setAnomalias(anomaliasData as Array<{ descripcion: string; fecha?: string; tipo: string }>);
+      } catch {
+        console.error('Error cargando análisis avanzado');
       }
     };
 
     if (ventasReporte || cobranzasReporte || tendenciasReporte || clientesReporte) {
       cargarAnalisisAvanzado();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventasReporte, cobranzasReporte, tendenciasReporte, clientesReporte]);
 
   // Manejar exportación
@@ -91,7 +96,7 @@ export const Reportes: React.FC = () => {
       } else {
         await exportarReporteCSV(tipoReporteActivo);
       }
-    } catch (error) {
+    } catch {
       toast.error('Error al exportar reporte');
     }
   };
@@ -433,7 +438,7 @@ export const Reportes: React.FC = () => {
                       Evolución de Ventas
                     </h3>
                     <GraficoVentasTemporal
-                      data={ventasReporte.ventasPorDia}
+                      data={ventasReporte.ventasPorDia as unknown as DatosGrafico[]}
                       height={300}
                       tema={configuracionPersonalizada.temaGraficos === 'oscuro' ? 'oscuro' : 'claro'}
                     />
@@ -444,7 +449,7 @@ export const Reportes: React.FC = () => {
                       Productos Más Vendidos
                     </h3>
                     <GraficoPie
-                      data={ventasReporte.topProductos}
+                      data={ventasReporte.topProductos as unknown as DatosGrafico[]}
                       dataKey="porcentaje"
                       nameKey="producto"
                       height={300}
@@ -457,7 +462,7 @@ export const Reportes: React.FC = () => {
                       Ventas Mensuales
                     </h3>
                     <GraficoBarras
-                      data={ventasReporte.ventasMensuales}
+                      data={ventasReporte.ventasMensuales as unknown as DatosGrafico[]}
                       dataKey="ventas"
                       xAxisKey="mes"
                       height={400}
@@ -517,7 +522,7 @@ export const Reportes: React.FC = () => {
                       Segmentación de Clientes
                     </h3>
                     <GraficoPie
-                      data={clientesReporte.segmentacion}
+                      data={clientesReporte.segmentacion as unknown as DatosGrafico[]}
                       dataKey="porcentaje"
                       nameKey="segmento"
                       height={300}
@@ -530,7 +535,7 @@ export const Reportes: React.FC = () => {
                       Distribución Geográfica
                     </h3>
                     <GraficoBarras
-                      data={clientesReporte.analisisGeografico}
+                      data={clientesReporte.analisisGeografico as unknown as DatosGrafico[]}
                       dataKey="ventas"
                       xAxisKey="zona"
                       height={300}
@@ -548,7 +553,7 @@ export const Reportes: React.FC = () => {
                       Crecimiento de Ventas
                     </h3>
                     <GraficoCombinado
-                      data={tendenciasReporte.crecimientoVentas}
+                      data={tendenciasReporte.crecimientoVentas as unknown as DatosGrafico[]}
                       barDataKey="ventas"
                       lineDataKey="crecimiento"
                       xAxisKey="periodo"

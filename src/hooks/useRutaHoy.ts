@@ -48,13 +48,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   // Monitor cambios en geolocalización - solo para desarrollo
   useEffect(() => {
     if (ubicacionActual && !hasLoadedRef.current) {
-      // Solo en modo desarrollo
-      if (process.env.NODE_ENV === 'development') {
-        console.log('📍 Ubicación obtenida:', {
-          lat: ubicacionActual.lat.toFixed(6),
-          lng: ubicacionActual.lng.toFixed(6)
-        });
-      }
+      // Ubicación obtenida correctamente
     }
   }, [ubicacionActual, errorUbicacion, loadingLocation]);
 

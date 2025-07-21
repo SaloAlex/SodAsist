@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, Mail, Smartphone, Save, X, Plus, Trash2 } from 'lucide-react';
+import { Bell, Mail, Smartphone, Save, X, Plus, Trash2, LucideProps } from 'lucide-react';
 
 interface AlertaConfig {
   id: string;
@@ -218,7 +218,7 @@ export const ConfiguracionAlertas: React.FC<ConfiguracionAlertasProps> = ({
 const EditarAlerta: React.FC<{
   alerta: AlertaConfig;
   tiposAlerta: Array<{ value: string; label: string; descripcion: string }>;
-  canalesDisponibles: Array<{ value: string; label: string; icono: React.ComponentType<any> }>;
+  canalesDisponibles: Array<{ value: string; label: string; icono: React.ComponentType<LucideProps> }>;
   onActualizar: (cambios: Partial<AlertaConfig>) => void;
   onToggleActiva: () => void;
 }> = ({ alerta, tiposAlerta, canalesDisponibles, onActualizar, onToggleActiva }) => {
@@ -241,10 +241,10 @@ const EditarAlerta: React.FC<{
     });
   };
 
-  const toggleCanal = (canal: string) => {
-    const nuevosCanales = alerta.canales.includes(canal as any)
+  const toggleCanal = (canal: 'email' | 'sms' | 'notificacion') => {
+    const nuevosCanales = alerta.canales.includes(canal)
       ? alerta.canales.filter(c => c !== canal)
-      : [...alerta.canales, canal as any];
+      : [...alerta.canales, canal];
     onActualizar({ canales: nuevosCanales });
   };
 
@@ -276,7 +276,7 @@ const EditarAlerta: React.FC<{
         </label>
         <select
           value={alerta.tipo}
-          onChange={(e) => onActualizar({ tipo: e.target.value as any })}
+          onChange={(e) => onActualizar({ tipo: e.target.value as 'ventas' | 'mora' | 'clientes' | 'inventario' })}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
           {tiposAlerta.map(tipo => (
@@ -298,7 +298,7 @@ const EditarAlerta: React.FC<{
           </label>
           <select
             value={alerta.condicion}
-            onChange={(e) => onActualizar({ condicion: e.target.value as any })}
+            onChange={(e) => onActualizar({ condicion: e.target.value as 'mayor' | 'menor' | 'igual' })}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="mayor">Mayor que</option>
@@ -327,7 +327,7 @@ const EditarAlerta: React.FC<{
         </label>
         <select
           value={alerta.frecuencia}
-          onChange={(e) => onActualizar({ frecuencia: e.target.value as any })}
+          onChange={(e) => onActualizar({ frecuencia: e.target.value as 'inmediata' | 'diaria' | 'semanal' })}
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
           <option value="inmediata">Inmediata</option>
@@ -345,9 +345,9 @@ const EditarAlerta: React.FC<{
           {canalesDisponibles.map(canal => (
             <button
               key={canal.value}
-              onClick={() => toggleCanal(canal.value)}
+              onClick={() => toggleCanal(canal.value as 'email' | 'sms' | 'notificacion')}
               className={`flex items-center justify-center p-3 rounded-lg border transition-colors ${
-                alerta.canales.includes(canal.value as any)
+                alerta.canales.includes(canal.value as 'email' | 'sms' | 'notificacion')
                   ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                   : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
               }`}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Calendar, 
   Filter, 
@@ -8,10 +8,9 @@ import {
   User, 
   Clock,
   RotateCcw,
-  Download,
-  Settings
+  Download
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { FiltrosReporte } from '../../services/reportesService';
 import { PeriodoPredefinido } from '../../hooks/useReportes';

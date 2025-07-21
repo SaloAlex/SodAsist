@@ -25,8 +25,12 @@ import {
   Scatter
 } from 'recharts';
 
+interface DatosGrafico {
+  [key: string]: string | number;
+}
+
 interface GraficoProps {
-  data: any[];
+  data: DatosGrafico[];
   height?: number;
   className?: string;
   tema?: 'claro' | 'oscuro';
@@ -34,7 +38,7 @@ interface GraficoProps {
 
 interface GraficoVentasProps extends GraficoProps {
   mostrarTendencia?: boolean;
-  compararPeriodo?: any[];
+  compararPeriodo?: Array<Record<string, unknown>>;
 }
 
 interface GraficoPieProps extends GraficoProps {
@@ -67,15 +71,29 @@ const COLORES_OSCURO = [
   '#22D3EE', '#A3E635', '#FB923C', '#F472B6', '#818CF8'
 ];
 
+// Interfaces para tipos de datos
+interface TooltipPayloadEntry {
+  color: string;
+  name: string;
+  value: number;
+}
+
+interface TooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+  formatoMoneda?: boolean;
+}
+
 // Componente de tooltip personalizado
-const TooltipPersonalizado = ({ active, payload, label, formatoMoneda = true }: any) => {
+const TooltipPersonalizado = ({ active, payload, label, formatoMoneda = true }: TooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
         <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">
           {label}
         </p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry: TooltipPayloadEntry, index: number) => (
           <p key={index} className="text-sm" style={{ color: entry.color }}>
             <span className="font-medium">{entry.name}:</span>{' '}
             {formatoMoneda && entry.name.toLowerCase().includes('ventas') || entry.name.toLowerCase().includes('total')
@@ -220,8 +238,8 @@ export const GraficoBarras: React.FC<GraficoBarrasProps> = ({
   const colores = tema === 'oscuro' ? COLORES_OSCURO : COLORES_DEFAULT;
   const colorBarra = color || colores[0];
 
-  const CustomizedLabel = (props: any) => {
-    const { x, y, width, value } = props;
+  const CustomizedLabel = (props: { x?: number; y?: number; width?: number; value?: number }) => {
+    const { x = 0, y = 0, width = 0, value = 0 } = props;
     return (
       <text 
         x={x + width / 2} 
@@ -277,8 +295,10 @@ export const GraficoPie: React.FC<GraficoPieProps> = ({
 }) => {
   const coloresFinales = tema === 'oscuro' ? COLORES_OSCURO : colores;
 
-  const renderLabel = (entry: any) => {
-    return `${entry[nameKey]}: ${entry[dataKey].toFixed(1)}%`;
+  const renderLabel = (entry: Record<string, string | number>) => {
+    const value = entry[dataKey];
+    const formattedValue = typeof value === 'number' ? value.toFixed(1) : value;
+    return `${entry[nameKey]}: ${formattedValue}%`;
   };
 
   return (
@@ -295,7 +315,7 @@ export const GraficoPie: React.FC<GraficoPieProps> = ({
             fill="#8884d8"
             dataKey={dataKey}
           >
-            {data.map((entry, index) => (
+            {data.map((_, index) => (
               <Cell 
                 key={`cell-${index}`} 
                 fill={coloresFinales[index % coloresFinales.length]} 
@@ -303,7 +323,7 @@ export const GraficoPie: React.FC<GraficoPieProps> = ({
             ))}
           </Pie>
           <Tooltip 
-            formatter={(value: any) => [`${value.toFixed(1)}%`, nameKey]}
+            formatter={(value: number) => [`${value.toFixed(1)}%`, nameKey]}
           />
           <Legend />
         </PieChart>

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ClienteConRuta, EstadoVisita } from '../../types';
+import { FaRoute, FaCheckCircle, FaRegCircle } from 'react-icons/fa';
 
 interface IniciarRutaProps {
   clientes: ClienteConRuta[];
@@ -199,18 +200,16 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
           {!isActive ? (
             <button
               onClick={handleStartRoute}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center space-x-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2"
             >
-              <span className="material-icons text-xl">navigation</span>
-              <span>Comenzar Ruta</span>
+              <span className="material-icons text-xl">Comenzar Ruta</span>
             </button>
           ) : (
             <button
               onClick={handleEndRoute}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center space-x-2"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center gap-2"
             >
-              <span className="material-icons text-xl">stop</span>
-              <span>Finalizar Ruta</span>
+              <span className="material-icons text-xl">Finalizar Ruta</span>
             </button>
           )}
         </div>
@@ -248,7 +247,6 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                     <button
                       onClick={() => {
                         if (cliente.coords) {
-                          // Abrir navegación a este cliente
                           const destination = `${cliente.coords.lat},${cliente.coords.lng}`;
                           window.open(
                             `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`,
@@ -259,7 +257,7 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                       className="text-blue-600 hover:text-blue-800 p-1"
                       title="Navegar"
                     >
-                      <span className="material-icons text-xl">directions</span>
+                      <FaRoute className="h-5 w-5" />
                     </button>
                     <button
                       onClick={() => handleClienteCompletado(cliente)}
@@ -271,9 +269,11 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                       title="Marcar como completado"
                       disabled={cliente.estado === EstadoVisita.COMPLETADA}
                     >
-                      <span className="material-icons text-xl">
-                        {cliente.estado === EstadoVisita.COMPLETADA ? 'check_circle' : 'radio_button_unchecked'}
-                      </span>
+                      {cliente.estado === EstadoVisita.COMPLETADA ? (
+                        <FaCheckCircle className="h-5 w-5" />
+                      ) : (
+                        <FaRegCircle className="h-5 w-5" />
+                      )}
                     </button>
                   </>
                 )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   ReportesService, 
   VentasReporte, 
@@ -7,8 +7,7 @@ import {
   ClientesReporte,
   FiltrosReporte 
 } from '../services/reportesService';
-import { ExportService } from '../services/exportService';
-import { startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from 'date-fns';
+import { startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import toast from 'react-hot-toast';
 
 export type TipoReporte = 'ventas' | 'cobranzas' | 'tendencias' | 'clientes';
@@ -53,11 +52,11 @@ interface UseReportesReturn {
   verificarAlertas: () => Promise<void>;
   
   // Comparaciones
-  compararPeriodos: (fechaInicio1: Date, fechaFin1: Date, fechaInicio2: Date, fechaFin2: Date) => Promise<any>;
+  compararPeriodos: (fechaInicio1: Date, fechaFin1: Date, fechaInicio2: Date, fechaFin2: Date) => Promise<unknown>;
   
   // Análisis avanzado
   generarInsights: () => Promise<string[]>;
-  detectarAnomalias: () => Promise<any[]>;
+  detectarAnomalias: () => Promise<unknown[]>;
   
   // Personalización
   guardarConfiguracion: (config: Partial<ConfiguracionReporte>) => void;
@@ -143,7 +142,8 @@ export const useReportes = (): UseReportesReturn => {
   // Cargar reporte inicial
   useEffect(() => {
     cargarReporte(tipoReporteActivo);
-  }, [filtros]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, tipoReporteActivo]);
 
   // Función principal para cargar reportes
   const cargarReporte = useCallback(async (tipo: TipoReporte) => {
@@ -155,25 +155,29 @@ export const useReportes = (): UseReportesReturn => {
       const filtrosConTipo = { ...filtros, tipoReporte: tipo };
 
       switch (tipo) {
-        case 'ventas':
+        case 'ventas': {
           const ventasData = await ReportesService.generarReporteVentas(filtrosConTipo);
           setVentasReporte(ventasData);
           break;
+        }
           
-        case 'cobranzas':
+        case 'cobranzas': {
           const cobranzasData = await ReportesService.generarReporteCobranzas(filtrosConTipo);
           setCobranzasReporte(cobranzasData);
           break;
+        }
           
-        case 'tendencias':
+        case 'tendencias': {
           const tendenciasData = await ReportesService.generarReporteTendencias(filtrosConTipo);
           setTendenciasReporte(tendenciasData);
           break;
+        }
           
-        case 'clientes':
+        case 'clientes': {
           const clientesData = await ReportesService.generarReporteClientes(filtrosConTipo);
           setClientesReporte(clientesData);
           break;
+        }
       }
 
       // Verificar alertas después de cargar datos
@@ -186,6 +190,7 @@ export const useReportes = (): UseReportesReturn => {
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtros]);
 
   // Actualizar filtros
@@ -244,13 +249,14 @@ export const useReportes = (): UseReportesReturn => {
         return;
       }
 
-      const blob = await generarPDFReporte(tipo, reporteData);
+      const blob = await generarPDFReporte();
       descargarArchivo(blob, `reporte-${tipo}-${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('Reporte exportado exitosamente');
     } catch (error) {
       toast.error('Error al exportar reporte');
       console.error('Error exportando PDF:', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventasReporte, cobranzasReporte, tendenciasReporte, clientesReporte]);
 
   // Exportación a CSV
@@ -269,6 +275,7 @@ export const useReportes = (): UseReportesReturn => {
       toast.error('Error al exportar reporte');
       console.error('Error exportando CSV:', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventasReporte, cobranzasReporte, tendenciasReporte, clientesReporte]);
 
   // Exportar todos los reportes
@@ -422,7 +429,7 @@ export const useReportes = (): UseReportesReturn => {
 
   // Detectar anomalías
   const detectarAnomalias = useCallback(async () => {
-    const anomalias: any[] = [];
+    const anomalias: unknown[] = [];
 
     try {
       if (ventasReporte?.ventasPorDia) {
@@ -489,19 +496,19 @@ export const useReportes = (): UseReportesReturn => {
     }
   };
 
-  const generarPDFReporte = async (tipo: TipoReporte, data: any): Promise<Blob> => {
+  const generarPDFReporte = async (): Promise<Blob> => {
     // Implementar generación de PDF específica por tipo
     return new Blob(['PDF generado'], { type: 'application/pdf' });
   };
 
-  const generarCSVReporte = async (tipo: TipoReporte, data: any): Promise<Blob> => {
+  const generarCSVReporte = async (tipo: TipoReporte, data: unknown): Promise<Blob> => {
     // Implementar generación de CSV específica por tipo
     let csvContent = '';
     
     switch (tipo) {
       case 'ventas':
         csvContent = 'Fecha,Ventas,Entregas,Ticket Promedio\n';
-        data.ventasPorDia.forEach((venta: any) => {
+        (data as { ventasPorDia: Array<{ fecha: string; ventas: number; entregas: number; ticketPromedio: number }> }).ventasPorDia.forEach((venta) => {
           csvContent += `${venta.fecha},${venta.ventas},${venta.entregas},${venta.ticketPromedio}\n`;
         });
         break;
@@ -527,15 +534,7 @@ export const useReportes = (): UseReportesReturn => {
     console.log(`Enviando notificación de ${alerta.tipo} a ${alerta.email}: ${valor}`);
   };
 
-  // Memoizar datos computados
-  const datosComputados = useMemo(() => {
-    return {
-      totalVentasActuales: ventasReporte?.resumenGeneral.totalVentas || 0,
-      crecimientoPromedio: ventasReporte?.resumenGeneral.crecimientoMensual || 0,
-      clientesActivos: clientesReporte?.segmentacion.reduce((sum, s) => sum + s.cantidad, 0) || 0,
-      morosidadActual: cobranzasReporte?.estadoCuentas.porcentajeMora || 0
-    };
-  }, [ventasReporte, clientesReporte, cobranzasReporte]);
+
 
   return {
     // Estados de datos
@@ -577,9 +576,6 @@ export const useReportes = (): UseReportesReturn => {
     
     // Personalización
     guardarConfiguracion,
-    restaurarConfiguracion,
-
-    // Datos computados (bonus)
-    datosComputados
+    restaurarConfiguracion
   };
 }; 

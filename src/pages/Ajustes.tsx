@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, User, Shield, Database, Bell } from 'lucide-react';
+import { User, Shield, Database, Bell } from 'lucide-react';
 
 export const Ajustes: React.FC = () => {
   return (

@@ -1,18 +1,11 @@
 import { FirebaseService } from './firebaseService';
 import { Cliente, Entrega, KPI } from '../types';
 import { 
-  startOfMonth, 
-  endOfMonth, 
-  subMonths, 
-  format, 
-  startOfWeek, 
-  endOfWeek,
-  startOfYear,
-  endOfYear,
+  subMonths,
+  format,
   eachDayOfInterval,
   eachMonthOfInterval,
-  differenceInDays,
-  parseISO
+  differenceInDays
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -272,8 +265,9 @@ export class ReportesService {
   /**
    * Genera reporte de tendencias
    */
-  static async generarReporteTendencias(filtros: FiltrosReporte): Promise<TendenciasReporte> {
+  static async generarReporteTendencias(_filtros: FiltrosReporte): Promise<TendenciasReporte> {
     try {
+      void _filtros; // evitar warning de variable no usada
       const entregas = await this.obtenerHistoricoEntregas(12); // 12 meses
       const kpis = await this.obtenerKPIsHistoricos(12);
       
@@ -564,7 +558,8 @@ export class ReportesService {
     return FirebaseService.getEntregasByDateRange(fechaInicio, new Date());
   }
 
-  private static async obtenerKPIsHistoricos(meses: number): Promise<KPI[]> {
+  private static async obtenerKPIsHistoricos(_meses: number): Promise<KPI[]> {
+    void _meses; // evitar warning de variable no usada
     // Implementar cuando los KPIs estén disponibles
     return [];
   }

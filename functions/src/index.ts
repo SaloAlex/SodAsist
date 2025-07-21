@@ -17,7 +17,7 @@ export const getKpisDailyData = getKpisDaily;
 export const generateDailyKpis = functions.pubsub
   .schedule('0 1 * * *') // Daily at 1 AM
   .timeZone('America/Argentina/Buenos_Aires')
-  .onRun(async (context) => {
+  .onRun(async () => {
     const db = admin.firestore();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
