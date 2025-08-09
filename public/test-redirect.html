@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test de Redirección - SodAsist</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f0f0f0; 
+            text-align: center;
+        }
+        button { 
+            padding: 15px 30px; 
+            margin: 10px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            border: none; 
+            border-radius: 5px;
+        }
+        .success { background: #4CAF50; color: white; }
+        .info { background: #2196F3; color: white; }
+        .warning { background: #ff9800; color: white; }
+        #results { 
+            margin-top: 20px; 
+            padding: 20px; 
+            background: white; 
+            border-radius: 5px; 
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test de Redirección SodAsist</h1>
+    <p>URL actual: <strong id="currentUrl"></strong></p>
+    
+    <div>
+        <button class="success" onclick="testRedirect1()">
+            Test 1: window.location.href = '/'
+        </button>
+        
+        <button class="info" onclick="testRedirect2()">
+            Test 2: window.location.replace('/')
+        </button>
+        
+        <button class="warning" onclick="testRedirect3()">
+            Test 3: window.location.assign('/')
+        </button>
+        
+        <button class="success" onclick="testRedirect4()">
+            Test 4: window.open('/', '_self')
+        </button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        const currentUrl = document.getElementById('currentUrl');
+        
+        currentUrl.textContent = window.location.href;
+        
+        function log(message) {
+            const div = document.createElement('div');
+            div.innerHTML = `${new Date().toLocaleTimeString()}: ${message}`;
+            results.appendChild(div);
+        }
+        
+        function testRedirect1() {
+            log('🚀 Probando window.location.href = "/"');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1000);
+        }
+        
+        function testRedirect2() {
+            log('🚀 Probando window.location.replace("/")');
+            setTimeout(() => {
+                window.location.replace('/');
+            }, 1000);
+        }
+        
+        function testRedirect3() {
+            log('🚀 Probando window.location.assign("/")');
+            setTimeout(() => {
+                window.location.assign('/');
+            }, 1000);
+        }
+        
+        function testRedirect4() {
+            log('🚀 Probando window.open("/", "_self")');
+            setTimeout(() => {
+                window.open('/', '_self');
+            }, 1000);
+        }
+        
+        // Auto test
+        log('✅ Página de test cargada correctamente');
+        log(`📍 Dominio: ${window.location.hostname}`);
+        log(`🌐 Protocolo: ${window.location.protocol}`);
+        log(`📂 Path: ${window.location.pathname}`);
+    </script>
+</body>
+</html>

@@ -15,41 +15,85 @@
       ]
     },
     {
-      "collectionGroup": "entregas",
+      "collectionGroup": "productos",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "fecha",
+          "fieldPath": "activo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nombre",
           "order": "ASCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "clientes",
+      "collectionGroup": "productos",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "saldoPendiente",
+          "fieldPath": "categoria",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nombre",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "productos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "proveedor",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nombre",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosInventario",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "productoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
           "order": "DESCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "inventarioVehiculo",
+      "collectionGroup": "movimientosInventario",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "fecha",
+          "fieldPath": "tipo",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "DESCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "inventarioVehiculo",
+      "collectionGroup": "historialPrecios",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "fecha",
+          "fieldPath": "productoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
           "order": "ASCENDING"
         },
         {

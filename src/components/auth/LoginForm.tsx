@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -13,6 +13,8 @@ import {
 import { auth } from '../../config/firebase';
 import { Truck, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { useAuthStore } from '../../store/authStore';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 const schema = yup.object().shape({
@@ -27,6 +29,10 @@ export const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -36,17 +42,126 @@ export const LoginForm: React.FC = () => {
     resolver: yupResolver(schema),
   });
 
+  // Redirigir automáticamente cuando el usuario se autentica exitosamente
+  useEffect(() => {
+    console.log('🔄 LoginForm - Estado de redirección:', { 
+      user: !!user, 
+      loginSuccess, 
+      userEmail: user?.email,
+      currentPath: window.location.pathname,
+      currentUrl: window.location.href
+    });
+    
+    if (user && loginSuccess) {
+      console.log('✅ LoginForm - Iniciando redirección...');
+      toast.success('Redirigiendo al dashboard...', { duration: 2000 });
+      
+      // Múltiples estrategias de redirección
+      const redirectStrategies = [
+        () => {
+          console.log('🚀 Estrategia 1: window.location.href');
+          window.location.href = window.location.origin + '/';
+        },
+        () => {
+          console.log('🚀 Estrategia 2: window.location.replace');
+          window.location.replace(window.location.origin + '/');
+        },
+        () => {
+          console.log('🚀 Estrategia 3: navigate con replace');
+          navigate('/', { replace: true });
+        },
+        () => {
+          console.log('🚀 Estrategia 4: window.location.assign');
+          window.location.assign(window.location.origin + '/');
+        }
+      ];
+      
+      // Intentar estrategias secuencialmente
+      let strategyIndex = 0;
+      const tryRedirect = () => {
+        if (strategyIndex < redirectStrategies.length) {
+          try {
+            redirectStrategies[strategyIndex]();
+            strategyIndex++;
+            
+            // Si después de 2 segundos no funcionó, probar siguiente estrategia
+            setTimeout(() => {
+              if (window.location.pathname === '/login') {
+                console.log(`❌ Estrategia ${strategyIndex} falló, probando siguiente...`);
+                tryRedirect();
+              }
+            }, 2000);
+          } catch (error) {
+            console.error(`❌ Error en estrategia ${strategyIndex + 1}:`, error);
+            strategyIndex++;
+            tryRedirect();
+          }
+        } else {
+          console.error('❌ Todas las estrategias de redirección fallaron');
+          toast.error('Error en redirección. Haz clic en el botón de abajo.', { duration: 5000 });
+          
+          // Mostrar botón manual como último recurso
+          const button = document.createElement('button');
+          button.innerHTML = '🏠 Ir al Dashboard';
+          button.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 9999;
+            background: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          `;
+          button.onclick = () => {
+            document.body.removeChild(button);
+            window.open(window.location.origin + '/', '_self');
+          };
+          document.body.appendChild(button);
+        }
+      };
+      
+      // Iniciar proceso de redirección después de 1.5 segundos
+      const timer = setTimeout(tryRedirect, 1500);
+      
+      return () => {
+        console.log('🧹 LoginForm - Limpiando timer de redirección');
+        clearTimeout(timer);
+      };
+    }
+  }, [user, loginSuccess, navigate]);
+
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
+    setLoginSuccess(false);
     try {
       if (isRegistering) {
         // Registrar nuevo usuario
         await createUserWithEmailAndPassword(auth, data.email, data.password);
         toast.success('Usuario registrado correctamente');
+        setLoginSuccess(true);
+        
+        // Redirección inmediata para registro
+        setTimeout(() => {
+          console.log('🚀 Redirección inmediata - Registro');
+          window.location.href = '/';
+        }, 1000);
       } else {
         // Iniciar sesión
         await signInWithEmailAndPassword(auth, data.email, data.password);
         toast.success('Sesión iniciada correctamente');
+        setLoginSuccess(true);
+        
+        // Redirección inmediata para login
+        setTimeout(() => {
+          console.log('🚀 Redirección inmediata - Login');
+          window.location.href = '/';
+        }, 1000);
       }
     } catch (err: unknown) {
       let errorMessage = 'Error en la autenticación';
@@ -79,10 +194,18 @@ export const LoginForm: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
+    setLoginSuccess(false);
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       toast.success('Sesión iniciada con Google');
+      setLoginSuccess(true);
+      
+      // Redirección inmediata para Google
+      setTimeout(() => {
+        console.log('🚀 Redirección inmediata - Google');
+        window.location.href = '/';
+      }, 1000);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('Error al iniciar sesión con Google: ' + errorMessage);
@@ -163,12 +286,37 @@ export const LoginForm: React.FC = () => {
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (loginSuccess && user)}
               className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? <LoadingSpinner size="sm" /> : (isRegistering ? 'Registrarse' : 'Iniciar Sesión')}
+              {loading ? (
+                <LoadingSpinner size="sm" />
+              ) : loginSuccess && user ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span className="ml-2">Redirigiendo...</span>
+                </>
+              ) : (
+                isRegistering ? 'Registrarse' : 'Iniciar Sesión'
+              )}
             </button>
           </div>
+
+          {/* Botón manual de redirección si el login fue exitoso */}
+          {loginSuccess && user && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  console.log('🔘 Botón manual clickeado');
+                  window.location.href = window.location.origin + '/';
+                }}
+                className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+              >
+                🏠 Ir al Dashboard Manualmente
+              </button>
+            </div>
+          )}
 
           <div className="flex items-center justify-center">
             <button
@@ -194,10 +342,19 @@ export const LoginForm: React.FC = () => {
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={googleLoading}
+                disabled={googleLoading || (loginSuccess && user)}
                 className="w-full inline-flex justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700"
               >
-                {googleLoading ? <LoadingSpinner size="sm" /> : 'Google'}
+                {googleLoading ? (
+                  <LoadingSpinner size="sm" />
+                ) : loginSuccess && user ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span className="ml-2">Redirigiendo...</span>
+                  </>
+                ) : (
+                  'Google'
+                )}
               </button>
             </div>
           </div>

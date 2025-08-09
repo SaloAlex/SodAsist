@@ -70,7 +70,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ───────── inventarioVehiculo ─────────
+    // ───────── INVENTARIO LEGACY ─────────
     match /inventarioVehiculo/{invId} {
       allow read, write: if isAdminOrSodero();
     }
@@ -78,6 +78,49 @@ service cloud.firestore {
     // Regla para inventarioVehiculo en cualquier subruta (por si acaso)
     match /{path=**}/inventarioVehiculo/{invId} {
       allow read, write: if isAdminOrSodero();
+    }
+
+    // ───────── NUEVO SISTEMA DE INVENTARIO DINÁMICO ─────────
+    
+    // Productos - lectura y escritura para admin y sodero
+    match /productos/{productoId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Categorías de productos - lectura y escritura para admin y sodero
+    match /categoriasProductos/{categoriaId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Movimientos de inventario - lectura y escritura para admin y sodero
+    match /movimientosInventario/{movimientoId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Ajustes de inventario - lectura y escritura para admin y sodero
+    match /ajustesInventario/{ajusteId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Proveedores - lectura y escritura para admin y sodero
+    match /proveedores/{proveedorId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Historial de precios - lectura y escritura para admin y sodero
+    match /historialPrecios/{historialId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Inventario vehicular dinámico - lectura y escritura para admin y sodero
+    match /inventarioVehicular/{inventarioId} {
+      allow read, write: if isAdminOrSodero();
+    }
+    
+    // Configuración del inventario - lectura para todos, escritura solo admin
+    match /configuracionInventario/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }

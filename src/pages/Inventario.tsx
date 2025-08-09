@@ -1,613 +1,620 @@
-import React, { useReducer, useCallback, useEffect, memo } from 'react';
-import { Package, Plus, Minus, RotateCcw, Clock, AlertTriangle, FileText } from 'lucide-react';
-import { InventarioVehiculo } from '../types';
-import { FirebaseService } from '../services/firebaseService';
+import React, { useState, useEffect } from 'react';
+import { 
+  Package, 
+  Plus, 
+  BarChart3, 
+  Grid3X3,
+  Search,
+  Download,
+  Upload,
+  Edit,
+  Trash2
+} from 'lucide-react';
+import { 
+  Producto, 
+  CategoriaProducto, 
+  FiltrosProductos 
+} from '../types';
+import { ProductosService } from '../services/productosService';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { InventarioDashboard } from '../components/inventario/InventarioDashboard';
+import { ProductoForm } from '../components/inventario/ProductoForm';
+import { CategoriaManager } from '../components/inventario/CategoriaManager';
 import toast from 'react-hot-toast';
-import { collection, doc, runTransaction, serverTimestamp, where, orderBy, limit, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 
-const INVENTARIO_INICIAL = {
-  sodas: 100,
-  bidones10: 50,
-  bidones20: 30,
-  envasesDevueltos: 0
-};
+type VistaInventario = 'dashboard' | 'productos' | 'movimientos' | 'categorias';
 
-const NIVELES_CRITICOS = {
-  sodas: 20,
-  bidones10: 10,
-  bidones20: 5,
-  envasesDevueltos: 0
-};
-
-type InventarioAction =
-  | { type: 'SET_DOC'; payload: InventarioVehiculo }
-  | { type: 'ADJUST'; field: keyof InventarioVehiculo; delta: number }
-  | { type: 'SET'; field: keyof InventarioVehiculo; value: number }
-  | { type: 'RESET' }
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_SAVING'; payload: boolean }
-  | { type: 'SET_EDITING'; payload: keyof InventarioVehiculo | null };
-
-interface InventarioState {
-  data: InventarioVehiculo;
-  loading: boolean;
-  saving: boolean;
-  editingField: keyof InventarioVehiculo | null;
+interface ProductoTableProps {
+  productos: Producto[];
+  onEdit: (producto: Producto) => void;
+  onDelete: (id: string) => void;
+  loading?: boolean;
 }
 
-function inventarioReducer(state: InventarioState, action: InventarioAction): InventarioState {
-  switch (action.type) {
-    case 'SET_DOC':
-      return { ...state, data: action.payload };
-    case 'ADJUST': {
-      const currentValue = state.data[action.field] as number;
-      const newValue = Math.max(0, currentValue + action.delta);
-      return {
-        ...state,
-        data: { ...state.data, [action.field]: newValue, updatedAt: new Date() }
-      };
-    }
-    case 'SET':
-      return {
-        ...state,
-        data: { ...state.data, [action.field]: action.value, updatedAt: new Date() }
-      };
-    case 'RESET':
-      return {
-        ...state,
-        data: { ...state.data, ...INVENTARIO_INICIAL, updatedAt: new Date() }
-      };
-    case 'SET_LOADING':
-      return { ...state, loading: action.payload };
-    case 'SET_SAVING':
-      return { ...state, saving: action.payload };
-    case 'SET_EDITING':
-      return { ...state, editingField: action.payload };
-    default:
-      return state;
+const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDelete, loading }) => {
+  if (productos.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div className="text-center py-12">
+          <Package className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+            No hay productos
+          </h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Comienza agregando tu primer producto al inventario
+          </p>
+        </div>
+      </div>
+    );
   }
-}
-
-interface StockItemProps {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  onIncrease: () => void;
-  onDecrease: () => void;
-  onManualUpdate: (value: number) => void;
-  isEditing: boolean;
-  setIsEditing: (value: boolean) => void;
-  nivelCritico: number;
-  disabled: boolean;
-}
-
-const StockItem = memo<StockItemProps>(({
-  title,
-  value,
-  icon,
-  onIncrease,
-  onDecrease,
-  onManualUpdate,
-  isEditing,
-  setIsEditing,
-  nivelCritico,
-  disabled
-}) => {
-  const [manualValue, setManualValue] = React.useState(value.toString());
-  const isBajoStock = value <= nivelCritico;
-
-  useEffect(() => {
-    setManualValue(value.toString());
-  }, [value]);
-
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newValue = Number(manualValue);
-    if (!isNaN(newValue) && newValue >= 0) {
-      onManualUpdate(newValue);
-      setIsEditing(false);
-    }
-  };
 
   return (
-    <div className={clsx(
-      'bg-white dark:bg-gray-800 rounded-lg shadow p-6',
-      { 'bg-amber-50 dark:bg-amber-900/20': isBajoStock }
-    )}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-2">
-          {icon}
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {title}
-          </h3>
-          {isBajoStock && (
-            <div className="flex items-center" title="Stock bajo" role="alert">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-            </div>
-          )}
+    <>
+      {/* Vista de tabla para desktop */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Producto
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Categoría
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Stock
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Precio
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
+              {productos.map((producto) => (
+                <tr key={producto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <Package className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {producto.nombre}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                          {producto.codigo}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    {producto.categoria}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <span className={clsx(
+                        'text-sm font-medium',
+                        producto.stock <= producto.stockMinimo
+                          ? 'text-red-600 dark:text-red-400'
+                          : producto.stock <= producto.stockMinimo * 2
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-green-600 dark:text-green-400'
+                      )}>
+                        {producto.stock}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                        / {producto.stockMinimo} mín
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    ${producto.precioVenta}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={clsx(
+                      'px-2 inline-flex text-xs leading-5 font-semibold rounded-full',
+                      producto.activo
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    )}>
+                      {producto.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end space-x-2">
+                      <button
+                        onClick={() => onEdit(producto)}
+                        className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 p-1"
+                        disabled={loading}
+                        title="Editar producto"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => onDelete(producto.id)}
+                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1"
+                        disabled={loading}
+                        title="Eliminar producto"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        {isEditing ? (
-          <form onSubmit={handleManualSubmit} className="flex items-center space-x-2">
-            <input
-              type="number"
-              value={manualValue}
-              onChange={(e) => setManualValue(e.target.value)}
-              className="w-20 px-2 py-1 text-xl font-bold border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              min="0"
-              autoFocus
-              aria-label={`Editar cantidad de ${title}`}
-            />
-            <button
-              type="submit"
-              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-              aria-label="Confirmar cambio"
-            >
-              ✓
-            </button>
-          </form>
-        ) : (
-          <div
-            className={clsx(
-              'text-2xl font-bold cursor-pointer',
-              isBajoStock ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'
-            )}
-            onClick={() => setIsEditing(true)}
-            title="Click para editar"
-            role="button"
-            tabIndex={0}
-          >
-            {value}
-          </div>
-        )}
       </div>
-      <div className="flex space-x-2">
-        <button
-          onClick={onDecrease}
-          className="flex-1 p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800 transition-colors disabled:opacity-50"
-          disabled={disabled}
-          aria-label={`Disminuir ${title}`}
-        >
-          <Minus className="h-5 w-5 mx-auto" />
-        </button>
-        <button
-          onClick={onIncrease}
-          className="flex-1 p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800 transition-colors disabled:opacity-50"
-          disabled={disabled}
-          aria-label={`Aumentar ${title}`}
-        >
-          <Plus className="h-5 w-5 mx-auto" />
-        </button>
-      </div>
-    </div>
-  );
-});
 
-StockItem.displayName = 'StockItem';
+      {/* Vista de cards para móvil */}
+      <div className="md:hidden space-y-4">
+        {productos.map((producto) => (
+          <div 
+            key={producto.id} 
+            className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700"
+          >
+            {/* Header del card */}
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center space-x-3 flex-1 min-w-0">
+                <Package className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {producto.nombre}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {producto.codigo}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Estado */}
+              <span className={clsx(
+                'px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0',
+                producto.activo
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+              )}>
+                {producto.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+
+            {/* Información del producto */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Categoría</p>
+                <p className="text-sm text-gray-900 dark:text-white">{producto.categoria}</p>
+              </div>
+              
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Precio</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">${producto.precioVenta}</p>
+              </div>
+            </div>
+
+            {/* Stock */}
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock</p>
+              <div className="flex items-center">
+                <span className={clsx(
+                  'text-sm font-medium',
+                  producto.stock <= producto.stockMinimo
+                    ? 'text-red-600 dark:text-red-400'
+                    : producto.stock <= producto.stockMinimo * 2
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-green-600 dark:text-green-400'
+                )}>
+                  {producto.stock}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                  / {producto.stockMinimo} mínimo
+                </span>
+              </div>
+            </div>
+
+            {/* Acciones */}
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => onEdit(producto)}
+                className="flex items-center space-x-2 px-3 py-2 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                disabled={loading}
+              >
+                <Edit className="h-4 w-4" />
+                <span className="text-sm">Editar</span>
+              </button>
+              <button
+                onClick={() => onDelete(producto.id)}
+                className="flex items-center space-x-2 px-3 py-2 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                disabled={loading}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="text-sm">Eliminar</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+};
 
 export const Inventario: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [state, dispatch] = useReducer(inventarioReducer, {
-    data: {
-      id: '',
-      fecha: new Date(),
-      sodas: 0,
-      bidones10: 0,
-      bidones20: 0,
-      envasesDevueltos: 0,
-      updatedAt: new Date(),
-    },
-    loading: true,
-    saving: false,
-    editingField: null
-  });
+  
+  // Estados principales
+  const [vistaActual, setVistaActual] = useState<VistaInventario>('dashboard');
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [procesando, setProcesando] = useState(false);
+  
+  // Estados para formularios y modales
+  const [mostrandoFormProducto, setMostrandoFormProducto] = useState(false);
+  const [productoEditando, setProductoEditando] = useState<Producto | undefined>();
+  const [mostrandoCategorias, setMostrandoCategorias] = useState(false);
+  
+  // Estados para filtros
+  const [filtros, setFiltros] = useState<FiltrosProductos>({});
+  const [busqueda, setBusqueda] = useState('');
 
-  const { data: inventario, loading, saving, editingField } = state;
-  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
-
+  // Verificar autenticación
   useEffect(() => {
     if (!user) {
       navigate('/login');
       return;
     }
-
-    dispatch({ type: 'SET_LOADING', payload: true });
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const unsubscribe = FirebaseService.subscribeToCollection<InventarioVehiculo>(
-      'inventarioVehiculo',
-      async (docs) => {
-        if (docs.length > 0) {
-          const latestDoc = docs.reduce((latest, current) => 
-            current.fecha > latest.fecha ? current : latest
-          );
-          dispatch({ type: 'SET_DOC', payload: latestDoc });
-        } else {
-          const newInventario: InventarioVehiculo = {
-            id: doc(collection(db, 'inventarioVehiculo')).id,
-            fecha: new Date(),
-            ...INVENTARIO_INICIAL,
-            updatedAt: new Date()
-          };
-          dispatch({ type: 'SET_DOC', payload: newInventario });
-          try {
-            await runTransaction(db, async (transaction) => {
-              transaction.set(doc(db, 'inventarioVehiculo', newInventario.id), {
-                ...newInventario,
-                updatedAt: serverTimestamp()
-              });
-            });
-          } catch (error) {
-            console.error('Error al crear inventario inicial:', error);
-            toast.error('Error al crear inventario inicial', { 
-              ariaProps: { role: 'alert', 'aria-live': 'assertive' }
-            });
-          }
-        }
-        dispatch({ type: 'SET_LOADING', payload: false });
-      },
-      (error) => {
-        console.error('Error en suscripción:', error);
-        if (error instanceof Error && error.message.includes('permission')) {
-          toast.error('No tienes permisos para acceder al inventario', { 
-            ariaProps: { role: 'alert', 'aria-live': 'assertive' }
-          });
-          navigate('/dashboard');
-        } else {
-          toast.error('Error al cargar inventario', { 
-            ariaProps: { role: 'alert', 'aria-live': 'assertive' }
-          });
-        }
-        dispatch({ type: 'SET_LOADING', payload: false });
-      },
-      [
-        where('fecha', '>=', Timestamp.fromDate(today)),
-        orderBy('fecha', 'desc'),
-        limit(1)
-      ]
-    );
-
-    return () => unsubscribe();
   }, [user, navigate]);
 
-  const updateInventario = useCallback(async (
-    field: keyof InventarioVehiculo,
-    value: number
-  ) => {
-    if (!user) return;
+  // Cargar datos iniciales
+  useEffect(() => {
+    cargarDatos();
+  }, []);
 
-    dispatch({ type: 'SET_SAVING', payload: true });
-    const previousValue = inventario[field];
-
+  const cargarDatos = async () => {
     try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, 'inventarioVehiculo', inventario.id);
-        transaction.update(docRef, {
-          [field]: value,
-          updatedAt: serverTimestamp()
-        });
-      });
-
-      dispatch({ type: field === 'reset' as keyof InventarioVehiculo ? 'RESET' : 'SET', field, value });
+      setLoading(true);
+      const [productosData, categoriasDataRaw] = await Promise.all([
+        ProductosService.getProductos(filtros),
+        ProductosService.getCategorias()
+      ]);
       
-      const prevValue = previousValue as number;
-      toast.custom(
-        (t) => (
-          <div className="bg-green-100 text-green-800 p-4 rounded-lg shadow flex justify-between items-center">
-            <span>Inventario actualizado</span>
-            <button
-              onClick={() => {
-                updateInventario(field, prevValue);
-                toast.dismiss(t.id);
-              }}
-              className="text-green-600 hover:text-green-800 font-medium"
-            >
-              Deshacer
-            </button>
-          </div>
-        ),
-        { duration: 3000 }
-      );
+      // Filtrar categorías duplicadas (mantener la más reciente)
+      const categoriasUnicas = categoriasDataRaw.reduce((acc, categoria) => {
+        const existente = acc.find(cat => cat.nombre.toLowerCase() === categoria.nombre.toLowerCase());
+        if (!existente) {
+          acc.push(categoria);
+        } else if (categoria.updatedAt > existente.updatedAt) {
+          // Reemplazar con la más reciente
+          const index = acc.indexOf(existente);
+          acc[index] = categoria;
+        }
+        return acc;
+      }, [] as CategoriaProducto[]);
+      
+      setProductos(productosData);
+      setCategorias(categoriasUnicas);
+      
+      // Si no hay productos, crear productos iniciales
+      if (productosData.length === 0 && user) {
+        await ProductosService.crearProductosIniciales(user.uid);
+        const nuevosProductos = await ProductosService.getProductos();
+        setProductos(nuevosProductos);
+        toast.success('Productos iniciales creados');
+      }
     } catch (error) {
-      console.error('Error al actualizar inventario:', error);
-      toast.error('Error al actualizar inventario', { 
-        ariaProps: { role: 'alert', 'aria-live': 'assertive' }
-      });
-      // Revertir cambio local
-      dispatch({ type: 'SET', field, value: previousValue as number });
+      console.error('Error al cargar datos:', error);
+      toast.error('Error al cargar datos del inventario');
     } finally {
-      dispatch({ type: 'SET_SAVING', payload: false });
+      setLoading(false);
     }
-  }, [dispatch, inventario, user]);
-
-  const adjustStock = useCallback((field: keyof InventarioVehiculo, delta: number) => {
-    const currentValue = inventario[field] as number;
-    const newValue = Math.max(0, currentValue + delta);
-    updateInventario(field, newValue);
-  }, [inventario, updateInventario]);
-
-  const handleManualUpdate = useCallback((field: keyof InventarioVehiculo, value: number) => {
-    updateInventario(field, value);
-  }, [updateInventario]);
-
-  const resetInventario = useCallback(async () => {
-    if (!user) return;
-
-    dispatch({ type: 'SET_SAVING', payload: true });
-    const previousState = { ...inventario };
-
-    try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, 'inventarioVehiculo', inventario.id);
-        transaction.update(docRef, {
-          ...INVENTARIO_INICIAL,
-          updatedAt: serverTimestamp()
-        });
-      });
-
-      dispatch({ type: 'RESET' });
-      toast.custom(
-        (t) => (
-          <div className="bg-green-100 text-green-800 p-4 rounded-lg shadow flex justify-between items-center">
-            <span>Inventario restablecido</span>
-            <button
-              onClick={async () => {
-                dispatch({ type: 'SET_DOC', payload: previousState });
-                await runTransaction(db, async (transaction) => {
-                  const docRef = doc(db, 'inventarioVehiculo', inventario.id);
-                  transaction.update(docRef, {
-                    ...previousState,
-                    updatedAt: serverTimestamp()
-                  });
-                });
-                toast.dismiss(t.id);
-              }}
-              className="text-green-600 hover:text-green-800 font-medium"
-            >
-              Deshacer
-            </button>
-          </div>
-        ),
-        { duration: 5000 }
-      );
-    } catch (error) {
-      console.error('Error al restablecer inventario:', error);
-      toast.error('Error al restablecer inventario', { 
-        ariaProps: { role: 'alert', 'aria-live': 'assertive' }
-      });
-      dispatch({ type: 'SET_DOC', payload: previousState });
-    } finally {
-      dispatch({ type: 'SET_SAVING', payload: false });
-      setShowResetConfirm(false);
-    }
-  }, [dispatch, inventario, user]);
-
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return '';
-    return new Intl.DateTimeFormat('es-AR', {
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    }).format(date);
   };
 
-  if (loading) {
+  // Aplicar filtros cuando cambien
+  useEffect(() => {
+    const aplicarFiltros = async () => {
+      try {
+        setLoading(true);
+        const filtrosCompletos = {
+          ...filtros,
+          busqueda: busqueda.trim() || undefined
+        };
+        const productosData = await ProductosService.getProductos(filtrosCompletos);
+        setProductos(productosData);
+      } catch (error) {
+        console.error('Error al aplicar filtros:', error);
+        toast.error('Error al filtrar productos');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const debounceTimeout = setTimeout(aplicarFiltros, 300);
+    return () => clearTimeout(debounceTimeout);
+  }, [filtros, busqueda]);
+
+  const handleCrearProducto = () => {
+    setProductoEditando(undefined);
+    setMostrandoFormProducto(true);
+  };
+
+  const handleEditarProducto = (producto: Producto) => {
+    setProductoEditando(producto);
+    setMostrandoFormProducto(true);
+  };
+
+  const handleGuardarProducto = async (data: Partial<Producto>) => {
+    try {
+      setProcesando(true);
+      
+      if (productoEditando) {
+        // Actualizar producto existente
+        await ProductosService.actualizarProducto(productoEditando.id, {
+          ...data,
+          updatedBy: user!.uid
+        });
+        toast.success('Producto actualizado correctamente');
+      } else {
+        // Crear nuevo producto
+        await ProductosService.crearProducto({
+          ...data,
+          createdBy: user!.uid,
+          updatedBy: user!.uid
+        } as Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>);
+        toast.success('Producto creado correctamente');
+      }
+
+      await cargarDatos();
+      setMostrandoFormProducto(false);
+      setProductoEditando(undefined);
+    } catch (error) {
+      console.error('Error al guardar producto:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al guardar producto');
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const handleEliminarProducto = async (id: string) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+      return;
+    }
+
+    try {
+      setProcesando(true);
+      await ProductosService.eliminarProducto(id);
+      toast.success('Producto eliminado correctamente');
+      await cargarDatos();
+    } catch (error) {
+      console.error('Error al eliminar producto:', error);
+      toast.error('Error al eliminar producto');
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const renderNavegacion = () => (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+      <div className="px-4 sm:px-6 py-4">
+        <nav className="flex overflow-x-auto space-x-2 sm:space-x-8 scrollbar-hide">
+          <button
+            onClick={() => setVistaActual('dashboard')}
+            className={clsx(
+              'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+              vistaActual === 'dashboard'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            )}
+          >
+            <BarChart3 className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </button>
+          
+          <button
+            onClick={() => setVistaActual('productos')}
+            className={clsx(
+              'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+              vistaActual === 'productos'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            )}
+          >
+            <Package className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Productos</span>
+          </button>
+          
+          <button
+            onClick={() => setVistaActual('movimientos')}
+            className={clsx(
+              'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+              vistaActual === 'movimientos'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            )}
+          >
+            <Upload className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Movimientos</span>
+          </button>
+          
+          <button
+            onClick={() => setMostrandoCategorias(true)}
+            className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors whitespace-nowrap"
+          >
+            <Grid3X3 className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Categorías</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  );
+
+  const renderBarraAcciones = () => {
+    if (vistaActual !== 'productos') return null;
+
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div className="px-4 sm:px-6 py-4">
+          <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+            {/* Barra de búsqueda */}
+            <div className="flex-1 sm:max-w-lg">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Buscar productos..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                />
+              </div>
+            </div>
+            
+            {/* Filtros y acciones */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
+              <select
+                value={filtros.categoria || ''}
+                onChange={(e) => setFiltros({ ...filtros, categoria: e.target.value || undefined })}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+              >
+                <option value="">Todas las categorías</option>
+                {categorias.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                ))}
+              </select>
+              
+              <button
+                onClick={handleCrearProducto}
+                className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                disabled={loading}
+              >
+                <Plus className="h-4 w-4 flex-shrink-0" />
+                <span className="whitespace-nowrap">Nuevo Producto</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
-  }
+  };
+
+  const renderContenido = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <LoadingSpinner size="lg" />
+        </div>
+      );
+    }
+
+    switch (vistaActual) {
+      case 'dashboard':
+        return (
+          <InventarioDashboard
+            onVerProductos={() => setVistaActual('productos')}
+            onVerMovimientos={() => setVistaActual('movimientos')}
+          />
+        );
+      
+      case 'productos':
+        return (
+          <ProductoTable
+            productos={productos}
+            onEdit={handleEditarProducto}
+            onDelete={handleEliminarProducto}
+            loading={procesando}
+          />
+        );
+      
+      case 'movimientos':
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="text-center py-12">
+              <Upload className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
+                Movimientos de Inventario
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Esta funcionalidad estará disponible próximamente
+              </p>
+            </div>
+          </div>
+        );
+      
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="space-y-6" id="print-section">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Inventario del Vehículo
+    <div className="space-y-4 sm:space-y-6 px-4 sm:px-0">
+      {/* Header */}
+      <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
+            Sistema de Inventario
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center mt-1">
-            <Clock className="h-4 w-4 mr-1" />
-            Última actualización: {formatDate(inventario.updatedAt)}
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+            Gestión completa de productos y stock
           </p>
         </div>
-        <div className="flex items-center space-x-4 no-print">
-          {saving && <LoadingSpinner size="sm" />}
+        
+        <div className="flex items-center justify-end sm:justify-start space-x-3">
           <button
             onClick={() => window.print()}
-            className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-            title="Imprimir inventario"
-            aria-label="Imprimir inventario"
+            className="flex items-center space-x-2 px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
           >
-            <FileText className="h-5 w-5" />
+            <Download className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Exportar</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StockItem
-          title="Sodas"
-          value={inventario.sodas}
-          icon={<Package className="h-6 w-6 text-blue-600" />}
-          onIncrease={() => adjustStock('sodas', 1)}
-          onDecrease={() => adjustStock('sodas', -1)}
-          onManualUpdate={(value) => handleManualUpdate('sodas', value)}
-          isEditing={editingField === 'sodas'}
-          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'sodas' : null })}
-          nivelCritico={NIVELES_CRITICOS.sodas}
-          disabled={saving}
-        />
+      {/* Navegación */}
+      {renderNavegacion()}
+      
+      {/* Barra de acciones */}
+      {renderBarraAcciones()}
+      
+      {/* Contenido principal */}
+      {renderContenido()}
 
-        <StockItem
-          title="Bidones 10L"
-          value={inventario.bidones10}
-          icon={<Package className="h-6 w-6 text-green-600" />}
-          onIncrease={() => adjustStock('bidones10', 1)}
-          onDecrease={() => adjustStock('bidones10', -1)}
-          onManualUpdate={(value) => handleManualUpdate('bidones10', value)}
-          isEditing={editingField === 'bidones10'}
-          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'bidones10' : null })}
-          nivelCritico={NIVELES_CRITICOS.bidones10}
-          disabled={saving}
-        />
-
-        <StockItem
-          title="Bidones 20L"
-          value={inventario.bidones20}
-          icon={<Package className="h-6 w-6 text-purple-600" />}
-          onIncrease={() => adjustStock('bidones20', 1)}
-          onDecrease={() => adjustStock('bidones20', -1)}
-          onManualUpdate={(value) => handleManualUpdate('bidones20', value)}
-          isEditing={editingField === 'bidones20'}
-          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'bidones20' : null })}
-          nivelCritico={NIVELES_CRITICOS.bidones20}
-          disabled={saving}
-        />
-
-        <StockItem
-          title="Envases Devueltos"
-          value={inventario.envasesDevueltos}
-          icon={<Package className="h-6 w-6 text-yellow-600" />}
-          onIncrease={() => adjustStock('envasesDevueltos', 1)}
-          onDecrease={() => adjustStock('envasesDevueltos', -1)}
-          onManualUpdate={(value) => handleManualUpdate('envasesDevueltos', value)}
-          isEditing={editingField === 'envasesDevueltos'}
-          setIsEditing={(value) => dispatch({ type: 'SET_EDITING', payload: value ? 'envasesDevueltos' : null })}
-          nivelCritico={NIVELES_CRITICOS.envasesDevueltos}
-          disabled={saving}
-        />
-      </div>
-
-      <div className="flex justify-end space-x-4 no-print">
-        {showResetConfirm ? (
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">¿Estás seguro?</span>
-            <button
-              onClick={resetInventario}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              disabled={saving}
-            >
-              Confirmar
-            </button>
-            <button
-              onClick={() => setShowResetConfirm(false)}
-              className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancelar
-            </button>
+      {/* Modales */}
+      {mostrandoFormProducto && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <ProductoForm
+              producto={productoEditando}
+              onSubmit={handleGuardarProducto}
+              onCancel={() => {
+                setMostrandoFormProducto(false);
+                setProductoEditando(undefined);
+              }}
+              isLoading={procesando}
+            />
           </div>
-        ) : (
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-            disabled={saving}
-          >
-            <RotateCcw className="h-5 w-5" />
-            <span>Restablecer Inventario</span>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <style>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 2cm;
-          }
-          
-          body {
-            visibility: visible !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            background: white !important;
-          }
-
-          body * {
-            visibility: hidden;
-          }
-
-          #print-section,
-          #print-section * {
-            visibility: visible !important;
-            color-adjust: exact !important;
-            -webkit-print-color-adjust: exact !important;
-          }
-
-          #print-section {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 20px;
-            background: white !important;
-          }
-
-          .no-print {
-            display: none !important;
-          }
-
-          /* Asegurar que los colores y fondos se impriman */
-          .bg-white {
-            background-color: white !important;
-            box-shadow: none !important;
-          }
-
-          .text-gray-900 {
-            color: black !important;
-          }
-
-          .text-gray-500 {
-            color: #666 !important;
-          }
-
-          /* Ajustar el grid para impresión */
-          .grid {
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important;
-            gap: 1rem !important;
-          }
-
-          /* Estilos específicos para StockItem en impresión */
-          #print-section .rounded-lg {
-            border: 1px solid #ddd !important;
-            padding: 1rem !important;
-            margin-bottom: 1rem !important;
-            page-break-inside: avoid !important;
-          }
-
-          /* Asegurar que los iconos sean visibles */
-          svg {
-            color: currentColor !important;
-            fill: currentColor !important;
-          }
-
-          /* Ajustar el tamaño de fuente para mejor legibilidad */
-          h1 {
-            font-size: 24pt !important;
-            margin-bottom: 1rem !important;
-          }
-
-          h3 {
-            font-size: 14pt !important;
-          }
-
-          .text-2xl {
-            font-size: 16pt !important;
-          }
-
-          /* Asegurar que los valores críticos sean visibles */
-          .text-amber-500,
-          .text-amber-600 {
-            color: #d97706 !important;
-          }
-        }
-      `}</style>
+      {mostrandoCategorias && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <CategoriaManager
+              onClose={() => {
+                setMostrandoCategorias(false);
+                cargarDatos(); // Recargar datos después de gestionar categorías
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

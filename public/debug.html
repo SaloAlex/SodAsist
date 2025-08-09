@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug - SodAsist</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff00; }
+        .ok { color: #00ff00; }
+        .error { color: #ff0000; }
+        .warning { color: #ffff00; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug SodAsist</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function log(message, type = 'ok') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+        
+        // Verificar variables de entorno
+        log('<h2>📋 Variables de Entorno:</h2>');
+        
+        const envVars = [
+            'VITE_FIREBASE_API_KEY',
+            'VITE_FIREBASE_AUTH_DOMAIN', 
+            'VITE_FIREBASE_PROJECT_ID',
+            'VITE_FIREBASE_STORAGE_BUCKET',
+            'VITE_FIREBASE_MESSAGING_SENDER_ID',
+            'VITE_FIREBASE_APP_ID',
+            'VITE_FIREBASE_MEASUREMENT_ID',
+            'VITE_GOOGLE_MAPS_API_KEY'
+        ];
+        
+        envVars.forEach(varName => {
+            const value = import.meta?.env?.[varName];
+            if (value) {
+                log(`✅ ${varName}: ${value.substring(0, 10)}...`, 'ok');
+            } else {
+                log(`❌ ${varName}: FALTANTE`, 'error');
+            }
+        });
+        
+        // Verificar conexión Firebase
+        log('<h2>🔥 Test Firebase:</h2>');
+        
+        try {
+            // Simular inicialización
+            const firebaseConfig = {
+                apiKey: import.meta.env?.VITE_FIREBASE_API_KEY,
+                authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN,
+                projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID,
+            };
+            
+            if (firebaseConfig.apiKey) {
+                log('✅ Configuración Firebase disponible', 'ok');
+                log(`📍 Dominio: ${window.location.hostname}`, 'warning');
+                log(`🌐 URL completa: ${window.location.href}`, 'warning');
+            } else {
+                log('❌ Configuración Firebase faltante', 'error');
+            }
+            
+        } catch (error) {
+            log(`❌ Error: ${error.message}`, 'error');
+        }
+        
+        // Info del navegador
+        log('<h2>🌐 Info del Navegador:</h2>');
+        log(`User Agent: ${navigator.userAgent}`);
+        log(`Idioma: ${navigator.language}`);
+        log(`Cookies habilitadas: ${navigator.cookieEnabled}`);
+        
+        // Test de red
+        log('<h2>🌍 Test de Red:</h2>');
+        fetch('https://firebase.googleapis.com/')
+            .then(() => log('✅ Conexión a Firebase OK', 'ok'))
+            .catch(err => log(`❌ Error conexión Firebase: ${err.message}`, 'error'));
+            
+        fetch('https://maps.googleapis.com/')
+            .then(() => log('✅ Conexión a Google Maps OK', 'ok'))
+            .catch(err => log(`❌ Error conexión Google Maps: ${err.message}`, 'error'));
+            
+        // Test de routing
+        log('<h2>🔀 Test de Routing:</h2>');
+        log(`Ruta actual: ${window.location.pathname}`);
+        log(`Hash: ${window.location.hash}`);
+        log(`Search: ${window.location.search}`);
+        
+        // Test de localStorage
+        log('<h2>💾 LocalStorage:</h2>');
+        try {
+            const keys = Object.keys(localStorage);
+            log(`Claves en localStorage: ${keys.length}`);
+            keys.forEach(key => {
+                if (key.includes('firebase') || key.includes('auth')) {
+                    log(`🔑 ${key}: ${localStorage.getItem(key)?.substring(0, 50)}...`);
+                }
+            });
+        } catch (e) {
+            log(`❌ Error accediendo localStorage: ${e.message}`, 'error');
+        }
+        
+        // Botón para probar login
+        log('<h2>🧪 Pruebas:</h2>');
+        const testDiv = document.createElement('div');
+        testDiv.innerHTML = `
+            <button onclick="testLogin()" style="background: #4CAF50; color: white; padding: 10px; border: none; margin: 5px; cursor: pointer;">
+                Test Login Redirect
+            </button>
+            <button onclick="testNavigation()" style="background: #2196F3; color: white; padding: 10px; border: none; margin: 5px; cursor: pointer;">
+                Test Navigation
+            </button>
+        `;
+        results.appendChild(testDiv);
+        
+        // Funciones de test
+        window.testLogin = () => {
+            log('🧪 Simulando redirección de login...', 'warning');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1000);
+        };
+        
+        window.testNavigation = () => {
+            log('🧪 Probando navegación...', 'warning');
+            window.history.pushState({}, '', '/dashboard');
+            log(`Nueva ruta: ${window.location.pathname}`);
+        };
+    </script>
+</body>
+</html>

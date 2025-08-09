@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Configuración Google Maps - SodAsist</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            line-height: 1.6;
+        }
+        .step { 
+            background: #f9f9f9; 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-left: 4px solid #4CAF50; 
+            border-radius: 4px;
+        }
+        .error { 
+            background: #ffebee; 
+            border-left-color: #f44336; 
+        }
+        .warning { 
+            background: #fff3e0; 
+            border-left-color: #ff9800; 
+        }
+        code { 
+            background: #f5f5f5; 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-family: monospace;
+        }
+        .button {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        .button.blue { background: #2196F3; }
+        .button.orange { background: #ff9800; }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Configuración de Google Maps para SodAsist</h1>
+    
+    <div class="error">
+        <h3>❌ Errores Actuales Detectados:</h3>
+        <ul>
+            <li><strong>BillingNotEnabledMapError</strong>: Facturación no habilitada</li>
+            <li><strong>RefererNotAllowedMapError</strong>: Dominio no autorizado</li>
+        </ul>
+    </div>
+
+    <h2>🔧 Solución Paso a Paso:</h2>
+
+    <div class="step">
+        <h3>Paso 1: Ir a Google Cloud Console</h3>
+        <p>Ve a: <a href="https://console.cloud.google.com/" target="_blank" class="button blue">Google Cloud Console</a></p>
+        <p>Selecciona tu proyecto o crea uno nuevo.</p>
+    </div>
+
+    <div class="step">
+        <h3>Paso 2: Habilitar APIs Necesarias</h3>
+        <p>Ve a <strong>APIs & Services → Library</strong> y habilita:</p>
+        <ul>
+            <li>Maps JavaScript API</li>
+            <li>Geocoding API</li>
+            <li>Places API (opcional)</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>Paso 3: Configurar API Key</h3>
+        <p>Ve a <strong>APIs & Services → Credentials</strong></p>
+        <p>Edita tu API Key existente o crea una nueva:</p>
+        <ul>
+            <li><strong>Application restrictions:</strong> HTTP referrers (web sites)</li>
+            <li><strong>Website restrictions:</strong> Agrega:
+                <ul>
+                    <li><code>probando.almarketing.site/*</code></li>
+                    <li><code>localhost/*</code> (para desarrollo)</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+
+    <div class="step warning">
+        <h3>Paso 4: Habilitar Facturación</h3>
+        <p>Ve a <strong>Billing</strong> en Google Cloud Console</p>
+        <p>Agrega un método de pago válido</p>
+        <p><strong>Nota:</strong> Google Maps tiene cuota gratuita generosa ($200/mes)</p>
+        <a href="https://console.cloud.google.com/billing" target="_blank" class="button orange">Configurar Facturación</a>
+    </div>
+
+    <div class="step">
+        <h3>Paso 5: Verificar Configuración</h3>
+        <p>Una vez configurado, verifica que funcione:</p>
+        <ol>
+            <li>Espera 5-10 minutos para propagación</li>
+            <li>Recarga la aplicación</li>
+            <li>Ve a la sección de rutas</li>
+            <li>Los mapas deberían cargar correctamente</li>
+        </ol>
+    </div>
+
+    <h2>🚀 Configuración Actual:</h2>
+    <div class="step">
+        <p><strong>Dominio de la app:</strong> <code>probando.almarketing.site</code></p>
+        <p><strong>API Key actual:</strong> <code id="apiKey">Cargando...</code></p>
+        <p><strong>Estado:</strong> <span id="status">Verificando...</span></p>
+    </div>
+
+    <h2>🔗 Enlaces Útiles:</h2>
+    <div>
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="button blue">
+            Credentials - Google Cloud
+        </a>
+        <a href="https://console.cloud.google.com/billing" target="_blank" class="button orange">
+            Billing - Google Cloud
+        </a>
+        <a href="/" class="button">
+            Volver a la App
+        </a>
+    </div>
+
+    <script>
+        // Mostrar configuración actual
+        const apiKeyElement = document.getElementById('apiKey');
+        const statusElement = document.getElementById('status');
+        
+        if (typeof import !== 'undefined' && import.meta && import.meta.env) {
+            const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+            if (apiKey) {
+                apiKeyElement.textContent = apiKey.substring(0, 20) + '...';
+                statusElement.textContent = 'API Key configurada ✅';
+                statusElement.style.color = 'green';
+            } else {
+                apiKeyElement.textContent = 'No configurada';
+                statusElement.textContent = 'API Key faltante ❌';
+                statusElement.style.color = 'red';
+            }
+        } else {
+            apiKeyElement.textContent = 'No disponible en esta página';
+            statusElement.textContent = 'Verificar en la aplicación principal';
+        }
+    </script>
+</body>
+</html>

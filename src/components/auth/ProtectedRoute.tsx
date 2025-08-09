@@ -33,7 +33,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       : userData.rol === requiredRole;
 
     if (!hasAccess) {
-      return <Navigate to="/dashboard" replace />;
+      return <Navigate to="/" replace />;
     }
   }
 
