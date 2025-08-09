@@ -1,0 +1,62 @@
+/* Optimizaciones para Google Maps en móviles */
+.map-container {
+  /* Forzar aceleración por hardware */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  
+  /* Prevenir parpadeo */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  
+  /* Optimizar rendimiento */
+  will-change: transform;
+  
+  /* Mejorar scrolling táctil */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  
+  /* Prevenir selección de texto */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  
+  /* Prevenir zoom del navegador en iOS */
+  touch-action: pan-x pan-y zoom-in zoom-out;
+}
+
+/* Optimizaciones específicas para dispositivos móviles */
+@media (max-width: 768px) {
+  .map-container {
+    /* Reducir la calidad de renderizado en móviles */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+  
+  /* Prevenir parpadeo en Safari iOS */
+  .map-container * {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+}
+
+/* Optimizaciones para pantallas de alta densidad */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .map-container {
+    /* Mejorar calidad en pantallas retina */
+    image-rendering: -webkit-optimize-contrast;
+  }
+}
+
+/* Prevenir parpadeo durante transiciones */
+.map-container.transitioning {
+  transition: none !important;
+}
+
+/* Optimizaciones para orientación landscape en móviles */
+@media (max-width: 768px) and (orientation: landscape) {
+  .map-container {
+    /* Ajustar altura para landscape */
+    height: 60vh !important;
+  }
+}

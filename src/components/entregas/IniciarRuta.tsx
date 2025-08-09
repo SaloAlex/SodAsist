@@ -188,8 +188,8 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
   return (
     <>
       <div className={`bg-white rounded-lg shadow-md p-4 ${className}`}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold text-gray-900">
               Ruta de Entregas
             </h3>
@@ -197,21 +197,27 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
               {clientesCompletados} de {clientes.length} entregas completadas
             </p>
           </div>
-          {!isActive ? (
-            <button
-              onClick={handleStartRoute}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2"
-            >
-              <span className="material-icons text-xl">Comenzar Ruta</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleEndRoute}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center gap-2"
-            >
-              <span className="material-icons text-xl">Finalizar Ruta</span>
-            </button>
-          )}
+          <div className="flex-shrink-0">
+            {!isActive ? (
+              <button
+                onClick={handleStartRoute}
+                className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-center gap-2 text-sm sm:text-base transition-colors"
+              >
+                <FaRoute className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline">Comenzar Ruta</span>
+                <span className="sm:hidden">Iniciar</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleEndRoute}
+                className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center justify-center gap-2 text-sm sm:text-base transition-colors"
+              >
+                <FaCheckCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="hidden sm:inline">Finalizar Ruta</span>
+                <span className="sm:hidden">Finalizar</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Barra de progreso */}
@@ -227,21 +233,21 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
           {clientes.map((cliente, index) => (
             <div
               key={cliente.id}
-              className={`flex items-center justify-between p-2 rounded-lg ${
+              className={`flex items-center justify-between p-3 sm:p-2 rounded-lg transition-colors ${
                 cliente.estado === EstadoVisita.COMPLETADA ? 'bg-green-50' : 'bg-gray-50'
               }`}
             >
-              <div className="flex items-center space-x-3">
-                <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-sm ${
+              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                <span className={`flex-shrink-0 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center rounded-full text-sm font-medium ${
                   cliente.estado === EstadoVisita.COMPLETADA 
                     ? 'bg-green-100 text-green-800' 
                     : 'bg-blue-100 text-blue-800'
                 }`}>
                   {index + 1}
                 </span>
-                <span className="text-gray-900">{cliente.nombre}</span>
+                <span className="text-gray-900 truncate text-sm sm:text-base">{cliente.nombre}</span>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
                 {isActive && (
                   <>
                     <button
@@ -254,25 +260,25 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                           );
                         }
                       }}
-                      className="text-blue-600 hover:text-blue-800 p-1"
+                      className="text-blue-600 hover:text-blue-800 p-2 sm:p-1 rounded-lg hover:bg-blue-50 transition-colors"
                       title="Navegar"
                     >
-                      <FaRoute className="h-5 w-5" />
+                      <FaRoute className="h-5 w-5 sm:h-4 sm:w-4" />
                     </button>
                     <button
                       onClick={() => handleClienteCompletado(cliente)}
-                      className={`p-1 ${
+                      className={`p-2 sm:p-1 rounded-lg transition-colors ${
                         cliente.estado === EstadoVisita.COMPLETADA
-                          ? 'text-green-600 hover:text-green-800'
-                          : 'text-gray-400 hover:text-gray-600'
+                          ? 'text-green-600 hover:text-green-800 hover:bg-green-50'
+                          : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                       }`}
                       title="Marcar como completado"
                       disabled={cliente.estado === EstadoVisita.COMPLETADA}
                     >
                       {cliente.estado === EstadoVisita.COMPLETADA ? (
-                        <FaCheckCircle className="h-5 w-5" />
+                        <FaCheckCircle className="h-5 w-5 sm:h-4 sm:w-4" />
                       ) : (
-                        <FaRegCircle className="h-5 w-5" />
+                        <FaRegCircle className="h-5 w-5 sm:h-4 sm:w-4" />
                       )}
                     </button>
                   </>
@@ -285,9 +291,9 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
 
       {/* Modal de configuración de ruta */}
       {showConfigModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
-            <h3 className="text-xl font-semibold mb-4">Configurar Ruta</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg sm:text-xl font-semibold mb-4">Configurar Ruta</h3>
             
             {/* Punto de inicio */}
             <div className="mb-4">
@@ -295,7 +301,7 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                 Punto de inicio
               </label>
               <select
-                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+                className="w-full border border-gray-300 rounded-md shadow-sm p-3 sm:p-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={puntoInicio?.nombre || ''}
                 onChange={(e) => {
                   if (e.target.value === 'ubicacion_actual' && ubicacionActual) {
@@ -336,7 +342,7 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
                 Punto final (opcional)
               </label>
               <select
-                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+                className="w-full border border-gray-300 rounded-md shadow-sm p-3 sm:p-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={puntoFin?.nombre || ''}
                 onChange={(e) => {
                   if (e.target.value === 'ubicacion_actual' && ubicacionActual) {
@@ -371,16 +377,16 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
               </select>
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowConfigModal(false)}
-                className="px-4 py-2 text-gray-700 hover:text-gray-900"
+                className="w-full sm:w-auto px-4 py-3 sm:py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmStart}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
               >
                 Comenzar Ruta
               </button>

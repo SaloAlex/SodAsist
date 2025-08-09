@@ -3,6 +3,7 @@ import { ClienteConRuta, EstadoVisita, LatLng } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useGoogleMaps } from '../common/hooks/useGoogleMaps';
 import { FaExclamationTriangle, FaRoute, FaEye, FaEyeSlash } from 'react-icons/fa';
+import './MapaRuta.css';
 
 interface MapaRutaProps {
   clientes: ClienteConRuta[];
@@ -27,11 +28,38 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { isLoaded, loadError } = useGoogleMaps();
   const [markerLibLoaded, setMarkerLibLoaded] = useState(false);
+  const [mapInitialized, setMapInitialized] = useState(false);
 
   // Efecto para actualizar clientes cuando cambian los iniciales
   useEffect(() => {
     setClientes(clientes);
   }, [clientes]);
+
+  // Efecto para manejar resize del mapa y evitar parpadeo
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    let resizeTimeout: NodeJS.Timeout;
+    
+    const handleResize = () => {
+      // Debounce el resize para evitar múltiples llamadas
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (mapRef.current) {
+          google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      }, 100);
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      clearTimeout(resizeTimeout);
+    };
+  }, []);
 
   // Función para validar coordenadas
   const isValidLatLng = useCallback((coords: LatLng | null | undefined): boolean => {
@@ -160,7 +188,7 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
 
   // Efecto para inicializar el mapa y los marcadores
   useEffect(() => {
-    if (!isLoaded || !markerLibLoaded || !mapContainerRef.current) return;
+    if (!isLoaded || !markerLibLoaded || !mapContainerRef.current || mapInitialized) return;
 
     let mounted = true;
     const markers: google.maps.marker.AdvancedMarkerElement[] = [];
@@ -184,6 +212,19 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
           draggable: true,
           zoomControl: true,
           scaleControl: false,
+          // Optimizaciones para móviles
+          tilt: 0,
+          heading: 0,
+          mapTypeId: google.maps.MapTypeId.ROADMAP,
+          // Reducir la calidad en móviles para mejor rendimiento
+          ...(window.innerWidth < 768 && {
+            zoomControlOptions: {
+              position: google.maps.ControlPosition.RIGHT_BOTTOM,
+            },
+            // Deshabilitar algunas características en móviles
+            rotateControl: false,
+            tiltControl: false,
+          }),
         });
 
         mapRef.current = map;
@@ -191,11 +232,17 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
         // Configurar opciones de gestos táctiles para evitar warnings de rendimiento
         const mapDiv = mapContainerRef.current;
         if (mapDiv) {
-          // Aplicar estilos CSS para mejorar rendimiento táctil
+          // Aplicar estilos CSS para mejorar rendimiento táctil y evitar parpadeo
           mapDiv.style.touchAction = 'pan-x pan-y zoom-in zoom-out';
           mapDiv.style.overscrollBehavior = 'contain';
+          mapDiv.style.willChange = 'transform';
+          mapDiv.style.transform = 'translateZ(0)';
           // @ts-expect-error - webkit prefix no está en tipos estándar
           mapDiv.style.webkitOverflowScrolling = 'touch';
+          mapDiv.style.webkitTransform = 'translateZ(0)';
+          // Prevenir parpadeo en iOS
+          mapDiv.style.webkitBackfaceVisibility = 'hidden';
+          mapDiv.style.backfaceVisibility = 'hidden';
         }
 
         // Crear marcadores para los clientes
@@ -259,6 +306,11 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
           if (zoom !== undefined && zoom > 15) {
             map.setZoom(15);
           }
+        }
+
+        // Marcar como inicializado para evitar re-inicializaciones
+        if (mounted) {
+          setMapInitialized(true);
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -343,57 +395,64 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Mapa de Ruta
-            {ubicacionActual && (
-              <span className="text-sm text-green-600 dark:text-green-400 ml-2">
-                📍 Ubicación activa
-              </span>
-            )}
-          </h3>
-          <div className="flex gap-2">
+      <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+              Mapa de Ruta
+              {ubicacionActual && (
+                <span className="text-xs sm:text-sm text-green-600 dark:text-green-400 ml-2">
+                  📍 Ubicación activa
+                </span>
+              )}
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {onOptimizarRuta && (
               <button
                 onClick={onOptimizarRuta}
                 disabled={optimizing || clientes.length === 0}
-                className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+                className="px-2 sm:px-3 py-2 sm:py-1 bg-blue-500 text-white text-xs sm:text-sm rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
               >
                 {optimizing ? (
                   <>
                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                    Optimizando...
+                    <span className="hidden sm:inline">Optimizando...</span>
+                    <span className="sm:hidden">...</span>
                   </>
                 ) : (
                   <>
-                    <FaRoute />
-                    Optimizar Ruta
+                    <FaRoute className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Optimizar</span>
+                    <span className="sm:hidden">Opt</span>
                   </>
                 )}
               </button>
             )}
             <button
               onClick={centrarMapa}
-              className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 flex items-center gap-1 transition-colors"
+              className="px-2 sm:px-3 py-2 sm:py-1 bg-gray-500 text-white text-xs sm:text-sm rounded hover:bg-gray-600 flex items-center gap-1 transition-colors"
             >
-              Centrar
+              <span className="hidden sm:inline">Centrar</span>
+              <span className="sm:hidden">📍</span>
             </button>
             
             {onToggleMapa && (
               <button
                 onClick={onToggleMapa}
-                className="px-3 py-1 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 flex items-center gap-1 transition-colors"
+                className="px-2 sm:px-3 py-2 sm:py-1 bg-indigo-500 text-white text-xs sm:text-sm rounded hover:bg-indigo-600 flex items-center gap-1 transition-colors"
               >
                 {mostrarMapa ? (
                   <>
-                    <FaEyeSlash />
-                    Ocultar
+                    <FaEyeSlash className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Ocultar</span>
+                    <span className="sm:hidden">👁️</span>
                   </>
                 ) : (
                   <>
-                    <FaEye />
-                    Mostrar
+                    <FaEye className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Mostrar</span>
+                    <span className="sm:hidden">👁️</span>
                   </>
                 )}
               </button>
@@ -404,11 +463,10 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
 
       <div 
         ref={mapContainerRef}
-        className="w-full h-96"
+        className="w-full h-64 sm:h-80 md:h-96 map-container"
         style={{
-          touchAction: 'pan-x pan-y zoom-in zoom-out',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain'
+          position: 'relative',
+          zIndex: 1
         }}
       />
       
