@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom';
 import { 
   Home, 
   Users, 
-  Truck, 
   Package, 
   BarChart3, 
   MapPin, 
@@ -11,6 +10,7 @@ import {
   Settings,
   LogOut 
 } from 'lucide-react';
+import { Logo } from './Logo';
 import { useAuthStore } from '../../store/authStore';
 import { auth } from '../../config/firebase';
 import { signOut } from 'firebase/auth';
@@ -54,12 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => 
   return (
     <aside className={`w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col ${className}`}>
       <div className="flex-none p-6">
-        <div className="flex items-center space-x-2">
-          <Truck className="h-8 w-8 text-blue-600" />
-          <span className="text-xl font-bold text-gray-900 dark:text-white">
-                            VaListo App
-          </span>
-        </div>
+        <Logo size="2xl" />
       </div>
       
       <nav className="flex-1 mt-6">

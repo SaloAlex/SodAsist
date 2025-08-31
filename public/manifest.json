@@ -1,16 +1,16 @@
 {
-  "name": "VaListo App",
+  "name": "VaListo",
   "short_name": "VaListo",
   "description": "Sistema de gestión profesional para reparto de agua",
   "icons": [
     {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
+      "src": "/Logo.png",
+      "sizes": "any",
       "type": "image/png"
     },
     {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
+      "src": "/Logo.png",
+      "sizes": "120x120",
       "type": "image/png"
     }
   ],
