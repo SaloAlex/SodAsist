@@ -25,8 +25,11 @@ import { Cliente, Entrega, User, InventarioVehiculo } from '../types';
 export class FirebaseService {
   // Función mejorada para convertir Timestamps manteniendo tipos de datos
   private static convertTimestamps<T>(input: T): T {
+    // Manejar casos nulos o undefined
+    if (input === null || input === undefined) return input;
+    
     if (input instanceof Timestamp) return input.toDate() as unknown as T;
-    if (Array.isArray(input)) return input.map(this.convertTimestamps) as unknown as T;
+    if (Array.isArray(input)) return input.map(item => this.convertTimestamps(item)) as unknown as T;
     if (input && typeof input === 'object') {
       const obj = {} as Record<string, unknown>;
       for (const [k, v] of Object.entries(input)) {
@@ -40,10 +43,17 @@ export class FirebaseService {
   static async getCollection<T>(collectionName: string): Promise<T[]> {
     try {
       const querySnapshot = await getDocs(collection(db, collectionName));
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      } as T));
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        if (!data) {
+          console.warn(`Documento ${doc.id} en ${collectionName} no tiene datos`);
+          return { id: doc.id } as T;
+        }
+        return {
+          id: doc.id,
+          ...this.convertTimestamps(data)
+        } as T;
+      });
     } catch (error) {
       console.error(`Error al obtener colección ${collectionName}:`, error);
       throw error;
@@ -56,9 +66,14 @@ export class FirebaseService {
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (!data) {
+          console.warn(`Documento ${id} en ${collectionName} no tiene datos`);
+          return { id: docSnap.id } as T;
+        }
         return {
           id: docSnap.id,
-          ...this.convertTimestamps(docSnap.data())
+          ...this.convertTimestamps(data)
         } as T;
       }
       return null;
@@ -106,6 +121,25 @@ export class FirebaseService {
   }
 
   // Specific operations
+  static async getClientes(): Promise<Cliente[]> {
+    const q = query(
+      collection(db, 'clientes'),
+      orderBy('nombre', 'asc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      if (!data) {
+        console.warn(`Cliente ${doc.id} no tiene datos`);
+        return { id: doc.id } as Cliente;
+      }
+      return {
+        id: doc.id,
+        ...this.convertTimestamps(data)
+      } as Cliente;
+    });
+  }
+
   static async getClientesWithSaldo(): Promise<Cliente[]> {
     const q = query(
       collection(db, 'clientes'),
@@ -119,6 +153,25 @@ export class FirebaseService {
         id: doc.id,
         ...this.convertTimestamps(data)
       } as Cliente;
+    });
+  }
+
+  static async getEntregas(): Promise<Entrega[]> {
+    const q = query(
+      collection(db, 'entregas'),
+      orderBy('fecha', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      if (!data) {
+        console.warn(`Entrega ${doc.id} no tiene datos`);
+        return { id: doc.id } as Entrega;
+      }
+      return {
+        id: doc.id,
+        ...this.convertTimestamps(data)
+      } as Entrega;
     });
   }
 
@@ -180,23 +233,53 @@ export class FirebaseService {
     onError?: (error: Error) => void,
     queryConstraints?: QueryConstraint[]
   ): () => void {
-    const q = queryConstraints 
-      ? query(collection(db, collectionName), ...queryConstraints)
-      : collection(db, collectionName);
+    try {
+      const q = queryConstraints 
+        ? query(collection(db, collectionName), ...queryConstraints)
+        : collection(db, collectionName);
 
-    return onSnapshot(q, {
-      next: (querySnapshot) => {
-        const data = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...this.convertTimestamps(doc.data())
-        } as T));
-        callback(data);
-      },
-      error: (error) => {
-        console.error(`Error en subscribeToCollection ${collectionName}:`, error);
-        if (onError) onError(error);
-      }
-    });
+      return onSnapshot(q, {
+        next: (querySnapshot) => {
+          try {
+            const data = querySnapshot.docs.map(doc => {
+              const docData = doc.data();
+              if (!docData) {
+                console.warn(`Documento ${doc.id} en ${collectionName} no tiene datos`);
+                return { id: doc.id } as T;
+              }
+              return {
+                id: doc.id,
+                ...this.convertTimestamps(docData)
+              } as T;
+            });
+            callback(data);
+          } catch (error) {
+            console.error(`Error procesando datos de ${collectionName}:`, error);
+            if (onError) onError(error as Error);
+          }
+        },
+        error: (error) => {
+          console.error(`Error en subscribeToCollection ${collectionName}:`, error);
+          
+          // Manejar errores específicos de autenticación
+          if (error.code === 'permission-denied') {
+            console.error('Error de permisos: Usuario no autenticado o sin permisos');
+          } else if (error.code === 'unavailable') {
+            console.error('Firestore no disponible');
+          } else if (error.code === 'resource-exhausted') {
+            console.error('Límite de recursos excedido');
+          }
+          
+          if (onError) onError(error);
+        }
+      });
+    } catch (error) {
+      console.error(`Error al crear suscripción para ${collectionName}:`, error);
+      if (onError) onError(error as Error);
+      
+      // Retornar una función vacía para evitar errores
+      return () => {};
+    }
   }
 
   static async createUserDocument(userData: Omit<User, 'id'>): Promise<void> {
@@ -253,10 +336,17 @@ export class FirebaseService {
         : collection(db, collectionName);
       
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      } as T));
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        if (!data) {
+          console.warn(`Documento ${doc.id} en ${collectionName} no tiene datos`);
+          return { id: doc.id } as T;
+        }
+        return {
+          id: doc.id,
+          ...this.convertTimestamps(data)
+        } as T;
+      });
     } catch (error) {
       console.error(`Error en queryCollection ${collectionName}:`, error);
       throw error;
@@ -278,6 +368,10 @@ export class FirebaseService {
       if (!querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
         const data = doc.data();
+        if (!data) {
+          console.warn(`Entrega ${doc.id} no tiene datos`);
+          return null;
+        }
         return {
           id: doc.id,
           clienteId: data.clienteId,
@@ -358,6 +452,10 @@ export class FirebaseService {
       if (!querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
         const data = doc.data();
+        if (!data) {
+          console.warn(`Inventario ${doc.id} no tiene datos`);
+          return null;
+        }
         return {
           id: doc.id,
           fecha: data.fecha.toDate(),

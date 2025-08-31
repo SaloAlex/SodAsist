@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, query, collection, limit, getDocs } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 
 // Validar que todas las variables de entorno estén configuradas
@@ -40,5 +40,31 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth();
 export const db = getFirestore();
 export const functions = getFunctions();
+
+// Configurar Firestore para mejor manejo de errores
+import { connectFirestoreEmulator, enableNetwork, disableNetwork } from 'firebase/firestore';
+
+// Configuración adicional para desarrollo
+if (import.meta.env.DEV) {
+  console.log('🔧 Modo desarrollo detectado');
+  console.log('📊 Configuración de Firestore:', {
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain
+  });
+}
+
+// Función para verificar conectividad de Firestore
+export const checkFirestoreConnection = async () => {
+  try {
+    // Intentar una operación simple para verificar la conexión
+    const testQuery = query(collection(db, 'users'), limit(1));
+    await getDocs(testQuery);
+    console.log('✅ Conexión a Firestore exitosa');
+    return true;
+  } catch (error) {
+    console.error('❌ Error de conexión a Firestore:', error);
+    return false;
+  }
+};
 
 export default app;

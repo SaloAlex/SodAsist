@@ -14,6 +14,8 @@ import { ProtectedRoute } from '../auth/ProtectedRoute';
 import { ClientesList } from '../clientes/ClientesList';
 import { ClienteForm } from '../clientes/ClienteForm';
 import { EntregaForm } from '../entregas/EntregaForm';
+import { EntregasList } from '../entregas/EntregasList';
+import { FirebaseStatus } from './FirebaseStatus';
 import { Menu, X } from 'lucide-react';
 
 export const Layout: React.FC = () => {
@@ -70,7 +72,7 @@ export const Layout: React.FC = () => {
                 <Route path=":id" element={<ClienteForm />} />
               </Route>
               <Route path="/entregas" element={<ProtectedRoute requiredRole="admin"><Entregas /></ProtectedRoute>}>
-                <Route index element={<div>Lista de Entregas</div>} />
+                <Route index element={<EntregasList />} />
                 <Route path="new" element={<EntregaForm />} />
                 <Route path="nuevo" element={<Navigate to="/entregas/new" replace />} />
               </Route>
@@ -91,6 +93,9 @@ export const Layout: React.FC = () => {
           </div>
         </main>
       </div>
+      
+      {/* Componente de estado de Firebase */}
+      <FirebaseStatus />
     </div>
   );
 };
