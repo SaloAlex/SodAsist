@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
-import { checkFirestoreConnection } from '../../config/firebase';
+import { FirebaseService } from '../../services/firebaseService';
 import { Wifi, WifiOff, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 
 export const FirebaseStatus: React.FC = () => {
@@ -11,8 +11,9 @@ export const FirebaseStatus: React.FC = () => {
   const checkConnection = async () => {
     setConnectionStatus('checking');
     try {
-      const isConnected = await checkFirestoreConnection();
-      setConnectionStatus(isConnected ? 'connected' : 'disconnected');
+      // Intentar una operación simple para verificar la conexión
+      await FirebaseService.getCollection('users');
+      setConnectionStatus('connected');
       setLastCheck(new Date());
     } catch (error) {
       console.error('Error checking Firebase connection:', error);

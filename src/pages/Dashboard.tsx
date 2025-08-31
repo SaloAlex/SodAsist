@@ -606,13 +606,13 @@ export const Dashboard: React.FC = () => {
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => navigate('/entregas')}
-                className="flex items-center px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                className="flex items-center px-3 py-1.5 text-sm text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
               >
                 <Eye className="h-4 w-4 mr-1" />
                 Ver todas
               </button>
               
-              <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                 <Download className="h-4 w-4" />
               </button>
             </div>

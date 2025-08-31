@@ -273,7 +273,7 @@ export const ClientesList: React.FC = () => {
       priority: 2,
       render: (value: unknown) => (
         <div className="flex items-center space-x-2">
-          <Phone className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <Phone className="h-4 w-4 text-gray-400 dark:text-gray-300" />
           <span className="text-gray-900 dark:text-white">{String(value)}</span>
         </div>
       ),
@@ -286,7 +286,7 @@ export const ClientesList: React.FC = () => {
       priority: 3,
       render: (value: unknown) => (
         <div className="flex items-center space-x-2">
-          <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-300" />
           <span className="truncate text-gray-900 dark:text-white">{String(value)}</span>
         </div>
       ),
@@ -299,7 +299,7 @@ export const ClientesList: React.FC = () => {
       hideOnMobile: true,
       render: (value: unknown, row: Cliente) => (
         <div className="flex items-center space-x-2">
-          <Clock className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <Clock className="h-4 w-4 text-gray-400 dark:text-gray-300" />
           <span className="text-gray-900 dark:text-white">
             {String(value).charAt(0).toUpperCase() + String(value).slice(1)}
             <span className="text-gray-400 dark:text-gray-500"> • </span>
@@ -317,11 +317,11 @@ export const ClientesList: React.FC = () => {
       render: (_: unknown, row: Cliente) => (
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1">
-            <Package className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+            <Package className="h-4 w-4 text-gray-400 dark:text-gray-300" />
             <span className="text-gray-900 dark:text-white">{row.consumoPromedioBidones || 0}</span>
           </div>
           <div className="flex items-center space-x-1">
-            <Beer className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+            <Beer className="h-4 w-4 text-gray-400 dark:text-gray-300" />
             <span className="text-gray-900 dark:text-white">{row.consumoPromedioSodas || 0}</span>
           </div>
         </div>

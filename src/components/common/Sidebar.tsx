@@ -57,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => 
         <div className="flex items-center space-x-2">
           <Truck className="h-8 w-8 text-blue-600" />
           <span className="text-xl font-bold text-gray-900 dark:text-white">
-            Sodero Pro
+                            VaListo App
           </span>
         </div>
       </div>

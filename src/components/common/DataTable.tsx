@@ -270,7 +270,7 @@ export const DataTable = <T,>({
                     </th>
                   ))}
                   {actions?.length ? (
-                    <th className="px-3 py-3 text-right w-[110px]">
+                    <th className="px-3 py-3 text-right w-[110px] text-gray-500 dark:text-gray-400">
                       Acciones
                     </th>
                   ) : null}

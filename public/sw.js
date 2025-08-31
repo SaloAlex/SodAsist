@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sodero-v1';
+const CACHE_NAME = 'valisto-v1';
 const urlsToCache = [
   '/',
   '/static/js/bundle.js',

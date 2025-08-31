@@ -241,27 +241,27 @@ export const Reportes: React.FC = () => {
             titulo: 'Ventas Totales',
             valor: ventasReporte ? `$${ventasReporte.resumenGeneral.totalVentas.toLocaleString('es-AR')}` : '$0',
             cambio: ventasReporte?.resumenGeneral.crecimientoMensual || 0,
-            icono: <DollarSign className="w-5 h-5" />,
+            icono: <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />,
             color: 'bg-green-100 dark:bg-green-900'
           },
           {
             titulo: 'Clientes Activos',
             valor: clientesReporte?.segmentacion.reduce((sum, s) => sum + s.cantidad, 0) || 0,
-            icono: <Users className="w-5 h-5" />,
+            icono: <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />,
             color: 'bg-blue-100 dark:bg-blue-900'
           },
           {
             titulo: 'Morosidad',
             valor: cobranzasReporte ? `${cobranzasReporte.estadoCuentas.porcentajeMora.toFixed(1)}%` : '0%',
             cambio: cobranzasReporte && cobranzasReporte.estadoCuentas.porcentajeMora > 25 ? -5 : 2,
-            icono: <AlertTriangle className="w-5 h-5" />,
+            icono: <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />,
             color: cobranzasReporte && cobranzasReporte.estadoCuentas.porcentajeMora > 25 ? 'bg-red-100 dark:bg-red-900' : 'bg-yellow-100 dark:bg-yellow-900'
           },
           {
             titulo: 'Eficiencia',
             valor: '87%',
             cambio: 3.2,
-            icono: <Target className="w-5 h-5" />,
+            icono: <Target className="w-5 h-5 text-purple-600 dark:text-purple-400" />,
             color: 'bg-purple-100 dark:bg-purple-900'
           }
         ]}
@@ -274,7 +274,7 @@ export const Reportes: React.FC = () => {
           {insights.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
               <div className="flex items-center mb-4">
-                <Zap className="w-5 h-5 text-yellow-500 mr-2" />
+                <Zap className="w-5 h-5 text-yellow-500 dark:text-yellow-400 mr-2" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Insights Automáticos
                 </h3>
@@ -295,7 +295,7 @@ export const Reportes: React.FC = () => {
           {anomalias.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
               <div className="flex items-center mb-4">
-                <Bell className="w-5 h-5 text-red-500 mr-2" />
+                <Bell className="w-5 h-5 text-red-500 dark:text-red-400 mr-2" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Anomalías Detectadas
                 </h3>
@@ -303,7 +303,7 @@ export const Reportes: React.FC = () => {
               <div className="space-y-3">
                 {anomalias.slice(0, 3).map((anomalia, index) => (
                   <div key={index} className="flex items-start p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400 mr-2 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-gray-700 dark:text-gray-300">
                       <div className="font-medium">{anomalia.descripcion}</div>
                       {anomalia.fecha && (

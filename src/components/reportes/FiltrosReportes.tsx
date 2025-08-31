@@ -293,7 +293,7 @@ export const FiltrosReportes: React.FC<FiltrosReportesProps> = ({
                     disabled={loading}
                   >
                     <div className="flex items-center">
-                      <User className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" />
+                      <User className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-300" />
                       <span className="truncate">
                         {clienteSeleccionado?.nombre || 'Todos los clientes'}
                       </span>

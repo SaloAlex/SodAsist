@@ -84,7 +84,7 @@ const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDele
                 <tr key={producto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <Package className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" />
+                      <Package className="h-5 w-5 text-gray-400 dark:text-gray-300 mr-3 flex-shrink-0" />
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {producto.nombre}

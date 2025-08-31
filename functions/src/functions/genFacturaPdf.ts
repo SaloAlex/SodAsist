@@ -43,7 +43,7 @@ export const genFacturaPdf = functions.https.onCall(async (data, context) => {
     doc.fontSize(12);
     
     // Company info
-    doc.text('Sistema Sodero', 50, 80);
+    doc.text('VaListo App', 50, 80);
     doc.text('Reparto de Agua', 50, 95);
     
     // Client info

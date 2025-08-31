@@ -303,7 +303,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
                 {title}
               </p>
               {description && (
-                <button className="ml-2 text-gray-400 hover:text-gray-600 transition-colors">
+                <button className="ml-2 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
                   <Info className="h-3 w-3" />
                 </button>
               )}
@@ -322,14 +322,14 @@ export const StatsCard: React.FC<StatsCardProps> = ({
             <div className="flex items-center space-x-1">
               {onClick && (
                 <button className={`p-1 rounded hover:bg-black/10 ${
-                  variant === 'gradient' ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-gray-600'
+                  variant === 'gradient' ? 'text-white/70 hover:text-white' : 'text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-200'
                 }`}>
                   <Eye className="h-3 w-3" />
                 </button>
               )}
               {onAction && (
                 <button className={`p-1 rounded hover:bg-black/10 ${
-                  variant === 'gradient' ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-gray-600'
+                  variant === 'gradient' ? 'text-white/70 hover:text-white' : 'text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-200'
                 }`}>
                   <MoreHorizontal className="h-3 w-3" />
                 </button>

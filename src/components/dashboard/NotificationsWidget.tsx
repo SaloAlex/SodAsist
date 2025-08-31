@@ -148,7 +148,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
 
   // Obtener icono por categoría
   const getCategoryIcon = (category: Notification['category']) => {
-    const iconProps = { className: 'h-3 w-3' };
+    const iconProps = { className: 'h-3 w-3 text-gray-500 dark:text-gray-300' };
     switch (category) {
       case 'entrega':
         return <Package {...iconProps} />;
@@ -168,14 +168,14 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
   const getPriorityColor = (priority: Notification['priority']) => {
     switch (priority) {
       case 'urgent':
-        return 'border-l-red-500 bg-red-50 dark:bg-red-900/10';
+        return 'border-l-red-600 bg-red-50/80 dark:bg-red-900/20';
       case 'high':
-        return 'border-l-orange-500 bg-orange-50 dark:bg-orange-900/10';
+        return 'border-l-orange-500 bg-orange-50/80 dark:bg-orange-900/20';
       case 'medium':
-        return 'border-l-blue-500 bg-blue-50 dark:bg-blue-900/10';
+        return 'border-l-blue-500 bg-blue-50/80 dark:bg-blue-900/20';
       case 'low':
       default:
-        return 'border-l-gray-500 bg-gray-50 dark:bg-gray-900/10';
+        return 'border-l-gray-400 bg-gray-50/80 dark:bg-gray-800/50';
     }
   };
 
@@ -192,15 +192,10 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between p-6 pb-4">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-            <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
-            Notificaciones
-            {priorityCounts.urgent > 0 && (
-              <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-full">
-                {priorityCounts.urgent} urgente{priorityCounts.urgent > 1 ? 's' : ''}
-              </span>
-            )}
-          </h3>
+                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+             <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
+             Notificaciones
+           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             {notificationData.length} notificación{notificationData.length !== 1 ? 'es' : ''} total{notificationData.length !== 1 ? 'es' : ''}
           </p>
@@ -210,7 +205,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
           {onMarkAllRead && (
             <button
               onClick={onMarkAllRead}
-              className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200"
             >
               Marcar como leídas
             </button>
@@ -219,51 +214,51 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
           {onDismissAll && notificationData.length > 0 && (
             <button
               onClick={onDismissAll}
-              className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200"
             >
               Descartar todas
             </button>
           )}
 
-          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200">
             <MoreHorizontal className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Resumen de prioridades */}
-      <div className="px-6 pb-4">
-        <div className="grid grid-cols-4 gap-3">
-          <div className="text-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
-            <p className="text-lg font-bold text-red-600 dark:text-red-400">{priorityCounts.urgent}</p>
-            <p className="text-xs text-red-600 dark:text-red-400">Urgente</p>
-          </div>
-          <div className="text-center p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-            <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{priorityCounts.high}</p>
-            <p className="text-xs text-orange-600 dark:text-orange-400">Alta</p>
-          </div>
-          <div className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{priorityCounts.medium}</p>
-            <p className="text-xs text-blue-600 dark:text-blue-400">Media</p>
-          </div>
-          <div className="text-center p-2 bg-gray-50 dark:bg-gray-900/20 rounded-lg">
-            <p className="text-lg font-bold text-gray-600 dark:text-gray-400">{priorityCounts.low}</p>
-            <p className="text-xs text-gray-600 dark:text-gray-400">Baja</p>
-          </div>
-        </div>
-      </div>
+             {/* Resumen de prioridades */}
+       <div className="px-6 pb-4">
+         <div className="grid grid-cols-4 gap-3">
+           <div className="text-center p-2 bg-red-50/80 dark:bg-red-900/30 rounded-lg border border-red-100 dark:border-red-800/50">
+             <p className="text-lg font-bold text-red-700 dark:text-red-300">{priorityCounts.urgent}</p>
+             <p className="text-xs text-red-600 dark:text-red-400">Urgente</p>
+           </div>
+           <div className="text-center p-2 bg-orange-50/80 dark:bg-orange-900/30 rounded-lg border border-orange-100 dark:border-orange-800/50">
+             <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{priorityCounts.high}</p>
+             <p className="text-xs text-orange-600 dark:text-orange-400">Alta</p>
+           </div>
+           <div className="text-center p-2 bg-blue-50/80 dark:bg-blue-900/30 rounded-lg border border-blue-100 dark:border-blue-800/50">
+             <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{priorityCounts.medium}</p>
+             <p className="text-xs text-blue-600 dark:text-blue-400">Media</p>
+           </div>
+           <div className="text-center p-2 bg-gray-50/80 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50">
+             <p className="text-lg font-bold text-gray-700 dark:text-gray-300">{priorityCounts.low}</p>
+             <p className="text-xs text-gray-600 dark:text-gray-400">Baja</p>
+           </div>
+         </div>
+       </div>
 
       {/* Filtros */}
       {showFilters && (
         <div className="px-6 pb-4">
-          <div className="flex items-center space-x-2 overflow-x-auto">
+          <div className="flex items-center space-x-2 overflow-x-auto pb-2">
             {typeFilters.map(({ key, label, count }) => (
               <button
                 key={key}
                 onClick={() => setFilter(key as typeof filter)}
-                className={`flex items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`flex items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-w-fit ${
                   filter === key
-                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 shadow-sm'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
@@ -310,7 +305,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
             {filteredNotifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`border-l-4 rounded-lg p-3 transition-all hover:shadow-sm ${getPriorityColor(notification.priority)}`}
+                className={`border-l-4 rounded-lg p-3 transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${getPriorityColor(notification.priority)}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 flex-1">
@@ -350,7 +345,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
                           {notification.onAction && notification.actionLabel && (
                             <button
                               onClick={notification.onAction}
-                              className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                              className="px-3 py-1.5 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-all duration-200 shadow-sm"
                             >
                               {notification.actionLabel}
                             </button>
@@ -359,7 +354,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
                           {notification.dismissible && onDismiss && (
                             <button
                               onClick={() => onDismiss(notification.id)}
-                              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded transition-colors"
+                              className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200"
                               title="Descartar notificación"
                             >
                               <X className="h-3 w-3" />
