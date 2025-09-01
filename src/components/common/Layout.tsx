@@ -79,7 +79,7 @@ export const Layout: React.FC = () => {
               <Route 
                 path="/ruta-hoy" 
                 element={
-                  <ProtectedRoute requiredRole={['admin', 'sodero']}>
+                  <ProtectedRoute requiredRole={['admin', 'manager', 'sodero']}>
                     <RutaHoy />
                   </ProtectedRoute>
                 } 

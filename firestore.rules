@@ -1,126 +1,86 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
     // Funciones auxiliares
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    function isAdmin() {
-      return isAuthenticated()
-             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
 
-    function isSodero() {
-      return isAuthenticated()
-             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'sodero';
+    function getUserRole(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return userDoc != null ? userDoc.data.rol : null;
     }
 
-    function isAdminOrSodero() {
-      return isAuthenticated()
-             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-             && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol in ['admin', 'sodero']);
+    function isAdmin(userId) {
+      return getUserRole(userId) == 'admin';
     }
 
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol;
+    function isManager(userId) {
+      return getUserRole(userId) == 'manager';
     }
 
-    // Reglas específicas para usuarios
+    function isSodero(userId) {
+      return getUserRole(userId) == 'sodero';
+    }
+
+    function isAdminOrManager(userId) {
+      let role = getUserRole(userId);
+      return role == 'admin' || role == 'manager';
+    }
+
+    function isAdminOrSodero(userId) {
+      let role = getUserRole(userId);
+      return role == 'admin' || role == 'sodero';
+    }
+
+    // Función para verificar límite de usuarios por plan
+    function canCreateUser(tenantId) {
+      let tenant = get(/databases/$(database)/documents/tenants/$(tenantId));
+      if (tenant == null) return false;
+      
+      let tenantData = tenant.data;
+      let currentUserCount = get(/databases/$(database)/documents/users).where('tenantId', '==', tenantId).size();
+      
+      if (tenantData.plan == 'individual') return currentUserCount < 1;
+      if (tenantData.plan == 'business') return currentUserCount < 11;
+      if (tenantData.plan == 'enterprise') return true; // Sin límite
+      
+      return false;
+    }
+
+    // Reglas para usuarios
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated()
-                   && request.auth.uid == userId
-                   && request.resource.data.rol in ['admin', 'sodero'];
-      allow update: if isAuthenticated()
-                   && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && 
+        (request.auth.uid == userId || // Usuario creando su propio documento
+         (request.resource.data.tenantId != null && canCreateUser(request.resource.data.tenantId))); // Admin creando empleado
+      allow read, update, delete: if isAuthenticated() && 
+        (isOwner(userId) || // Usuario puede ver/editar sus propios datos
+         isAdmin(request.auth.uid)); // Admin puede ver/editar todos los usuarios del tenant
     }
 
-    // Reglas para clientes
-    match /clientes/{clienteId} {
-      allow read, write: if isAdminOrSodero();
+    // Reglas para tenants
+    match /tenants/{tenantId} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.uid == resource.data.adminUid || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
     }
 
-    // Reglas para entregas
-    match /entregas/{entregaId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Reglas para visitas
-    match /visitas/{visitaId} {
-      allow read, write: if isAdminOrSodero();
+    // Reglas para datos de tenant
+    match /tenants/{tenantId}/{collection}/{document=**} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.uid == resource.data.tenantId || // Usuario del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
     }
 
-    // Reglas para rutas
-    match /rutas/{rutaId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Pagos - authenticated users can read and write
-    match /pagos/{pagoId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    // KPIs - authenticated users can read, only functions can write
-    match /kpis/{kpiId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // ───────── INVENTARIO LEGACY ─────────
-    match /inventarioVehiculo/{invId} {
-      allow read, write: if isAdminOrSodero();
-    }
-
-    // Regla para inventarioVehiculo en cualquier subruta (por si acaso)
-    match /{path=**}/inventarioVehiculo/{invId} {
-      allow read, write: if isAdminOrSodero();
-    }
-
-    // ───────── NUEVO SISTEMA DE INVENTARIO DINÁMICO ─────────
-    
-    // Productos - lectura y escritura para admin y sodero
-    match /productos/{productoId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Categorías de productos - lectura y escritura para admin y sodero
-    match /categoriasProductos/{categoriaId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Movimientos de inventario - lectura y escritura para admin y sodero
-    match /movimientosInventario/{movimientoId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Ajustes de inventario - lectura y escritura para admin y sodero
-    match /ajustesInventario/{ajusteId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Proveedores - lectura y escritura para admin y sodero
-    match /proveedores/{proveedorId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Historial de precios - lectura y escritura para admin y sodero
-    match /historialPrecios/{historialId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Inventario vehicular dinámico - lectura y escritura para admin y sodero
-    match /inventarioVehicular/{inventarioId} {
-      allow read, write: if isAdminOrSodero();
-    }
-    
-    // Configuración del inventario - lectura para todos, escritura solo admin
-    match /configuracionInventario/{configId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+    // Reglas para colecciones globales (compatibilidad)
+    match /{collection}/{document=**} {
+      allow read, write: if isAuthenticated() && 
+        (collection == 'users' || // Usuarios (manejado arriba)
+         collection == 'tenants'); // Tenants (manejado arriba)
     }
   }
 }

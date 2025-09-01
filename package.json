@@ -24,6 +24,7 @@
     "@types/signature_pad": "^2.3.4",
     "date-fns": "^2.30.0",
     "firebase": "^12.1.0",
+    "firebase-admin": "^13.5.0",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "js-cookie": "^3.0.5",

@@ -20,7 +20,7 @@ export const Logo: React.FC<LogoProps> = ({
     return (
     <div className={`flex items-center justify-center ${className}`}>
       <img 
-        src="/Logo.png" 
+        src={import.meta.env.BASE_URL + 'Logo.png'} 
         alt="VaListo" 
         className={`${sizeClasses[size]} w-auto`} 
       />

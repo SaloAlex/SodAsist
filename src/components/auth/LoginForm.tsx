@@ -17,6 +17,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { PlanSelection } from './PlanSelection';
 
 const schema = yup.object().shape({
   email: yup.string().email('Email inválido').required('Email requerido'),
@@ -31,6 +32,7 @@ export const LoginForm: React.FC = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'individual' | 'business' | 'enterprise'>('individual');
   
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -142,16 +144,17 @@ export const LoginForm: React.FC = () => {
     setLoginSuccess(false);
     try {
       if (isRegistering) {
-        // Registrar nuevo usuario
-        await createUserWithEmailAndPassword(auth, data.email, data.password);
-        toast.success('Usuario registrado correctamente');
-        setLoginSuccess(true);
+        console.log('🔄 Iniciando registro de usuario...');
+        console.log('📋 Plan seleccionado:', selectedPlan);
         
-        // Redirección inmediata para registro
-        setTimeout(() => {
-          console.log('🚀 Redirección inmediata - Registro');
-          window.location.href = '/';
-        }, 1000);
+        // Registrar nuevo usuario en Firebase Auth
+        await createUserWithEmailAndPassword(auth, data.email, data.password);
+        console.log('✅ Usuario creado en Firebase Auth');
+        
+        // El listener de useAuth se encargará de crear el documento con el plan seleccionado
+        // El plan se pasará a través del contexto de autenticación
+        toast.success(`Usuario registrado correctamente con plan ${selectedPlan}`);
+        setLoginSuccess(true);
       } else {
         // Iniciar sesión
         await signInWithEmailAndPassword(auth, data.email, data.password);
@@ -215,16 +218,20 @@ export const LoginForm: React.FC = () => {
     }
   };
 
+  const handlePlanChange = (planId: string) => {
+    setSelectedPlan(planId as 'individual' | 'business' | 'enterprise');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-                      <div className="flex justify-center">
-              <Logo size="lg" />
-            </div>
-                      <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-              VaListo
-            </h2>
+          <div className="flex justify-center">
+            <Logo size="lg" />
+          </div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
+            VaListo
+          </h2>
           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
             {isRegistering ? 'Crear nueva cuenta' : 'Gestión profesional de entregas'}
           </p>
@@ -284,10 +291,21 @@ export const LoginForm: React.FC = () => {
             )}
           </div>
 
+          {/* Selección de Plan - Solo mostrar durante el registro */}
+          {isRegistering && (
+            <div className="mt-6">
+              <PlanSelection
+                selectedPlan={selectedPlan}
+                onPlanChange={handlePlanChange}
+                isFirstUser={true}
+              />
+            </div>
+          )}
+
           <div>
             <button
               type="submit"
-              disabled={loading || (loginSuccess && user)}
+              disabled={loading || (loginSuccess && !!user)}
               className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -343,7 +361,7 @@ export const LoginForm: React.FC = () => {
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={googleLoading || (loginSuccess && user)}
+                disabled={googleLoading || (loginSuccess && !!user)}
                 className="w-full inline-flex justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700"
               >
                 {googleLoading ? (

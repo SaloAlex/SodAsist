@@ -5,7 +5,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'sodero' | ('admin' | 'sodero')[];
+  requiredRole?: 'admin' | 'manager' | 'sodero' | ('admin' | 'manager' | 'sodero')[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
@@ -15,6 +15,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { user, userData, loading, initialized } = useAuthStore();
   const location = useLocation();
 
+  // Mostrar spinner mientras se inicializa
   if (!initialized || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -23,8 +24,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  if (!user || !userData) {
+  // Redirigir a login si no hay usuario o datos
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Esperar datos del usuario
+  if (!userData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
   }
 
   if (requiredRole) {

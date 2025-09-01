@@ -106,8 +106,56 @@ export interface User {
   uid: string;
   nombre: string;
   email: string;
-  rol: 'admin' | 'sodero';
+  rol: 'admin' | 'manager' | 'sodero';
+  plan: 'individual' | 'business' | 'enterprise'; // Agregar campo plan
+  tenantId: string; // ID del tenant/empresa al que pertenece
   createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface Tenant {
+  id: string;
+  nombre: string;
+  email: string;
+  plan: 'individual' | 'business' | 'enterprise';
+  maxUsers: number; // 1, 11, o null (ilimitado)
+  currentUserCount: number; // Contador actual de usuarios
+  adminUid: string;
+  empleados: string[]; // Array de UIDs de empleados
+  createdAt: Date;
+  updatedAt: Date;
+  upgradeHistory?: {
+    fromPlan: string;
+    toPlan: string;
+    date: Date;
+    reason: 'user_limit_reached' | 'manual_upgrade' | 'downgrade';
+  }[];
+  config?: {
+    timezone?: string;
+    currency?: string;
+    language?: string;
+  };
+}
+
+// Nueva interfaz para planes
+export interface Plan {
+  id: 'individual' | 'business' | 'enterprise';
+  name: string;
+  price: string;
+  maxUsers: number | null; // null = ilimitado
+  features: string[];
+  description: string;
+  isPopular?: boolean;
+}
+
+// Interfaz para el modal de upgrade
+export interface UpgradeOption {
+  planId: 'business' | 'enterprise';
+  name: string;
+  price: string;
+  maxUsers: number | null;
+  features: string[];
+  currentPlan?: boolean;
 }
 
 export interface KPI {

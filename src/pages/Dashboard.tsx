@@ -28,6 +28,8 @@ import { format, isValid, parseISO, subDays, startOfDay, endOfDay, addDays, star
 import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { UserLimitReached } from '../components/common/UserLimitReached';
+import { PlanInfo } from '../components/common/PlanInfo';
 
 type ViewMode = 'grid' | 'list';
 type DateRange = 'today' | 'week' | 'month' | 'custom';
@@ -400,6 +402,9 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Alerta de límite de usuarios alcanzado */}
+      <UserLimitReached />
+
       {/* Métricas principales mejoradas */}
       <div className={`grid ${viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1'} gap-6`}>
         <StatsCard
@@ -444,7 +449,7 @@ export const Dashboard: React.FC = () => {
           description="Base total de clientes registrados"
           actionLabel="Gestionar"
           onAction={() => navigate('/clientes')}
-          variant="outlined"
+          variant="default"
         />
 
         <StatsCard
@@ -457,7 +462,9 @@ export const Dashboard: React.FC = () => {
           progressValue={stats.litrosVendidos}
           target={500}
           description="Litros de agua vendidos"
-          variant="minimal"
+          actionLabel="Ver inventario"
+          onAction={() => navigate('/inventario')}
+          variant="default"
         />
       </div>
 
@@ -516,6 +523,11 @@ export const Dashboard: React.FC = () => {
               <Settings className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
               Acciones Rápidas
             </h3>
+            
+            {/* Información del Plan */}
+            <div className="mb-6">
+              <PlanInfo />
+            </div>
             
             <div className="space-y-3">
               <button
