@@ -19,51 +19,20 @@ service cloud.firestore {
       return getUserRole(userId) == 'admin';
     }
 
-    function isManager(userId) {
-      return getUserRole(userId) == 'manager';
-    }
-
-    function isSodero(userId) {
-      return getUserRole(userId) == 'sodero';
-    }
-
-    function isAdminOrManager(userId) {
-      let role = getUserRole(userId);
-      return role == 'admin' || role == 'manager';
-    }
-
-    function isAdminOrSodero(userId) {
-      let role = getUserRole(userId);
-      return role == 'admin' || role == 'sodero';
-    }
-
-    // Función para verificar límite de usuarios por plan
-    function canCreateUser(tenantId) {
-      let tenant = get(/databases/$(database)/documents/tenants/$(tenantId));
-      if (tenant == null) return false;
-      
-      let tenantData = tenant.data;
-      let currentUserCount = get(/databases/$(database)/documents/users).where('tenantId', '==', tenantId).size();
-      
-      if (tenantData.plan == 'individual') return currentUserCount < 1;
-      if (tenantData.plan == 'business') return currentUserCount < 11;
-      if (tenantData.plan == 'enterprise') return true; // Sin límite
-      
-      return false;
-    }
-
-    // Reglas para usuarios
+    // Reglas para usuarios - Simplificadas para permitir el primer registro
     match /users/{userId} {
       allow create: if isAuthenticated() && 
         (request.auth.uid == userId || // Usuario creando su propio documento
-         (request.resource.data.tenantId != null && canCreateUser(request.resource.data.tenantId))); // Admin creando empleado
+         request.resource.data.rol == 'admin'); // Permitir creación de admin
       allow read, update, delete: if isAuthenticated() && 
         (isOwner(userId) || // Usuario puede ver/editar sus propios datos
-         isAdmin(request.auth.uid)); // Admin puede ver/editar todos los usuarios del tenant
+         isAdmin(request.auth.uid)); // Admin puede ver/editar todos los usuarios
     }
 
-    // Reglas para tenants
+    // Reglas para tenants - Simplificadas
     match /tenants/{tenantId} {
+      allow create: if isAuthenticated() && 
+        request.auth.uid == request.resource.data.adminUid; // Solo el admin puede crear su tenant
       allow read, write: if isAuthenticated() && 
         (request.auth.uid == resource.data.adminUid || // Owner del tenant
          isAdmin(request.auth.uid)); // Admin del sistema
@@ -72,7 +41,7 @@ service cloud.firestore {
     // Reglas para datos de tenant
     match /tenants/{tenantId}/{collection}/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == resource.data.tenantId || // Usuario del tenant
+        (request.auth.uid == resource.data.adminUid || // Owner del tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
