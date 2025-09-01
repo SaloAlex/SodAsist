@@ -43,12 +43,14 @@ export const useAuth = () => {
           const isFirstUser = await FirebaseService.isFirstUser();
           console.log('👥 Es primer usuario:', isFirstUser);
 
-          // Determinar el rol del usuario
-          let userRole: 'admin' | 'manager' | 'sodero';
+          // Determinar el rol del usuario según el plan
+          let userRole: 'owner' | 'admin' | 'manager' | 'sodero';
           if (isFirstUser) {
-            userRole = 'admin';
-            console.log('👑 Asignando rol ADMIN al primer usuario');
+            // El primer usuario es siempre 'owner' del plan individual
+            userRole = 'owner';
+            console.log('👑 Asignando rol OWNER al primer usuario');
           } else {
+            // Para usuarios adicionales, el rol se determina por el tenant
             userRole = 'sodero';
             console.log('👤 Asignando rol SODERO al usuario');
           }
@@ -57,9 +59,15 @@ export const useAuth = () => {
           let userPlan: 'individual' | 'business' | 'enterprise';
           if (isFirstUser) {
             // El primer usuario puede elegir su plan durante el registro
-            // Por ahora usamos 'individual' por defecto, pero esto se puede mejorar
-            userPlan = 'individual';
-            console.log('📋 Asignando plan INDIVIDUAL al primer usuario (se puede cambiar después)');
+            // Intentar obtener el plan del localStorage (se establece en PlanSelection)
+            const selectedPlan = localStorage.getItem('selectedPlan') as 'individual' | 'business' | 'enterprise' | null;
+            userPlan = selectedPlan || 'individual';
+            console.log('📋 Plan seleccionado durante registro:', userPlan);
+            
+            // Limpiar el localStorage después de usarlo
+            if (selectedPlan) {
+              localStorage.removeItem('selectedPlan');
+            }
           } else {
             // Para usuarios adicionales, el plan se determina por el tenant
             userPlan = 'individual'; // Por defecto, se puede cambiar después

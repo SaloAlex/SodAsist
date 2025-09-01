@@ -106,11 +106,15 @@ export interface User {
   uid: string;
   nombre: string;
   email: string;
-  rol: 'admin' | 'manager' | 'sodero';
-  plan: 'individual' | 'business' | 'enterprise'; // Agregar campo plan
-  tenantId: string; // ID del tenant/empresa al que pertenece
+  rol: 'owner' | 'admin' | 'manager' | 'sodero'; // Agregamos 'owner' como rol principal
+  plan: 'individual' | 'business' | 'enterprise';
+  tenantId: string;
   createdAt: Date;
   updatedAt?: Date;
+  isActive?: boolean; // Para empleados activos/inactivos
+  invitedBy?: string; // UID del usuario que invitó
+  invitedAt?: Date; // Fecha de invitación
+  acceptedAt?: Date; // Fecha de aceptación de la invitación
 }
 
 export interface Tenant {
@@ -120,8 +124,16 @@ export interface Tenant {
   plan: 'individual' | 'business' | 'enterprise';
   maxUsers: number; // 1, 11, o null (ilimitado)
   currentUserCount: number; // Contador actual de usuarios
-  adminUid: string;
-  empleados: string[]; // Array de UIDs de empleados
+  adminUid: string; // UID del owner
+  empleados: {
+    uid: string;
+    rol: 'admin' | 'manager' | 'sodero';
+    nombre: string;
+    email: string;
+    isActive: boolean;
+    invitedAt: Date;
+    acceptedAt?: Date;
+  }[]; // Array de empleados con información detallada
   createdAt: Date;
   updatedAt: Date;
   upgradeHistory?: {

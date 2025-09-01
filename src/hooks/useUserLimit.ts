@@ -37,7 +37,7 @@ export const useUserLimit = (): UseUserLimitReturn => {
 
       // Obtener el conteo actual de usuarios del tenant
       const users = await FirebaseService.getCollection('users');
-      const tenantUsers = users.filter(user => user.tenantId === userData.tenantId);
+      const tenantUsers = users.filter((user: any) => user.tenantId === userData.tenantId);
       const userCount = tenantUsers.length;
 
       setCurrentUserCount(userCount);
@@ -54,7 +54,7 @@ export const useUserLimit = (): UseUserLimitReturn => {
         setLimitReached(!canAdd);
 
         // Mostrar toast si se alcanzó el límite
-        if (!canAdd && !limitReached) {
+        if (!canAdd) {
           toast.error(
             `Has alcanzado el límite de ${plan.maxUsers} usuarios en tu plan ${plan.name}. Considera hacer upgrade.`,
             { duration: 5000 }
@@ -69,7 +69,7 @@ export const useUserLimit = (): UseUserLimitReturn => {
     } finally {
       setLoading(false);
     }
-  }, [userData, limitReached]);
+  }, [userData]);
 
   // Verificar límite cuando cambie el usuario o se monte el componente
   useEffect(() => {

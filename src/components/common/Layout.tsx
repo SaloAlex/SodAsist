@@ -65,13 +65,13 @@ export const Layout: React.FC = () => {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/clientes" element={<ProtectedRoute requiredRole="admin"><Clientes /></ProtectedRoute>}>
+              <Route path="/clientes" element={<ProtectedRoute requiredRole={['owner', 'admin']}><Clientes /></ProtectedRoute>}>
                 <Route index element={<ClientesList />} />
                 <Route path="new" element={<ClienteForm />} />
                 <Route path="nuevo" element={<Navigate to="/clientes/new" replace />} />
                 <Route path=":id" element={<ClienteForm />} />
               </Route>
-              <Route path="/entregas" element={<ProtectedRoute requiredRole="admin"><Entregas /></ProtectedRoute>}>
+              <Route path="/entregas" element={<ProtectedRoute requiredRole={['owner', 'admin']}><Entregas /></ProtectedRoute>}>
                 <Route index element={<EntregasList />} />
                 <Route path="new" element={<EntregaForm />} />
                 <Route path="nuevo" element={<Navigate to="/entregas/new" replace />} />
@@ -79,15 +79,15 @@ export const Layout: React.FC = () => {
               <Route 
                 path="/ruta-hoy" 
                 element={
-                  <ProtectedRoute requiredRole={['admin', 'manager', 'sodero']}>
+                  <ProtectedRoute requiredRole={['owner', 'admin', 'manager', 'sodero']}>
                     <RutaHoy />
                   </ProtectedRoute>
                 } 
               />
               <Route path="/ruta" element={<Navigate to="/ruta-hoy" replace />} />
-              <Route path="/inventario" element={<ProtectedRoute requiredRole="admin"><Inventario /></ProtectedRoute>} />
-              <Route path="/reportes" element={<ProtectedRoute requiredRole="admin"><Reportes /></ProtectedRoute>} />
-              <Route path="/ajustes" element={<ProtectedRoute requiredRole="admin"><Ajustes /></ProtectedRoute>} />
+              <Route path="/inventario" element={<ProtectedRoute requiredRole={['owner', 'admin']}><Inventario /></ProtectedRoute>} />
+              <Route path="/reportes" element={<ProtectedRoute requiredRole={['owner', 'admin']}><Reportes /></ProtectedRoute>} />
+              <Route path="/ajustes" element={<ProtectedRoute><Ajustes /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

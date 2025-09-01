@@ -5,7 +5,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'manager' | 'sodero' | ('admin' | 'manager' | 'sodero')[];
+  requiredRole?: 'owner' | 'admin' | 'manager' | 'sodero' | ('owner' | 'admin' | 'manager' | 'sodero')[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 

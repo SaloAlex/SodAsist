@@ -15,7 +15,7 @@ import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { Logo } from '../common/Logo';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuthStore } from '../../store/authStore';
-import { useNavigate } from 'react-router-dom';
+
 import toast from 'react-hot-toast';
 import { PlanSelection } from './PlanSelection';
 
@@ -35,7 +35,6 @@ export const LoginForm: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<'individual' | 'business' | 'enterprise'>('individual');
   
   const { user } = useAuthStore();
-  const navigate = useNavigate();
 
   const {
     register,
@@ -55,89 +54,29 @@ export const LoginForm: React.FC = () => {
       currentUrl: window.location.href
     });
     
-    if (user && loginSuccess) {
-      console.log('✅ LoginForm - Iniciando redirección...');
-      toast.success('Redirigiendo al dashboard...', { duration: 2000 });
+    // Para registro exitoso, redirigir inmediatamente cuando se tenga el usuario
+    if (user && loginSuccess && isRegistering) {
+      console.log('✅ LoginForm - Usuario registrado, redirigiendo al dashboard...');
+      toast.success('¡Bienvenido! Redirigiendo al dashboard...', { duration: 2000 });
       
-      // Múltiples estrategias de redirección
-      const redirectStrategies = [
-        () => {
-          console.log('🚀 Estrategia 1: window.location.href');
-          window.location.href = window.location.origin + '/';
-        },
-        () => {
-          console.log('🚀 Estrategia 2: window.location.replace');
-          window.location.replace(window.location.origin + '/');
-        },
-        () => {
-          console.log('🚀 Estrategia 3: navigate con replace');
-          navigate('/', { replace: true });
-        },
-        () => {
-          console.log('🚀 Estrategia 4: window.location.assign');
-          window.location.assign(window.location.origin + '/');
-        }
-      ];
-      
-      // Intentar estrategias secuencialmente
-      let strategyIndex = 0;
-      const tryRedirect = () => {
-        if (strategyIndex < redirectStrategies.length) {
-          try {
-            redirectStrategies[strategyIndex]();
-            strategyIndex++;
-            
-            // Si después de 2 segundos no funcionó, probar siguiente estrategia
-            setTimeout(() => {
-              if (window.location.pathname === '/login') {
-                console.log(`❌ Estrategia ${strategyIndex} falló, probando siguiente...`);
-                tryRedirect();
-              }
-            }, 2000);
-          } catch (error) {
-            console.error(`❌ Error en estrategia ${strategyIndex + 1}:`, error);
-            strategyIndex++;
-            tryRedirect();
-          }
-        } else {
-          console.error('❌ Todas las estrategias de redirección fallaron');
-          toast.error('Error en redirección. Haz clic en el botón de abajo.', { duration: 5000 });
-          
-          // Mostrar botón manual como último recurso
-          const button = document.createElement('button');
-          button.innerHTML = '🏠 Ir al Dashboard';
-          button.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 9999;
-            background: #4CAF50;
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          `;
-          button.onclick = () => {
-            document.body.removeChild(button);
-            window.open(window.location.origin + '/', '_self');
-          };
-          document.body.appendChild(button);
-        }
-      };
-      
-      // Iniciar proceso de redirección después de 1.5 segundos
-      const timer = setTimeout(tryRedirect, 1500);
-      
-      return () => {
-        console.log('🧹 LoginForm - Limpiando timer de redirección');
-        clearTimeout(timer);
-      };
+      // Redirección simple y directa para usuarios registrados
+      setTimeout(() => {
+        console.log('🚀 Redirección para usuario registrado');
+        window.location.href = '/';
+      }, 1500);
     }
-  }, [user, loginSuccess, navigate]);
+    // Para login exitoso, redirigir cuando se tenga el usuario
+    else if (user && loginSuccess && !isRegistering) {
+      console.log('✅ LoginForm - Usuario autenticado, redirigiendo al dashboard...');
+      toast.success('Sesión iniciada correctamente', { duration: 2000 });
+      
+      // Redirección simple y directa para usuarios que inician sesión
+      setTimeout(() => {
+        console.log('🚀 Redirección para usuario autenticado');
+        window.location.href = '/';
+      }, 1000);
+    }
+  }, [user, loginSuccess, isRegistering]);
 
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
@@ -147,14 +86,21 @@ export const LoginForm: React.FC = () => {
         console.log('🔄 Iniciando registro de usuario...');
         console.log('📋 Plan seleccionado:', selectedPlan);
         
+        // Guardar el plan seleccionado en localStorage para que useAuth lo pueda usar
+        localStorage.setItem('selectedPlan', selectedPlan);
+        console.log('💾 Plan guardado en localStorage:', selectedPlan);
+        
         // Registrar nuevo usuario en Firebase Auth
         await createUserWithEmailAndPassword(auth, data.email, data.password);
         console.log('✅ Usuario creado en Firebase Auth');
         
         // El listener de useAuth se encargará de crear el documento con el plan seleccionado
-        // El plan se pasará a través del contexto de autenticación
-        toast.success(`Usuario registrado correctamente con plan ${selectedPlan}`);
+        // El plan se obtiene del localStorage
+        toast.success(`Usuario registrado correctamente con plan ${selectedPlan}. Redirigiendo...`, { duration: 3000 });
         setLoginSuccess(true);
+        
+        // Mostrar mensaje adicional para el usuario
+        console.log('🎯 Usuario registrado exitosamente, esperando redirección automática...');
       } else {
         // Iniciar sesión
         await signInWithEmailAndPassword(auth, data.email, data.password);
