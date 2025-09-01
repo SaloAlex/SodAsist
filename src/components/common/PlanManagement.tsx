@@ -14,7 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 
 export const PlanManagement: React.FC = () => {
-  const { userData } = useAuthStore();
+  const { userData, setUserData } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
   const [showDowngradeOptions, setShowDowngradeOptions] = useState(false);
@@ -24,22 +24,72 @@ export const PlanManagement: React.FC = () => {
   const canDowngrade = PlanManagementService.canDowngrade(currentPlan);
 
   const handlePlanChange = async (newPlan: 'individual' | 'business' | 'enterprise') => {
+    console.log('🔄 Iniciando cambio de plan:', { 
+      newPlan, 
+      currentPlan, 
+      userData: userData ? {
+        uid: userData.uid,
+        email: userData.email,
+        tenantId: userData.tenantId,
+        plan: userData.plan
+      } : null
+    });
+    
+    // Validar que no se esté intentando cambiar al mismo plan
+    if (newPlan === currentPlan) {
+      toast.error(`Ya tienes el plan ${newPlan}. No se puede cambiar al mismo plan.`);
+      console.warn('⚠️ Intento de cambio al mismo plan:', { currentPlan, newPlan });
+      return;
+    }
+    
     if (!userData?.tenantId) {
       toast.error('No se pudo identificar el tenant');
+      console.error('❌ TenantId no encontrado en userData:', userData);
       return;
     }
 
     setIsLoading(true);
     try {
       const reason = newPlan === 'individual' ? 'manual_downgrade' : 'manual_upgrade';
+      console.log('📞 Llamando a PlanManagementService.changePlan con:', {
+        tenantId: userData.tenantId,
+        newPlan,
+        reason
+      });
+      
       const success = await PlanManagementService.changePlan(userData.tenantId, newPlan, reason);
       
-      if (success) {
-        // Recargar la página para actualizar el estado
-        window.location.reload();
-      }
+             if (success) {
+         // Actualizar el estado local del usuario
+         console.log('✅ Plan cambiado exitosamente, actualizando estado local...');
+         
+         // Actualizar el store local con el nuevo plan
+         if (userData) {
+           const updatedUserData = {
+             ...userData,
+             plan: newPlan,
+             updatedAt: new Date()
+           };
+           
+           console.log('🔄 Actualizando store local:', {
+             fromPlan: userData.plan,
+             toPlan: newPlan
+           });
+           
+           setUserData(updatedUserData);
+           
+           toast.success(`Plan actualizado a ${newPlan} en tu perfil`);
+           console.log('✅ Store local actualizado correctamente');
+         }
+         
+         // Recargar la página para asegurar sincronización completa
+         setTimeout(() => {
+           window.location.reload();
+         }, 1000);
+       }
     } catch (error) {
       console.error('Error cambiando plan:', error);
+      toast.error(`Error al cambiar plan: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     } finally {
       setIsLoading(false);
     }
@@ -195,6 +245,76 @@ export const PlanManagement: React.FC = () => {
                 <li>• Los empleados excedidos se marcarán como inactivos</li>
               </ul>
             </div>
+          </div>
+        </div>
+        
+        {/* Sync Button */}
+        <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-start space-x-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                <p className="font-medium">⚠️ Problema de sincronización detectado</p>
+                <p>El documento del tenant no existe o no se puede encontrar. Esto puede causar problemas con la gestión de planes.</p>
+              </div>
+            </div>
+                         <button
+               onClick={async () => {
+                 console.log('🔄 Botón Crear/Reparar Tenant activado');
+                 console.log('👤 userData:', userData);
+                 
+                 if (!userData?.uid) {
+                   toast.error('No se pudo identificar el usuario');
+                   console.error('❌ UID no encontrado en userData');
+                   return;
+                 }
+                 
+                 if (!userData?.tenantId) {
+                   toast.error('No se pudo identificar el tenant');
+                   console.error('❌ TenantId no encontrado en userData');
+                   return;
+                 }
+                 
+                 console.log('✅ Datos válidos, iniciando sincronización...');
+                 setIsLoading(true);
+                 
+                 try {
+                   console.log('📞 Llamando a syncUserPlanWithTenant con:', {
+                     userId: userData.uid,
+                     tenantId: userData.tenantId
+                   });
+                   
+                   const success = await PlanManagementService.syncUserPlanWithTenant(
+                     userData.uid, 
+                     userData.tenantId
+                   );
+                   
+                   console.log('📋 Resultado de sincronización:', success);
+                   
+                   if (success) {
+                     toast.success('Tenant sincronizado correctamente. Actualizando perfil...');
+                     console.log('✅ Sincronización exitosa, actualizando perfil...');
+                     
+                     // Recargar la página para asegurar sincronización completa
+                     setTimeout(() => {
+                       window.location.reload();
+                     }, 1500);
+                   } else {
+                     toast.error('La sincronización no fue exitosa');
+                     console.warn('⚠️ Sincronización no exitosa');
+                   }
+                 } catch (error) {
+                   console.error('❌ Error sincronizando:', error);
+                   toast.error(`Error al sincronizar: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+                 } finally {
+                   setIsLoading(false);
+                 }
+               }}
+               disabled={isLoading}
+               className="px-4 py-2 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 transition-colors disabled:opacity-50"
+             >
+               {isLoading ? 'Sincronizando...' : 'Crear/Reparar Tenant'}
+             </button>
           </div>
         </div>
       </div>

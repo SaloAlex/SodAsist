@@ -101,12 +101,28 @@ export const useAuth = () => {
           // Si es el primer usuario, crear también el documento del tenant
           if (isFirstUser) {
             try {
+              // Calcular maxUsers según el plan seleccionado
+              let maxUsers: number;
+              switch (userPlan) {
+                case 'individual':
+                  maxUsers = 1;
+                  break;
+                case 'business':
+                  maxUsers = 11;
+                  break;
+                case 'enterprise':
+                  maxUsers = 999; // Número alto para representar "ilimitado"
+                  break;
+                default:
+                  maxUsers = 1;
+              }
+              
               await FirebaseService.createTenantDocument({
                 id: firebaseUser.email,
                 nombre: firebaseUser.displayName || 'Mi Empresa',
                 email: firebaseUser.email,
                 plan: userPlan,
-                maxUsers: 1,
+                maxUsers: maxUsers,
                 currentUserCount: 1,
                 adminUid: firebaseUser.uid,
                 empleados: [],
