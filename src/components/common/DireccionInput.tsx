@@ -61,6 +61,14 @@ export const DireccionInput: React.FC<DireccionInputProps> = ({
     }
   }, [value, onValidation]);
 
+  // Mostrar el valor inicial en el input cuando se carga
+  useEffect(() => {
+    if (value && !inputValue) {
+      setInputValue(value);
+      setHasSelectedPlace(true);
+    }
+  }, [value, inputValue]);
+
   const obtenerDetallesLugar = useCallback(async (placeId: string, intentos = 0): Promise<google.maps.places.PlaceResult> => {
     if (!placesServiceRef.current) {
       throw new Error('Places service no inicializado');
@@ -250,10 +258,29 @@ export const DireccionInput: React.FC<DireccionInputProps> = ({
 
   return (
     <div className="relative">
+      {/* Mostrar input visible cuando hay un valor inicial o cuando no se ha cargado Google Places */}
+      {(inputValue || !isLoaded) && (
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => {
+            const newValue = e.target.value;
+            setInputValue(newValue);
+            setHasSelectedPlace(false);
+          }}
+          className={className}
+          placeholder={placeholder}
+          readOnly={isLoaded && !loadError} // Solo editable cuando Google Places no está disponible
+        />
+      )}
+      
+      {/* Contenedor para Google Places Autocomplete */}
       <div
         ref={containerRef}
         className="google-places-autocomplete"
+        style={{ display: isLoaded && !loadError ? 'block' : 'none' }}
       />
+      
       {loading && (
         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
           <LoadingSpinner className="w-5 h-5" />

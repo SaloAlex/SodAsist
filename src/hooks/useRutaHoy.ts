@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ClienteConRuta, RutaOptimizada, Visita, EstadoVisita } from '../types';
 import { FirebaseService } from '../services/firebaseService';
 import { RouteOptimizer } from '../services/routeOptimizer';
 import { ExportService, ExportData } from '../services/exportService';
 import { collection, query, where, orderBy, getDocs, doc, Timestamp, limit } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import { useAuthStore } from '../store/authStore';
 import { useGeolocation } from './useGeolocation';
 import toast from 'react-hot-toast';
@@ -44,16 +44,36 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   const { coords: ubicacionActual, error: errorUbicacion, loading: loadingLocation } = useGeolocation();
   
   const hasLoadedRef = useRef(false);
+  const lastDateRef = useRef<string>('');
 
-  // Monitor cambios en geolocalización - solo para desarrollo
-  useEffect(() => {
-    if (ubicacionActual && !hasLoadedRef.current) {
-      // Ubicación obtenida correctamente
+  // Función para verificar si cambió el día
+  const checkDateChange = useCallback(() => {
+    const today = new Date().toDateString();
+    if (lastDateRef.current !== today) {
+      lastDateRef.current = today;
+      setVisitasCompletadas(new Map());
+      hasLoadedRef.current = false;
+      return true;
     }
-  }, [ubicacionActual, errorUbicacion, loadingLocation]);
+    return false;
+  }, []);
+
+     // Monitor cambios en geolocalización - solo para desarrollo
+   useEffect(() => {
+     if (ubicacionActual && !hasLoadedRef.current) {
+       // Ubicación obtenida correctamente
+     }
+   }, [ubicacionActual, errorUbicacion, loadingLocation]);
+
+   
 
   // Cargar datos solo una vez - SIN mountedRef
   useEffect(() => {
+    // Verificar si cambió el día
+    if (checkDateChange()) {
+      return; // El estado se limpió, se ejecutará en el siguiente render
+    }
+    
     if (hasLoadedRef.current || authLoading || !userData) {
       return;
     }
@@ -63,33 +83,81 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         setLoading(true);
         setError(null);
 
-        if (!['admin', 'sodero'].includes(userData.rol)) {
-          throw new Error('No tienes permisos para ver esta información');
+        // Permitir acceso a admin, sodero, owner y manager
+        if (!['admin', 'sodero', 'owner', 'manager'].includes(userData.rol)) {
+          throw new Error(`No tienes permisos para ver esta información. Rol actual: ${userData.rol}`);
         }
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        
+        
 
+                 // Obtener clientes usando el servicio de Firebase
+         let clientesData: ClienteConRuta[];
+         try {
+           clientesData = await FirebaseService.getCollection<ClienteConRuta>('clientes');
+           
+           
+         } catch (error) {
+           console.error('❌ Error cargando clientes:', error);
+           throw error;
+         }
+        
+        // Obtener visitas usando la ruta del tenant
+        const user = auth.currentUser;
+        if (!user || !user.email) {
+          throw new Error('Usuario no autenticado o sin email');
+        }
+        
+        
+        
         const visitasQuery = query(
-          collection(db, 'visitas'),
+          collection(db, `tenants/${user.email}/visitas`),
           where('fecha', '>=', Timestamp.fromDate(today)),
           orderBy('fecha', 'desc')
         );
+        
+        const visitasData = await getDocs(visitasQuery);
 
-        const [clientesData, visitasData] = await Promise.all([
-          FirebaseService.getCollection<ClienteConRuta>('clientes'),
-          getDocs(visitasQuery)
-        ]);
+                 // Procesar visitas - SOLO las del día actual
+         const visitasMap = new Map<string, Visita>();
+         
 
-        // Procesar visitas
-        const visitasMap = new Map<string, Visita>();
-        visitasData.docs.forEach(doc => {
-          const visita = { id: doc.id, ...doc.data() } as Visita;
-          if (visita.completada) {
-            visitasMap.set(visita.clienteId, visita);
-          }
-        });
-        setVisitasCompletadas(visitasMap);
+         
+         visitasData.docs.forEach(doc => {
+           const visita = { id: doc.id, ...doc.data() } as Visita;
+           
+           // Verificar que la visita sea realmente del día actual
+           const visitaDate = visita.fecha instanceof Date ? visita.fecha : new Date(visita.fecha.seconds * 1000);
+           const isToday = visitaDate.getDate() === today.getDate() && 
+                          visitaDate.getMonth() === today.getMonth() && 
+                          visitaDate.getFullYear() === today.getFullYear();
+           
+           
+           
+           // SOLO agregar visitas que sean del día actual Y estén completadas
+           if (visita.completada && isToday) {
+             // Verificar que el cliente exista en la lista actual
+             const clienteExiste = clientesData.some(c => c.id === visita.clienteId);
+             if (clienteExiste) {
+               visitasMap.set(visita.clienteId, visita);
+             }
+                        }
+         });
+         
+
+         
+         // LIMPIEZA ADICIONAL: Solo mantener visitas de clientes que existen hoy
+         const visitasFinales = new Map<string, Visita>();
+         visitasMap.forEach((visita, clienteId) => {
+           if (clientesData.some(c => c.id === clienteId)) {
+             visitasFinales.set(clienteId, visita);
+           }
+         });
+         
+
+         setVisitasCompletadas(visitasFinales);
 
         // Filtrar clientes para hoy
         const today2 = new Date();
@@ -114,6 +182,8 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
             default: return false;
           }
         });
+
+        
 
         setClientes(clientesFiltrados);
 
@@ -146,7 +216,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
     };
 
     cargarDatos();
-  }, [authLoading, userData]);
+  }, [authLoading, userData, checkDateChange]);
 
   // Funciones implementadas
   const reoptimizarRuta = async () => {
@@ -162,10 +232,16 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
       // Mostrar toast de carga
       const loadingToast = toast.loading('Optimizando ruta...', { duration: Infinity });
 
-      // Filtrar solo clientes no completados
-      const clientesPendientes = clientes.filter(cliente => 
-        !visitasCompletadas.has(cliente.id!)
-      );
+      
+
+             // Filtrar solo clientes no completados
+       const clientesPendientes = clientes.filter(cliente => 
+         !visitasCompletadas.has(cliente.id!)
+       );
+
+       
+
+      
 
       if (clientesPendientes.length === 0) {
         toast.dismiss(loadingToast);
@@ -178,8 +254,8 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         ubicacionInicial: ubicacionActual
       } : {};
 
-      // Optimizar la ruta
-      const resultado = await RouteOptimizer.optimizeRoute(clientesPendientes, options);
+                     // Optimizar la ruta
+        const resultado = await RouteOptimizer.optimizeRoute(clientesPendientes, options);
       
       // Actualizar el estado con la ruta optimizada
       const rutaOptimizada: RutaOptimizada = {
@@ -196,9 +272,9 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         zonas: Array.from(new Set(resultado.clientesOrdenados.map(c => c.zona).filter(Boolean))) as string[]
       };
 
-      // Actualizar estados
-      setClientes(resultado.clientesOrdenados);
-      setRutaOptimizada(rutaOptimizada);
+                            // Actualizar estados
+        setClientes(resultado.clientesOrdenados);
+        setRutaOptimizada(rutaOptimizada);
 
       // Mostrar estadísticas
       const distanciaKm = (resultado.stats.distanciaTotal / 1000).toFixed(1);
@@ -344,8 +420,13 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
 
   const obtenerHistorialVisitas = async (clienteId: string): Promise<Visita[]> => {
     try {
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        throw new Error('Usuario no autenticado');
+      }
+      
       const visitasQuery = query(
-        collection(db, 'visitas'),
+        collection(db, `tenants/${user.email}/visitas`),
         where('clienteId', '==', clienteId),
         orderBy('fecha', 'desc'),
         limit(10)
@@ -426,6 +507,28 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   const enviarNotificacion = async () => {
     toast.success('Función de notificaciones pendiente');
   };
+  
+  // Función para limpiar visitas inválidas
+  const limpiarVisitasInvalidas = useCallback(() => {
+    if (clientes.length === 0) return;
+    
+    const visitasValidas = new Map<string, Visita>();
+    visitasCompletadas.forEach((visita, clienteId) => {
+      // Solo mantener visitas de clientes que existen hoy
+      if (clientes.some(c => c.id === clienteId)) {
+        visitasValidas.set(clienteId, visita);
+      }
+    });
+    
+         if (visitasValidas.size !== visitasCompletadas.size) {
+       setVisitasCompletadas(visitasValidas);
+     }
+  }, [clientes, visitasCompletadas]);
+  
+  // Efecto para limpiar visitas cuando cambian los clientes
+  useEffect(() => {
+    limpiarVisitasInvalidas();
+  }, [clientes, limpiarVisitasInvalidas]);
 
   return {
     clientes,

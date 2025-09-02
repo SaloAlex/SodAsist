@@ -32,16 +32,16 @@ service cloud.firestore {
     // Reglas para tenants - Simplificadas
     match /tenants/{tenantId} {
       allow create: if isAuthenticated() && 
-        request.auth.uid == request.resource.data.adminUid; // Solo el admin puede crear su tenant
+        request.auth.token.email == tenantId; // Solo el usuario puede crear su propio tenant
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == resource.data.adminUid || // Owner del tenant
+        (request.auth.token.email == tenantId || // Owner del tenant (usando email)
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     // Reglas para datos de tenant
     match /tenants/{tenantId}/{collection}/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == resource.data.adminUid || // Owner del tenant
+        (request.auth.token.email == tenantId || // Owner del tenant (usando email)
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
@@ -50,6 +50,31 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && 
         (collection == 'users' || // Usuarios (manejado arriba)
          collection == 'tenants'); // Tenants (manejado arriba)
+    }
+
+    // Reglas específicas para colecciones comunes en tenants (backup)
+    match /tenants/{tenantId}/clientes/{document=**} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.token.email == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/entregas/{document=**} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.token.email == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/inventario/{document=**} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.token.email == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/productos/{document=**} {
+      allow read, write: if isAuthenticated() && 
+        (request.auth.token.email == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
     }
   }
 }

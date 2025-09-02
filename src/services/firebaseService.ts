@@ -154,7 +154,22 @@ export class FirebaseService {
 
   static async deleteDocument(collectionName: string, id: string): Promise<void> {
     try {
-      const docRef = doc(db, collectionName, id);
+      // Para la colección users, usar la ruta directa
+      const isUsersCollection = collectionName === 'users';
+      
+      let docRef;
+      if (isUsersCollection) {
+        docRef = doc(db, collectionName, id);
+      } else {
+        // Para otras colecciones, usar el email del usuario como tenant ID
+        const user = auth.currentUser;
+        if (!user || !user.email) {
+          throw new Error('Usuario no autenticado o sin email');
+        }
+        const collectionPath = `tenants/${user.email}/${collectionName}`;
+        docRef = doc(db, collectionPath, id);
+      }
+      
       await deleteDoc(docRef);
     } catch (error) {
       console.error(`Error al eliminar documento ${collectionName}/${id}:`, error);

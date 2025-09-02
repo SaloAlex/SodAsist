@@ -17,6 +17,8 @@ export const ClientesList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [observacionesModalOpen, setObservacionesModalOpen] = useState(false);
   const [observacionesCliente, setObservacionesCliente] = useState<{nombre: string, observaciones: string} | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [clienteToDelete, setClienteToDelete] = useState<Cliente | null>(null);
   const navigate = useNavigate();
   const [filters, setFilters] = useState<ClientesFilters>({
     searchTerm: '',
@@ -126,19 +128,29 @@ export const ClientesList: React.FC = () => {
     });
   }, [clientes, filters]);
 
-  const handleDeleteCliente = async (cliente: Cliente) => {
-    if (!cliente.id) return;
+  const handleDeleteCliente = (cliente: Cliente) => {
+    setClienteToDelete(cliente);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDeleteCliente = async () => {
+    if (!clienteToDelete?.id) return;
     
-    if (window.confirm(`¿Estás seguro de eliminar a ${cliente.nombre}?`)) {
-      try {
-        await FirebaseService.deleteDocument('clientes', cliente.id);
-        toast.success('Cliente eliminado correctamente');
-        loadClientes();
-      } catch (error) {
-        console.error('Error al eliminar cliente:', error);
-        toast.error('Error al eliminar cliente');
-      }
+    try {
+      await FirebaseService.deleteDocument('clientes', clienteToDelete.id);
+      toast.success('Cliente eliminado correctamente');
+      loadClientes();
+      setDeleteModalOpen(false);
+      setClienteToDelete(null);
+    } catch (error) {
+      console.error('Error al eliminar cliente:', error);
+      toast.error('Error al eliminar cliente');
     }
+  };
+
+  const cancelDeleteCliente = () => {
+    setDeleteModalOpen(false);
+    setClienteToDelete(null);
   };
 
   const handleLlamar = (cliente: Cliente) => {
@@ -390,6 +402,58 @@ export const ClientesList: React.FC = () => {
                   className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400"
                 >
                   Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {deleteModalOpen && clienteToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
+                    <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  </div>
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                    Eliminar Cliente
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Esta acción no se puede deshacer
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-700 dark:text-gray-300">
+                  ¿Estás seguro de que quieres eliminar a{' '}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {clienteToDelete.nombre}
+                  </span>?
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  Se eliminarán todos los datos asociados a este cliente, incluyendo su historial de entregas.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={cancelDeleteCliente}
+                  className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDeleteCliente}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                >
+                  Eliminar Cliente
                 </button>
               </div>
             </div>

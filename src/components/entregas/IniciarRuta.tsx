@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { ClienteConRuta, EstadoVisita } from '../../types';
 import { FaRoute, FaCheckCircle, FaRegCircle } from 'react-icons/fa';
 
@@ -47,6 +47,9 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
       : null
   );
   const [puntoFin, setPuntoFin] = useState<PuntoRuta | null>(null);
+  
+  // Ref para evitar bucles infinitos en el reordenamiento
+  const lastReorderRef = useRef<string>('');
 
   // Función para calcular distancia entre dos puntos
   const calcularDistancia = useCallback((coord1: { lat: number; lng: number }, coord2: { lat: number; lng: number }): number => {
@@ -90,12 +93,26 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
     });
   }, [calcularDistancia]);
 
-  // Efecto para reordenar la ruta cuando cambian los puntos de inicio/fin
-  useEffect(() => {
+  // Función de reordenamiento memoizada
+  const reordenarRuta = useCallback(() => {
     if (!onReorderRoute || !clientes.length) return;
 
     // Evitar reordenar si no hay puntos de inicio o fin seleccionados
     if (!puntoInicio && !puntoFin) return;
+
+    // Evitar reordenar si solo se cambió el punto final y no hay punto de inicio
+    if (!puntoInicio && puntoFin) return;
+
+    // Crear una clave única para identificar el estado actual
+    const currentState = JSON.stringify({ 
+      puntoInicio: puntoInicio?.nombre, 
+      puntoFin: puntoFin?.nombre,
+      clientesCount: clientes.length 
+    });
+
+    // Evitar reordenar si ya se procesó este estado
+    if (lastReorderRef.current === currentState) return;
+    lastReorderRef.current = currentState;
 
     let clientesOrdenados = [...clientes];
     let huboReordenamiento = false;
@@ -109,8 +126,8 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
       }
     }
 
-    // Si hay punto final, reorganizar para que el último cliente sea el más cercano al punto final
-    if (puntoFin) {
+    // Si hay punto final Y punto de inicio, reorganizar para que el último cliente sea el más cercano al punto final
+    if (puntoFin && puntoInicio) {
       const ordenados = ordenarClientesPorDistancia(clientesOrdenados, puntoFin, true);
       if (JSON.stringify(ordenados) !== JSON.stringify(clientesOrdenados)) {
         clientesOrdenados = ordenados;
@@ -123,6 +140,11 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
       onReorderRoute(clientesOrdenados);
     }
   }, [puntoInicio, puntoFin, clientes, onReorderRoute, ordenarClientesPorDistancia]);
+
+  // Efecto para ejecutar el reordenamiento cuando cambian los puntos
+  useEffect(() => {
+    reordenarRuta();
+  }, [reordenarRuta]);
 
   // URL de Google Maps memoizada
   const googleMapsUrl = useMemo(() => {
@@ -141,11 +163,22 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
       url += `&destination=${destino.lat},${destino.lng}`;
     }
 
-    // Waypoints (puntos intermedios)
-    const waypoints = clientes
-      .slice(0, -1)
-      .filter(c => c.coords)
-      .map(c => `${c.coords?.lat},${c.coords?.lng}`);
+    // Waypoints (TODOS los clientes excepto el destino final)
+    let waypoints: string[] = [];
+    
+    // Si inicio y fin son la misma ubicación (mi ubicación actual), incluir TODOS los clientes
+    if (puntoInicio?.nombre === 'Mi ubicación actual' && puntoFin?.nombre === 'Mi ubicación actual') {
+      waypoints = clientes
+        .filter(c => c.coords)
+        .map(c => c.coords ? `${c.coords.lat},${c.coords.lng}` : '')
+        .filter(coord => coord !== '');
+    } else {
+      // Caso normal: excluir solo el último cliente (destino final)
+      waypoints = clientes
+        .filter(c => c.coords && c.id !== clientes[clientes.length - 1].id)
+        .map(c => c.coords ? `${c.coords.lat},${c.coords.lng}` : '')
+        .filter(coord => coord !== '');
+    }
     
     if (waypoints.length > 0) {
       url += `&waypoints=${waypoints.join('|')}`;

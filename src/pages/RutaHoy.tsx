@@ -28,8 +28,12 @@ export const RutaHoy: React.FC = () => {
     exportarRuta,
     actualizarOrdenManual,
     filtrarPorZona,
-    zonaActual
+    zonaActual,
+    error
   } = useRutaHoy();
+  
+  // DEBUG: Verificar cuando se ejecuta el componente
+  
 
   const { loading: authLoading, userData } = useAuthStore();
 
@@ -43,6 +47,9 @@ export const RutaHoy: React.FC = () => {
   // Calcular estadísticas
   const clientesCompletados = visitasCompletadas.size;
   const porcentajeCompletado = clientes.length > 0 ? ((clientesCompletados / clientes.length) * 100).toFixed(0) : '0';
+  
+  // DEBUG: Verificar estado de visitas
+  
 
   // Calcular zonas disponibles
   const zonasDisponibles = useMemo(() => {
@@ -169,6 +176,28 @@ export const RutaHoy: React.FC = () => {
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
         <LoadingSpinner size="lg" />
         <p className="mt-4 text-gray-600 dark:text-gray-300">Cargando datos...</p>
+      </div>
+    );
+  }
+
+  // Mostrar error si existe
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-4 dark:text-white">Error al cargar la ruta</h1>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md mx-auto">
+            <p className="text-red-800 dark:text-red-200 mb-4">
+              {error.message || 'Error desconocido al cargar los datos'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -333,17 +362,23 @@ export const RutaHoy: React.FC = () => {
 
       {/* Filtros */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-4 sm:mb-6">
-        <div className="flex items-center">
-          <select
-            value={zonaActual || ''}
-            onChange={(e) => filtrarPorZona(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white min-h-[40px]"
-          >
-            <option value="">Todas las Zonas</option>
-            {zonasDisponibles.map((zona) => (
-              <option key={zona} value={zona}>{zona}</option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          {/* Filtro de zona */}
+          <div className="w-full">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Filtrar por zona
+            </label>
+            <select
+              value={zonaActual || ''}
+              onChange={(e) => filtrarPorZona(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white min-h-[40px]"
+            >
+              <option value="">Todas las Zonas</option>
+              {zonasDisponibles.map((zona) => (
+                <option key={zona} value={zona}>{zona}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -351,25 +386,44 @@ export const RutaHoy: React.FC = () => {
         {/* Lista de clientes */}
         <div className="space-y-4">
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <select
-              value={zonaActual || ''}
-              onChange={(e) => filtrarPorZona(e.target.value)}
-              className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 transition-colors mb-4"
-            >
-              <option value="">Todas las zonas</option>
-              {zonasDisponibles.map((zona) => (
-                <option key={zona} value={zona}>
-                  {zona}
-                </option>
-              ))}
-            </select>
-
-            <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div 
-                className="bg-green-500 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${(clientesCompletados / clientes.length) * 100}%` }}
-              />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Clientes del Día
+              </h3>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {clientes.length} total
+                </span>
+                <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+                  {clientesCompletados} completados
+                </span>
+              </div>
             </div>
+            
+            {/* Indicador de estado de la ruta */}
+            {rutaOptimizada && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center">
+                      <FaRoute className="mr-2 text-blue-500" />
+                      <span className="text-blue-700 dark:text-blue-300">
+                        {(rutaOptimizada.distanciaTotal / 1000).toFixed(1)} km
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <FaClock className="mr-2 text-green-500" />
+                      <span className="text-green-700 dark:text-green-300">
+                        {Math.floor(rutaOptimizada.tiempoEstimadoTotal / 3600)}h {Math.floor((rutaOptimizada.tiempoEstimadoTotal % 3600) / 60)}m
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded-full">
+                    Ruta optimizada
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <DragDropContext onDragEnd={handleDragEnd}>

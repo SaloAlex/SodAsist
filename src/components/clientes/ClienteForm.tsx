@@ -48,8 +48,9 @@ type ClienteFormData = yup.InferType<typeof schema>;
 export const ClienteForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>(undefined);
   const [direccionError, setDireccionError] = useState<string | null>(null);
+  const [clienteToEdit, setClienteToEdit] = useState<Cliente | null>(null);
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
@@ -79,6 +80,8 @@ export const ClienteForm: React.FC = () => {
     try {
       const cliente = await FirebaseService.getDocument<Cliente>('clientes', clienteId);
       if (cliente) {
+        console.log('🔍 Cliente cargado:', cliente);
+        setClienteToEdit(cliente);
         setValue('nombre', cliente.nombre);
         setValue('telefono', cliente.telefono);
         setValue('direccion', cliente.direccion);
@@ -87,9 +90,16 @@ export const ClienteForm: React.FC = () => {
         setValue('observaciones', cliente.observaciones || '');
 
         if (cliente.direccionDetalles) {
+          console.log('📍 Dirección detalles encontrados:', cliente.direccionDetalles);
           setValue('direccionDetalles', cliente.direccionDetalles);
           setCoords(cliente.direccionDetalles.coords);
+        } else if (cliente.coords) {
+          console.log('📍 Coordenadas encontradas:', cliente.coords);
+          // Si no hay direccionDetalles pero sí hay coords, crear un objeto básico
+          setCoords(cliente.coords);
         }
+        
+        console.log('📝 Valores establecidos en el formulario');
       }
     } catch (error) {
       console.error('Error al cargar cliente:', error);
@@ -106,6 +116,18 @@ export const ClienteForm: React.FC = () => {
   }, [id, loadCliente]);
 
   const onSubmit = async (data: ClienteFormData) => {
+    // En modo de edición, permitir usar coordenadas existentes si no hay nuevas
+    if (!coords && !isEdit) {
+      setDireccionError('Por favor, selecciona una dirección válida del autocompletado');
+      return;
+    }
+    
+    // Si estamos editando y no hay nuevas coordenadas, usar las existentes
+    if (isEdit && !coords && clienteToEdit?.coords) {
+      setCoords(clienteToEdit.coords);
+    }
+    
+    // Asegurar que tenemos coordenadas válidas
     if (!coords) {
       setDireccionError('Por favor, selecciona una dirección válida del autocompletado');
       return;
@@ -245,8 +267,26 @@ export const ClienteForm: React.FC = () => {
                   <Home className="inline h-4 w-4 mr-2" />
                   Dirección
                 </label>
+                
+                {/* En modo de edición, mostrar input simple si ya hay dirección */}
+                {isEdit && direccion ? (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={direccion}
+                      onChange={(e) => setValue('direccion', e.target.value)}
+                      className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Dirección del cliente"
+                    />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Para cambiar la ubicación en el mapa, usa el campo de búsqueda de abajo
+                    </p>
+                  </div>
+                ) : null}
+                
+                {/* Campo de búsqueda de dirección */}
                 <DireccionInput
-                  value={direccion}
+                  value={isEdit ? '' : direccion} // En modo de edición, empezar vacío para nueva búsqueda
                   onChange={(detalles: DireccionDetalles) => {
                     setValue('direccion', detalles.direccionCompleta);
                     setValue('direccionDetalles', detalles);
@@ -254,9 +294,10 @@ export const ClienteForm: React.FC = () => {
                     setDireccionError(null);
                   }}
                   onError={setDireccionError}
-                  placeholder="Buscar dirección..."
+                  placeholder={isEdit ? "Buscar nueva dirección..." : "Buscar dirección..."}
                   className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
+                
                 {errors.direccion && (
                   <p className="mt-1 text-sm text-red-600">{errors.direccion.message}</p>
                 )}
