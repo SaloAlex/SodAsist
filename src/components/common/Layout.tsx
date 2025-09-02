@@ -15,7 +15,6 @@ import { ClientesList } from '../clientes/ClientesList';
 import { ClienteForm } from '../clientes/ClienteForm';
 import { EntregaForm } from '../entregas/EntregaForm';
 import { EntregasList } from '../entregas/EntregasList';
-import { FirebaseStatus } from './FirebaseStatus';
 import { Menu, X } from 'lucide-react';
 
 export const Layout: React.FC = () => {
@@ -93,9 +92,6 @@ export const Layout: React.FC = () => {
           </div>
         </main>
       </div>
-      
-      {/* Componente de estado de Firebase */}
-      <FirebaseStatus />
     </div>
   );
 };

@@ -11,6 +11,7 @@ import {
   LogOut 
 } from 'lucide-react';
 import { Logo } from './Logo';
+import { FirebaseStatus } from './FirebaseStatus';
 import { useAuthStore } from '../../store/authStore';
 import { auth } from '../../config/firebase';
 import { signOut } from 'firebase/auth';
@@ -80,7 +81,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '', onClose }) => 
         </ul>
       </nav>
 
-      <div className="flex-none p-4">
+      <div className="flex-none p-4 space-y-3">
+        {/* Estado de Firebase */}
+        <FirebaseStatus />
+        
         <button
           onClick={handleLogout}
           className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors"

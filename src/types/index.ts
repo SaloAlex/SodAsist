@@ -115,6 +115,18 @@ export interface User {
   invitedBy?: string; // UID del usuario que invitó
   invitedAt?: Date; // Fecha de invitación
   acceptedAt?: Date; // Fecha de aceptación de la invitación
+  // Campos adicionales del perfil
+  telefono?: string;
+  empresa?: string;
+  direccion?: string;
+  // Autenticación de dos factores
+  twoFactor?: {
+    isEnabled: boolean;
+    secret?: string;
+    backupCodes?: string[];
+    createdAt?: Date;
+    updatedAt?: Date;
+  };
 }
 
 export interface Tenant {

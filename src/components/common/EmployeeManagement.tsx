@@ -129,13 +129,7 @@ export const EmployeeManagement: React.FC = () => {
           </div>
         </div>
         
-        <button
-          onClick={() => setShowInviteModal(true)}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <UserPlus className="h-4 w-4 mr-2" />
-          Invitar Empleado
-        </button>
+
       </div>
 
       {/* Employee List */}

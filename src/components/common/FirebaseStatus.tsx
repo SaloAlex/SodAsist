@@ -75,15 +75,15 @@ export const FirebaseStatus: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-50">
+    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
       <div className="flex items-center space-x-2">
         {getStatusIcon()}
-        <div>
-          <div className={`text-sm font-medium ${getStatusColor()}`}>
+        <div className="flex-1 min-w-0">
+          <div className={`text-sm font-medium ${getStatusColor()} dark:text-white`}>
             {getStatusText()}
           </div>
           {lastCheck && (
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 dark:text-gray-300 truncate">
               Última verificación: {lastCheck.toLocaleTimeString()}
             </div>
           )}
@@ -91,10 +91,10 @@ export const FirebaseStatus: React.FC = () => {
         <button
           onClick={checkConnection}
           disabled={connectionStatus === 'checking'}
-          className="ml-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+          className="flex-shrink-0 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
           title="Verificar conexión"
         >
-          <RefreshCw className={`h-3 w-3 ${connectionStatus === 'checking' ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3 w-3 text-gray-600 dark:text-gray-300 ${connectionStatus === 'checking' ? 'animate-spin' : ''}`} />
         </button>
       </div>
     </div>
