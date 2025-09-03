@@ -90,7 +90,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
       // Actualizar el store local
       const updatedUserData = {
         ...userData,
-        ...updateData
+        ...updateData,
+        telefono: updateData.telefono || undefined,
+        empresa: updateData.empresa || undefined,
+        direccion: updateData.direccion || undefined
       };
       
       setUserData(updatedUserData);

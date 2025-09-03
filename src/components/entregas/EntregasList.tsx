@@ -109,12 +109,14 @@ export const EntregasList: React.FC = () => {
         switch (dateFilter) {
           case 'today':
             return entregaDay.getTime() === today.getTime();
-          case 'week':
+          case 'week': {
             const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
             return entregaDay >= weekAgo;
-          case 'month':
+          }
+          case 'month': {
             const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
             return entregaDay >= monthAgo;
+          }
           default:
             return true;
         }
@@ -237,6 +239,7 @@ export const EntregasList: React.FC = () => {
       setClientes(clientesData);
       toast.success('Datos actualizados');
     } catch (error) {
+      console.error('Error al actualizar los datos:', error);
       toast.error('Error al actualizar los datos');
     } finally {
       setRefreshing(false);

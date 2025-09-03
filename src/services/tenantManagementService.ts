@@ -126,7 +126,10 @@ export class TenantManagementService {
 
       // Obtener el conteo actual de usuarios
       const users = await FirebaseService.getCollection('users');
-      const tenantUsers = users.filter((user: any) => user.tenantId === tenantId);
+      const tenantUsers = users.filter((user: unknown) => {
+        const userObj = user as { tenantId?: string };
+        return userObj.tenantId === tenantId;
+      });
       const currentCount = tenantUsers.length;
 
       // Validar creación del usuario
@@ -180,9 +183,18 @@ export class TenantManagementService {
         FirebaseService.getDocument<Tenant>('tenants', tenantId)
       ]);
 
-      const tenantUsers = users.filter((user: any) => user.tenantId === tenantId);
-      const tenantClientes = clientes.filter((cliente: any) => cliente.tenantId === tenantId);
-      const tenantEntregas = entregas.filter((entrega: any) => entrega.tenantId === tenantId);
+      const tenantUsers = users.filter((user: unknown) => {
+        const userObj = user as { tenantId?: string };
+        return userObj.tenantId === tenantId;
+      });
+      const tenantClientes = clientes.filter((cliente: unknown) => {
+        const clienteObj = cliente as { tenantId?: string };
+        return clienteObj.tenantId === tenantId;
+      });
+      const tenantEntregas = entregas.filter((entrega: unknown) => {
+        const entregaObj = entrega as { tenantId?: string };
+        return entregaObj.tenantId === tenantId;
+      });
 
       const totalUsers = tenantUsers.length;
       const maxUsers = tenant?.maxUsers || 1;

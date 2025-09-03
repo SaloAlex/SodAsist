@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, Lock, Eye, EyeOff, Smartphone, Bell, LogOut, X, Check, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, AuthError } from 'firebase/auth';
 import { auth } from '../../config/firebase';
 import toast from 'react-hot-toast';
 import { TwoFactorAuthService, TwoFactorStatus } from '../../services/twoFactorAuthService';
@@ -40,14 +40,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose })
     newDevices: true
   });
 
-  // Cargar estado de 2FA cuando se abre el modal
-  useEffect(() => {
-    if (isOpen && userData?.uid) {
-      loadTwoFactorStatus();
-    }
-  }, [isOpen, userData?.uid]);
-
-  const loadTwoFactorStatus = async () => {
+  const loadTwoFactorStatus = useCallback(async () => {
     if (!userData?.uid) return;
     
     try {
@@ -56,7 +49,14 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose })
     } catch (error) {
       console.error('Error cargando estado 2FA:', error);
     }
-  };
+  }, [userData?.uid]);
+
+  // Cargar estado de 2FA cuando se abre el modal
+  useEffect(() => {
+    if (isOpen && userData?.uid) {
+      loadTwoFactorStatus();
+    }
+  }, [isOpen, userData?.uid, loadTwoFactorStatus]);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -135,15 +135,20 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose })
 
       console.log('✅ Contraseña actualizada exitosamente');
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error actualizando contraseña:', error);
       
-      if (error.code === 'auth/wrong-password') {
-        toast.error('La contraseña actual es incorrecta');
-      } else if (error.code === 'auth/weak-password') {
-        toast.error('La nueva contraseña es demasiado débil');
+      if (error instanceof Error && 'code' in error) {
+        const authError = error as AuthError;
+        if (authError.code === 'auth/wrong-password') {
+          toast.error('La contraseña actual es incorrecta');
+        } else if (authError.code === 'auth/weak-password') {
+          toast.error('La nueva contraseña es demasiado débil');
+        } else {
+          toast.error(`Error al actualizar contraseña: ${authError.message}`);
+        }
       } else {
-        toast.error(`Error al actualizar contraseña: ${error.message}`);
+        toast.error('Error desconocido al actualizar contraseña');
       }
     } finally {
       setIsLoading(false);
@@ -161,6 +166,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose })
           toast.success('Autenticación de dos factores desactivada');
           await loadTwoFactorStatus(); // Recargar estado
         } catch (error) {
+          console.error('Error al desactivar 2FA:', error);
           toast.error('Error al desactivar 2FA');
         } finally {
           setTwoFactorLoading(false);
@@ -191,6 +197,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose })
         toast.success('Sesión cerrada en todos los dispositivos');
         window.location.href = '/login';
       } catch (error) {
+        console.error('Error al cerrar sesión:', error);
         toast.error('Error al cerrar sesión');
       }
     }
@@ -233,7 +240,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({ isOpen, onClose })
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id as 'password' | '2fa' | 'sessions' | 'notifications')}
                     className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                       activeTab === tab.id
                         ? 'border-green-500 text-green-600'

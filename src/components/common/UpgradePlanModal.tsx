@@ -3,7 +3,6 @@ import { X, Check, Crown, Building, Users, Star, CreditCard, Shield, Zap } from 
 import { getUpgradeOptions, calculateUpgradePrice, AVAILABLE_PLANS } from '../../services/plansService';
 import { TenantManagementService } from '../../services/tenantManagementService';
 import { useAuthStore } from '../../store/authStore';
-import { UpgradeOption } from '../../types';
 import toast from 'react-hot-toast';
 
 interface UpgradePlanModalProps {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Package, 
   Plus, 
@@ -274,12 +274,7 @@ export const Inventario: React.FC = () => {
     }
   }, [user, navigate]);
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    cargarDatos();
-  }, []);
-
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     try {
       setLoading(true);
       const [productosData, categoriasDataRaw] = await Promise.all([
@@ -316,7 +311,12 @@ export const Inventario: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtros, user]);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
 
   // Aplicar filtros cuando cambien
   useEffect(() => {

@@ -37,7 +37,10 @@ export const useUserLimit = (): UseUserLimitReturn => {
 
       // Obtener el conteo actual de usuarios del tenant
       const users = await FirebaseService.getCollection('users');
-      const tenantUsers = users.filter((user: any) => user.tenantId === userData.tenantId);
+      const tenantUsers = users.filter((user: unknown) => {
+        const userObj = user as { tenantId?: string };
+        return userObj.tenantId === userData.tenantId;
+      });
       const userCount = tenantUsers.length;
 
       setCurrentUserCount(userCount);

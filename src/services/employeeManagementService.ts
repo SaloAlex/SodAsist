@@ -1,6 +1,6 @@
 import { FirebaseService } from './firebaseService';
 import { User, Tenant } from '../types';
-import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { updateDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import toast from 'react-hot-toast';
 
@@ -47,7 +47,7 @@ export class EmployeeManagementService {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días
       };
       
-      await FirebaseService.addDocument('invitations', invitationData);
+      await FirebaseService.createDocument('invitations', invitationData);
       
       // Actualizar contador de usuarios en tenant
       await updateDoc(doc(db, 'tenants', invitation.tenantId), {

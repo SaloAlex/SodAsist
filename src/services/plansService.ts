@@ -1,4 +1,4 @@
-import { Plan, UpgradeOption } from '../types';
+import { Plan, UpgradeOption, User } from '../types';
 
 // Configuración de planes disponibles
 export const AVAILABLE_PLANS: Plan[] = [
@@ -56,7 +56,7 @@ export const getPlanById = (planId: string): Plan | undefined => {
 };
 
 // Función para obtener el plan actual del usuario
-export const getCurrentUserPlan = (userData: any): Plan | undefined => {
+export const getCurrentUserPlan = (userData: Pick<User, 'plan'> | null | undefined): Plan | undefined => {
   if (!userData || !userData.plan) return AVAILABLE_PLANS[0]; // Individual por defecto
   return getPlanById(userData.plan);
 };

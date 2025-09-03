@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Smartphone, Download, Copy, Check, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { TwoFactorAuthService, TwoFactorSecret } from '../../services/twoFactorAuthService';
 import { useAuthStore } from '../../store/authStore';
@@ -23,12 +23,24 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
   const [showSecret, setShowSecret] = useState(false);
   const [currentTOTPCode, setCurrentTOTPCode] = useState<string>('');
 
+  const generateNewSecret = useCallback(async () => {
+    if (!userData?.email) return;
+    
+    try {
+      const secret = await TwoFactorAuthService.generateSecret(userData.email);
+      setTwoFactorSecret(secret);
+    } catch (error) {
+      console.error('Error generando secreto 2FA:', error);
+      toast.error('Error generando secreto 2FA');
+    }
+  }, [userData?.email]);
+
   // Generar secreto cuando se abre el modal
   useEffect(() => {
     if (isOpen && !twoFactorSecret) {
       generateNewSecret();
     }
-  }, [isOpen]);
+  }, [isOpen, twoFactorSecret, generateNewSecret]);
 
   // Actualizar código TOTP cada segundo
   useEffect(() => {
@@ -49,17 +61,6 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
 
     return () => clearInterval(interval);
   }, [twoFactorSecret?.secret]);
-
-  const generateNewSecret = async () => {
-    if (!userData?.email) return;
-    
-    try {
-      const secret = await TwoFactorAuthService.generateSecret(userData.email);
-      setTwoFactorSecret(secret);
-    } catch (error) {
-      toast.error('Error generando secreto 2FA');
-    }
-  };
 
   const handleVerification = async () => {
     if (!twoFactorSecret || !userData?.uid) return;
@@ -94,6 +95,7 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
       setCurrentStep('backup');
       
     } catch (error) {
+      console.error('Error activando 2FA:', error);
       toast.error('Error activando 2FA');
     } finally {
       setIsLoading(false);

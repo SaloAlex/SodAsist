@@ -1,4 +1,4 @@
-import React, { Component, ReactNode } from 'react';
+import { Component, ReactNode } from 'react';
 import { AlertTriangle, MapPin } from 'lucide-react';
 
 interface Props {
@@ -20,7 +20,7 @@ export class GoogleMapsErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: any) {
+  componentDidCatch(error: Error, errorInfo: { componentStack?: string }) {
     console.error('Google Maps Error:', error, errorInfo);
   }
 

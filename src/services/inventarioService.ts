@@ -11,7 +11,8 @@ import {
   limit,
   writeBatch,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  DocumentData
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import {
@@ -184,7 +185,7 @@ export class InventarioService {
       const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map(doc => {
         const data = doc.data();
-        const convertedData = this.convertTimestamps(data);
+        const convertedData = this.convertTimestamps(data as DocumentData) as Omit<MovimientoInventario, 'id'>;
         return {
           id: doc.id,
           ...convertedData
@@ -605,7 +606,8 @@ export class InventarioService {
 
       // Convertir a array y ordenar
       const resultados = [];
-      for (const [productoId, datos] of ventasPorProducto.entries()) {
+      const ventasArray = Array.from(ventasPorProducto.entries());
+      for (const [productoId, datos] of ventasArray) {
         const producto = await ProductosService.getProducto(productoId);
         if (producto) {
           resultados.push({

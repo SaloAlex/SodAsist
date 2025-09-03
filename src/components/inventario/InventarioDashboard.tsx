@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Package, 
   TrendingUp, 
@@ -52,11 +52,7 @@ export const InventarioDashboard: React.FC<InventarioDashboardProps> = ({
   const [actualizando, setActualizando] = useState(false);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
 
-  useEffect(() => {
-    cargarDatos();
-  }, [fechaSeleccionada]);
-
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -83,7 +79,11 @@ export const InventarioDashboard: React.FC<InventarioDashboardProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [fechaSeleccionada]);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
 
   const actualizarDatos = async () => {
     setActualizando(true);

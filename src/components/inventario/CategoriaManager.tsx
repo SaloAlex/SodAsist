@@ -9,7 +9,6 @@ import {
   Save, 
   X, 
   Tag,
-  Palette,
   Grid3X3,
   AlertTriangle,
   Check
@@ -26,7 +25,7 @@ const schema = yup.object().shape({
   color: yup.string().required('Color requerido'),
   icono: yup.string().required('Icono requerido'),
   orden: yup.number().min(1, 'Orden debe ser mayor a 0').required('Orden requerido'),
-  activa: yup.boolean()
+  activa: yup.boolean().required('Estado activo requerido')
 });
 
 type CategoriaFormData = yup.InferType<typeof schema>;
@@ -98,24 +97,10 @@ export const CategoriaManager: React.FC<CategoriaManagerProps> = ({ onClose }) =
   const loadCategorias = async () => {
     setLoading(true);
     try {
-      const categoriasDataRaw = await ProductosService.getCategorias();
-      
-      // Filtrar categorías duplicadas (mantener la más reciente)
-      const categoriasUnicas = categoriasDataRaw.reduce((acc, categoria) => {
-        const existente = acc.find(cat => cat.nombre.toLowerCase() === categoria.nombre.toLowerCase());
-        if (!existente) {
-          acc.push(categoria);
-        } else if (categoria.updatedAt > existente.updatedAt) {
-          // Reemplazar con la más reciente
-          const index = acc.indexOf(existente);
-          acc[index] = categoria;
-        }
-        return acc;
-      }, [] as CategoriaProducto[]);
-      
-      setCategorias(categoriasUnicas);
+      const categoriasData = await ProductosService.getCategorias();
+      setCategorias(categoriasData);
     } catch (error) {
-      console.error('Error al cargar categorías:', error);
+      console.error('Error cargando categorías:', error);
       toast.error('Error al cargar categorías');
     } finally {
       setLoading(false);
@@ -123,34 +108,25 @@ export const CategoriaManager: React.FC<CategoriaManagerProps> = ({ onClose }) =
   };
 
   const handleCrear = () => {
-    const siguienteOrden = Math.max(...categorias.map(c => c.orden), 0) + 1;
-    reset({
-      nombre: '',
-      descripcion: '',
-      color: COLORES_DISPONIBLES[0].valor,
-      icono: ICONOS_DISPONIBLES[0].valor,
-      orden: siguienteOrden,
-      activa: true
-    });
-    setEditandoId(null);
     setMostrandoForm(true);
+    setEditandoId(null);
+    reset();
   };
 
   const handleEditar = (categoria: CategoriaProducto) => {
+    setEditandoId(categoria.id!);
+    setMostrandoForm(true);
     setValue('nombre', categoria.nombre);
     setValue('descripcion', categoria.descripcion || '');
     setValue('color', categoria.color);
     setValue('icono', categoria.icono);
     setValue('orden', categoria.orden);
     setValue('activa', categoria.activa);
-    setEditandoId(categoria.id);
-    setMostrandoForm(true);
   };
 
   const handleGuardar = async (data: CategoriaFormData) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
       if (editandoId) {
         // Actualizar categoría existente
         await ProductosService.actualizarCategoria(editandoId, data);
@@ -197,7 +173,7 @@ export const CategoriaManager: React.FC<CategoriaManagerProps> = ({ onClose }) =
     reset();
   };
 
-  const getIconComponent = (iconName: string) => {
+  const getIconComponent = () => {
     // En una implementación real, aquí mapearías los nombres de iconos a componentes
     return <Tag className="h-5 w-5" />;
   };
@@ -407,7 +383,7 @@ export const CategoriaManager: React.FC<CategoriaManagerProps> = ({ onClose }) =
                       className="w-10 h-10 rounded-full flex items-center justify-center text-white"
                       style={{ backgroundColor: categoria.color }}
                     >
-                      {getIconComponent(categoria.icono)}
+                      {getIconComponent()}
                     </div>
                     <div>
                       <h4 className="font-medium text-gray-900 dark:text-white">

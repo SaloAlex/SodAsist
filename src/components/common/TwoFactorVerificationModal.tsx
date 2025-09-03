@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Smartphone, Check, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { X, Smartphone, Check, AlertTriangle } from 'lucide-react';
 import { TwoFactorAuthService } from '../../services/twoFactorAuthService';
 import toast from 'react-hot-toast';
 
@@ -52,7 +52,7 @@ export const TwoFactorVerificationModal: React.FC<TwoFactorVerificationModalProp
           return;
         }
         
-        isValid = TwoFactorAuthService.verifyCode(secret, verificationCode);
+        isValid = await TwoFactorAuthService.verifyCode(secret, verificationCode);
       }
 
       if (isValid) {
@@ -62,6 +62,7 @@ export const TwoFactorVerificationModal: React.FC<TwoFactorVerificationModalProp
         toast.error(useBackupCode ? 'Código de respaldo incorrecto' : 'Código incorrecto');
       }
     } catch (error) {
+      console.error('Error durante la verificación:', error);
       toast.error('Error durante la verificación');
     } finally {
       setIsLoading(false);

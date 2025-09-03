@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   getDocs,
-  getDoc,
   addDoc,
   updateDoc,
   query,
@@ -11,7 +10,8 @@ import {
   limit,
   writeBatch,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  DocumentData
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { 
@@ -100,81 +100,83 @@ export class PreciosService {
    * Actualizar precios masivos con porcentaje
    */
   static async actualizarPreciosMasivos(
-    filtros: {
-      categoria?: string;
-      proveedor?: string;
-      productos?: string[];
-    },
-    porcentajeAumento: number,
-    tipo: 'venta' | 'compra' | 'ambos' = 'venta',
-    motivo: string = 'Actualización masiva',
+    porcentaje: number,
+    tipo: 'incremento' | 'decremento',
+    categoria?: string,
     usuario: string = 'sistema'
-  ): Promise<{
-    actualizados: number;
-    errores: { productoId: string; error: string }[];
-  }> {
+  ): Promise<{ actualizados: number; errores: number }> {
     try {
-      let productos: Producto[] = [];
+      const batch = writeBatch(db);
+      let actualizados = 0;
+      let errores = 0;
 
-      if (filtros.productos && filtros.productos.length > 0) {
-        // Obtener productos específicos
-        for (const id of filtros.productos) {
-          const producto = await ProductosService.getProducto(id);
-          if (producto) productos.push(producto);
-        }
-      } else {
-        // Obtener productos por filtros
-        productos = await ProductosService.getProductos({
-          categoria: filtros.categoria,
-          proveedor: filtros.proveedor,
-          activo: true
-        });
+      // Obtener productos a actualizar
+      const filtros: { activo?: boolean; categoria?: string } = { activo: true };
+      if (categoria) {
+        filtros.categoria = categoria;
       }
 
-      const errores: { productoId: string; error: string }[] = [];
-      let actualizados = 0;
+      const productos = await ProductosService.getProductos(filtros);
 
-      // Procesar productos en lotes para evitar límites de Firestore
-      const BATCH_SIZE = 10;
-      for (let i = 0; i < productos.length; i += BATCH_SIZE) {
-        const lote = productos.slice(i, i + BATCH_SIZE);
-        
-        for (const producto of lote) {
-          try {
-            const factor = 1 + (porcentajeAumento / 100);
-            
-            let nuevoPrecioVenta = producto.precioVenta;
-            let nuevoPrecioCompra = producto.precioCompra;
+      for (const producto of productos) {
+        try {
+          const factor = tipo === 'incremento' ? (1 + porcentaje / 100) : (1 - porcentaje / 100);
+          const nuevoPrecioVenta = Math.round(producto.precioVenta * factor * 100) / 100;
+          const nuevoPrecioCompra = producto.precioCompra 
+            ? Math.round(producto.precioCompra * factor * 100) / 100 
+            : undefined;
 
-            if (tipo === 'venta' || tipo === 'ambos') {
-              nuevoPrecioVenta = Math.round(producto.precioVenta * factor);
-            }
-            
-            if (tipo === 'compra' || tipo === 'ambos') {
-              nuevoPrecioCompra = Math.round(producto.precioCompra * factor);
-            }
+          // Crear historial de precio de venta
+          const historialVentaRef = doc(collection(db, 'historialPrecios'));
+          batch.set(historialVentaRef, {
+            productoId: producto.id,
+            precioAnterior: producto.precioVenta,
+            precioNuevo: nuevoPrecioVenta,
+            tipo: 'venta',
+            motivo: `Actualización masiva: ${tipo} del ${porcentaje}%`,
+            fecha: serverTimestamp(),
+            usuario,
+            createdAt: serverTimestamp()
+          });
 
-            await this.actualizarPrecio(
-              producto.id,
-              nuevoPrecioVenta,
-              tipo === 'compra' || tipo === 'ambos' ? nuevoPrecioCompra : undefined,
-              `${motivo} (${porcentajeAumento > 0 ? '+' : ''}${porcentajeAumento}%)`,
-              usuario
-            );
-
-            actualizados++;
-          } catch (error) {
-            errores.push({
+          // Crear historial de precio de compra si existe
+          if (nuevoPrecioCompra !== undefined && producto.precioCompra) {
+            const historialCompraRef = doc(collection(db, 'historialPrecios'));
+            batch.set(historialCompraRef, {
               productoId: producto.id,
-              error: error instanceof Error ? error.message : 'Error desconocido'
+              precioAnterior: producto.precioCompra,
+              precioNuevo: nuevoPrecioCompra,
+              tipo: 'compra',
+              motivo: `Actualización masiva: ${tipo} del ${porcentaje}%`,
+              fecha: serverTimestamp(),
+              usuario,
+              createdAt: serverTimestamp()
             });
           }
+
+          // Actualizar producto
+          const productoRef = doc(db, 'productos', producto.id!);
+          batch.update(productoRef, {
+            precioVenta: nuevoPrecioVenta,
+            ...(nuevoPrecioCompra !== undefined && { precioCompra: nuevoPrecioCompra }),
+            updatedAt: serverTimestamp(),
+            updatedBy: usuario
+          });
+
+          actualizados++;
+        } catch (error) {
+          console.error(`Error actualizando producto ${producto.id}:`, error);
+          errores++;
         }
+      }
+
+      if (actualizados > 0) {
+        await batch.commit();
       }
 
       return { actualizados, errores };
     } catch (error) {
-      console.error('Error en actualización masiva de precios:', error);
+      console.error('Error al actualizar precios masivos:', error);
       throw error;
     }
   }
@@ -210,27 +212,25 @@ export class PreciosService {
    */
   static async getHistorialPrecios(
     productoId: string,
-    tipo?: 'venta' | 'compra',
-    limite = 50
+    limite: number = 50
   ): Promise<HistorialPrecio[]> {
     try {
-      const constraints = [
+      const historialRef = collection(db, 'historialPrecios');
+      const q = query(
+        historialRef,
         where('productoId', '==', productoId),
         orderBy('fecha', 'desc'),
         limit(limite)
-      ];
+      );
 
-      if (tipo) {
-        constraints.splice(1, 0, where('tipo', '==', tipo));
-      }
-
-      const q = query(collection(db, 'historialPrecios'), ...constraints);
       const querySnapshot = await getDocs(q);
-
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      })) as HistorialPrecio[];
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...this.convertTimestamps(data as DocumentData)
+        } as HistorialPrecio;
+      });
     } catch (error) {
       console.error('Error al obtener historial de precios:', error);
       throw error;
@@ -238,26 +238,80 @@ export class PreciosService {
   }
 
   /**
-   * Obtener productos con márgenes bajos
+   * Obtener productos con mayor variación de precio
    */
-  static async getProductosMargenBajo(
-    margenMinimo: number = 20
-  ): Promise<Array<Producto & { margenActual: number }>> {
+  static async getProductosConMayorVariacion(
+    dias: number = 30,
+    limite: number = 10
+  ): Promise<Array<{
+    producto: Producto;
+    variacion: number;
+    tendencia: 'subida' | 'bajada' | 'estable';
+  }>> {
     try {
-      const productos = await ProductosService.getProductos({ activo: true });
-      
-      return productos
-        .map(producto => {
-          const margen = this.calcularMargenGanancia(producto.precioCompra, producto.precioVenta);
-          return {
-            ...producto,
-            margenActual: margen.margenPorcentaje
-          };
-        })
-        .filter(producto => producto.margenActual < margenMinimo)
-        .sort((a, b) => a.margenActual - b.margenActual);
+      const fechaLimite = new Date();
+      fechaLimite.setDate(fechaLimite.getDate() - dias);
+
+      const historialRef = collection(db, 'historialPrecios');
+      const q = query(
+        historialRef,
+        where('fecha', '>=', fechaLimite),
+        orderBy('fecha', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const historial = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...this.convertTimestamps(data as DocumentData)
+        } as HistorialPrecio;
+      });
+
+      // Agrupar por producto y calcular variación
+      const variacionesPorProducto = new Map<string, { 
+        precioInicial: number; 
+        precioFinal: number; 
+        variacion: number;
+        tendencia: 'subida' | 'bajada' | 'estable';
+      }>();
+
+      for (const registro of historial) {
+        const actual = variacionesPorProducto.get(registro.productoId);
+        
+        if (!actual) {
+          variacionesPorProducto.set(registro.productoId, {
+            precioInicial: registro.precioAnterior,
+            precioFinal: registro.precioNuevo,
+            variacion: ((registro.precioNuevo - registro.precioAnterior) / registro.precioAnterior) * 100,
+            tendencia: registro.precioNuevo > registro.precioAnterior ? 'subida' : 'bajada'
+          });
+        } else {
+          // Actualizar precio final y recalcular variación
+          actual.precioFinal = registro.precioNuevo;
+          actual.variacion = ((actual.precioFinal - actual.precioInicial) / actual.precioInicial) * 100;
+          actual.tendencia = actual.precioFinal > actual.precioInicial ? 'subida' : 'bajada';
+        }
+      }
+
+      // Obtener productos y ordenar por variación
+      const resultados = [];
+      for (const [productoId, variacion] of variacionesPorProducto.entries()) {
+        const producto = await ProductosService.getProducto(productoId);
+        if (producto) {
+          resultados.push({
+            producto,
+            variacion: Math.round(variacion.variacion * 100) / 100,
+            tendencia: variacion.tendencia
+          });
+        }
+      }
+
+      return resultados
+        .sort((a, b) => Math.abs(b.variacion) - Math.abs(a.variacion))
+        .slice(0, limite);
     } catch (error) {
-      console.error('Error al obtener productos con margen bajo:', error);
+      console.error('Error al obtener productos con mayor variación:', error);
       throw error;
     }
   }
@@ -372,7 +426,8 @@ export class PreciosService {
    */
   static async generarReporteEvolucionPrecios(
     productoId: string,
-    diasAtras: number = 90
+    fechaInicio: Date,
+    fechaFin: Date
   ): Promise<{
     producto: Producto;
     historial: HistorialPrecio[];
@@ -385,31 +440,37 @@ export class PreciosService {
         throw new Error('Producto no encontrado');
       }
 
-      const fechaInicio = new Date();
-      fechaInicio.setDate(fechaInicio.getDate() - diasAtras);
-
+      const historialRef = collection(db, 'historialPrecios');
       const q = query(
-        collection(db, 'historialPrecios'),
+        historialRef,
         where('productoId', '==', productoId),
-        where('fecha', '>=', Timestamp.fromDate(fechaInicio)),
+        where('fecha', '>=', fechaInicio),
+        where('fecha', '<=', fechaFin),
         orderBy('fecha', 'asc')
       );
 
       const querySnapshot = await getDocs(q);
-      const historial = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      })) as HistorialPrecio[];
+      const historial = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...this.convertTimestamps(data as DocumentData)
+        } as HistorialPrecio;
+      });
 
       // Calcular tendencia
       let tendencia: 'subida' | 'bajada' | 'estable' = 'estable';
       let cambioPromedio = 0;
 
       if (historial.length > 1) {
-        const precioInicial = historial[0].precioAnterior;
-        const precioFinal = historial[historial.length - 1].precioNuevo;
-        cambioPromedio = ((precioFinal - precioInicial) / precioInicial) * 100;
-
+        const cambios = [];
+        for (let i = 1; i < historial.length; i++) {
+          const cambio = ((historial[i].precioNuevo - historial[i-1].precioNuevo) / historial[i-1].precioNuevo) * 100;
+          cambios.push(cambio);
+        }
+        
+        cambioPromedio = cambios.reduce((sum, cambio) => sum + cambio, 0) / cambios.length;
+        
         if (cambioPromedio > 5) {
           tendencia = 'subida';
         } else if (cambioPromedio < -5) {
@@ -461,24 +522,30 @@ export class PreciosService {
   // UTILIDADES
   // ============================================
 
-  private static convertTimestamps(data: any): any {
+  private static convertTimestamps<T = unknown>(data: T): T extends Timestamp
+    ? Date
+    : T extends (infer U)[]
+      ? ReturnType<typeof this.convertTimestamps<U>>[]
+      : T extends Record<string, unknown>
+        ? { [K in keyof T]: ReturnType<typeof this.convertTimestamps<T[K]>> }
+        : T {
     if (data instanceof Timestamp) {
-      return data.toDate();
+      return data.toDate() as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
+
     if (Array.isArray(data)) {
-      return data.map(item => this.convertTimestamps(item));
+      return data.map(item => this.convertTimestamps(item)) as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
+
     if (data && typeof data === 'object') {
-      const converted: any = {};
+      const converted: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(data)) {
         converted[key] = this.convertTimestamps(value);
       }
-      return converted;
+      return converted as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
-    return data;
+
+    return data as ReturnType<typeof this.convertTimestamps<T>>;
   }
 
   /**

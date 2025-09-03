@@ -152,7 +152,7 @@ export const InviteEmployeeModal: React.FC<InviteEmployeeModalProps> = ({
                       name="rol"
                       value={role.value}
                       checked={formData.rol === role.value}
-                      onChange={(e) => setFormData({ ...formData, rol: e.target.value as any })}
+                      onChange={(e) => setFormData({ ...formData, rol: e.target.value as 'admin' | 'manager' | 'sodero' })}
                       className="sr-only"
                       disabled={isLoading}
                     />

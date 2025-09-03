@@ -396,7 +396,7 @@ export class FirebaseService {
     }
   }
 
-  static async createTenantDocument(tenantData: any): Promise<void> {
+  static async createTenantDocument(tenantData: { id: string; email: string; [key: string]: unknown }): Promise<void> {
     try {
       console.log('🔧 Iniciando createTenantDocument con datos:', tenantData);
       

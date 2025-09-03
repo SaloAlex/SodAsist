@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Crown, Building, Users, Star, Zap, Shield, TrendingUp, Check } from 'lucide-react';
+import { Crown, Building, Users, Zap, Shield, TrendingUp, Check } from 'lucide-react';
 import { useUserLimit } from '../../hooks/useUserLimit';
 import { getCurrentUserPlan, getRecommendedUpgrade } from '../../services/plansService';
 import { UpgradePlanModal } from './UpgradePlanModal';

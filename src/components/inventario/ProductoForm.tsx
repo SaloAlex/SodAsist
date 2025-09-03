@@ -8,7 +8,6 @@ import {
   X, 
   Calculator, 
   Barcode, 
-  AlertCircle,
   Eye,
   EyeOff,
   Info
@@ -16,8 +15,7 @@ import {
 import { 
   Producto, 
   CategoriaProducto, 
-  UnidadMedida,
-  Proveedor 
+  UnidadMedida
 } from '../../types';
 import { ProductosService } from '../../services/productosService';
 import { PreciosService } from '../../services/preciosService';
@@ -70,8 +68,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
     handleSubmit,
     formState: { errors },
     watch,
-    setValue,
-    reset
+    setValue
   } = useForm<ProductoFormData>({
     resolver: yupResolver(schema),
     defaultValues: producto ? {
@@ -101,8 +98,8 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
     }
   });
 
-  const watchPrecioCompra = watch('precioCompra');
-  const watchPrecioVenta = watch('precioVenta');
+  const watchPrecioCompra = watch('precioCompra') || 0;
+  const watchPrecioVenta = watch('precioVenta') || 0;
   const watchCategoria = watch('categoria');
 
   // Cargar categorías
@@ -141,7 +138,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   useEffect(() => {
     if (watchPrecioCompra > 0 && watchPrecioVenta > 0) {
       const margen = PreciosService.calcularMargenGanancia(watchPrecioCompra, watchPrecioVenta);
-      setMargenCalculado(margen);
+      setMargenCalculado({ pesos: margen.margenPesos, porcentaje: margen.margenPorcentaje });
     }
   }, [watchPrecioCompra, watchPrecioVenta]);
 
@@ -238,9 +235,9 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
               </label>
               <textarea
                 {...register('descripcion')}
-                rows={3}
+                rows={2}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                placeholder="Descripción detallada del producto"
+                placeholder="Descripción opcional del producto"
               />
             </div>
 
@@ -248,23 +245,18 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Categoría *
               </label>
-              {loadingCategorias ? (
-                <div className="flex items-center justify-center py-2">
-                  <LoadingSpinner size="sm" />
-                </div>
-              ) : (
-                <select
-                  {...register('categoria')}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">Seleccionar categoría</option>
-                  {categorias.map(cat => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nombre}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <select
+                {...register('categoria')}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                disabled={loadingCategorias}
+              >
+                <option value="">Seleccionar categoría</option>
+                {categorias.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nombre}
+                  </option>
+                ))}
+              </select>
               {errors.categoria && (
                 <p className="text-red-500 text-sm mt-1">{errors.categoria.message}</p>
               )}
@@ -292,39 +284,37 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Código
-                </label>
-                <div className="relative">
-                  <input
-                    {...register('codigo')}
-                    type="text"
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    placeholder="AUTO"
-                  />
-                  {codigoGenerado && (
-                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                      <Info className="h-4 w-4 text-green-500" title="Código generado automáticamente" />
-                    </div>
-                  )}
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Código del Producto
+              </label>
+              <div className="relative">
+                <input
+                  {...register('codigo')}
+                  type="text"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  placeholder="AUTO"
+                />
+                {codigoGenerado && (
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    <Info className="h-4 w-4 text-green-500" />
+                  </div>
+                )}
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Código de Barras
-                </label>
-                <div className="relative">
-                  <input
-                    {...register('codigoBarras')}
-                    type="text"
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    placeholder="Opcional"
-                  />
-                  <Barcode className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Código de Barras
+              </label>
+              <div className="relative">
+                <input
+                  {...register('codigoBarras')}
+                  type="text"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  placeholder="Opcional"
+                />
+                <Barcode className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               </div>
             </div>
 
