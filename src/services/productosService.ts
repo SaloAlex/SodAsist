@@ -12,26 +12,52 @@ import {
   limit,
   writeBatch,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  DocumentData
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { 
-  Producto, 
-  CategoriaProducto, 
-  FiltrosProductos, 
+import { auth } from '../config/firebase';
+import {
+  Producto,
+  CategoriaProducto,
+  FiltrosProductos,
   UnidadMedida,
-  TipoMovimiento 
+  TipoMovimiento
 } from '../types';
-import { FirebaseService } from './firebaseService';
 
 export class ProductosService {
-  
+
+  /**
+   * Obtener la ruta del tenant del usuario actual
+   */
+  private static getTenantPath(collectionName: string): string {
+    const user = auth.currentUser;
+    if (!user || !user.uid) {
+      throw new Error('Usuario no autenticado');
+    }
+    return `tenants/${user.uid}/${collectionName}`;
+  }
+
+  /**
+   * Obtener la ruta del tenant para movimientos de inventario
+   */
+  private static getMovimientosPath(): string {
+    return this.getTenantPath('movimientosInventario');
+  }
+
+  /**
+   * Obtener la ruta del tenant para categorías de productos
+   */
+  private static getCategoriasPath(): string {
+    return this.getTenantPath('categoriasProductos');
+  }
+
   /**
    * Obtener todos los productos con filtros opcionales
    */
   static async getProductos(filtros?: FiltrosProductos): Promise<Producto[]> {
     try {
-      let q = collection(db, 'productos');
+      let q: ReturnType<typeof collection> | ReturnType<typeof query> = collection(db, this.getTenantPath('productos'));
       const constraints = [];
 
       // Aplicar filtros
@@ -51,14 +77,18 @@ export class ProductosService {
       constraints.push(orderBy('nombre', 'asc'));
 
       if (constraints.length > 0) {
-        q = query(collection(db, 'productos'), ...constraints);
+        q = query(collection(db, this.getTenantPath('productos')), ...constraints);
       }
 
       const querySnapshot = await getDocs(q);
-      const productos = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      })) as Producto[];
+      const productos = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertedData = this.convertTimestamps(data as DocumentData) as Omit<Producto, 'id'>;
+        return {
+          id: doc.id,
+          ...convertedData
+        };
+      });
 
       // Filtros que no se pueden hacer en Firestore
       let productosFiltrados = productos;
@@ -93,14 +123,16 @@ export class ProductosService {
    */
   static async getProducto(id: string): Promise<Producto | null> {
     try {
-      const docRef = doc(db, 'productos', id);
+      const docRef = doc(db, this.getTenantPath('productos'), id);
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
+        const data = docSnap.data();
+        const convertedData = this.convertTimestamps(data as DocumentData) as Omit<Producto, 'id'>;
         return {
           id: docSnap.id,
-          ...this.convertTimestamps(docSnap.data())
-        } as Producto;
+          ...convertedData
+        };
       }
       
       return null;
@@ -123,7 +155,7 @@ export class ProductosService {
         }
       }
 
-      const docRef = await addDoc(collection(db, 'productos'), {
+      const docRef = await addDoc(collection(db, this.getTenantPath('productos')), {
         ...producto,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -149,7 +181,7 @@ export class ProductosService {
         }
       }
 
-      const docRef = doc(db, 'productos', id);
+      const docRef = doc(db, this.getTenantPath('productos'), id);
       await updateDoc(docRef, {
         ...producto,
         updatedAt: serverTimestamp()
@@ -165,7 +197,7 @@ export class ProductosService {
    */
   static async eliminarProducto(id: string): Promise<void> {
     try {
-      const docRef = doc(db, 'productos', id);
+      const docRef = doc(db, this.getTenantPath('productos'), id);
       await updateDoc(docRef, {
         activo: false,
         updatedAt: serverTimestamp()
@@ -182,7 +214,7 @@ export class ProductosService {
   static async getProductoPorCodigo(codigo: string): Promise<Producto | null> {
     try {
       const q = query(
-        collection(db, 'productos'),
+        collection(db, this.getTenantPath('productos')),
         where('codigo', '==', codigo),
         limit(1)
       );
@@ -191,10 +223,12 @@ export class ProductosService {
       
       if (!querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
+        const data = doc.data();
+        const convertedData = this.convertTimestamps(data as DocumentData) as Omit<Producto, 'id'>;
         return {
           id: doc.id,
-          ...this.convertTimestamps(doc.data())
-        } as Producto;
+          ...convertedData
+        };
       }
       
       return null;
@@ -224,14 +258,14 @@ export class ProductosService {
       }
 
       // Actualizar stock del producto
-      const productoRef = doc(db, 'productos', productoId);
+      const productoRef = doc(db, this.getTenantPath('productos'), productoId);
       batch.update(productoRef, {
         stock: nuevaCantidad,
         updatedAt: serverTimestamp()
       });
 
       // Crear movimiento de inventario
-      const movimientoRef = doc(collection(db, 'movimientosInventario'));
+      const movimientoRef = doc(collection(db, this.getMovimientosPath()));
       batch.set(movimientoRef, {
         productoId,
         tipo: nuevaCantidad > producto.stock ? TipoMovimiento.ENTRADA : TipoMovimiento.SALIDA,
@@ -259,7 +293,7 @@ export class ProductosService {
     try {
       // Obtener productos de la misma categoría
       const q = query(
-        collection(db, 'productos'),
+        collection(db, this.getTenantPath('productos')),
         where('categoria', '==', categoria),
         orderBy('createdAt', 'desc'),
         limit(1)
@@ -298,15 +332,19 @@ export class ProductosService {
   static async getCategorias(): Promise<CategoriaProducto[]> {
     try {
       const q = query(
-        collection(db, 'categoriasProductos'),
+        collection(db, this.getCategoriasPath()),
         orderBy('orden', 'asc')
       );
       
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      })) as CategoriaProducto[];
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertedData = this.convertTimestamps(data as DocumentData) as Omit<CategoriaProducto, 'id'>;
+        return {
+          id: doc.id,
+          ...convertedData
+        };
+      });
     } catch (error) {
       console.error('Error al obtener categorías:', error);
       throw error;
@@ -329,7 +367,7 @@ export class ProductosService {
         return categoriaExistente.id;
       }
 
-      const docRef = await addDoc(collection(db, 'categoriasProductos'), {
+      const docRef = await addDoc(collection(db, this.getCategoriasPath()), {
         ...categoria,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -347,7 +385,7 @@ export class ProductosService {
    */
   static async actualizarCategoria(id: string, categoria: Partial<CategoriaProducto>): Promise<void> {
     try {
-      const docRef = doc(db, 'categoriasProductos', id);
+      const docRef = doc(db, this.getCategoriasPath(), id);
       await updateDoc(docRef, {
         ...categoria,
         updatedAt: serverTimestamp()
@@ -369,7 +407,7 @@ export class ProductosService {
         throw new Error('No se puede eliminar la categoría porque tiene productos asociados');
       }
 
-      const docRef = doc(db, 'categoriasProductos', id);
+      const docRef = doc(db, this.getCategoriasPath(), id);
       await deleteDoc(docRef);
     } catch (error) {
       console.error('Error al eliminar categoría:', error);
@@ -464,24 +502,30 @@ export class ProductosService {
   /**
    * Convertir timestamps de Firestore a Date
    */
-  private static convertTimestamps(data: any): any {
+  private static convertTimestamps<T = unknown>(data: T): T extends Timestamp
+    ? Date
+    : T extends (infer U)[]
+      ? ReturnType<typeof this.convertTimestamps<U>>[]
+      : T extends Record<string, unknown>
+        ? { [K in keyof T]: ReturnType<typeof this.convertTimestamps<T[K]>> }
+        : T {
     if (data instanceof Timestamp) {
-      return data.toDate();
+      return data.toDate() as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
+
     if (Array.isArray(data)) {
-      return data.map(item => this.convertTimestamps(item));
+      return data.map(item => this.convertTimestamps(item)) as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
+
     if (data && typeof data === 'object') {
-      const converted: any = {};
+      const converted: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(data)) {
         converted[key] = this.convertTimestamps(value);
       }
-      return converted;
+      return converted as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
-    return data;
+
+    return data as ReturnType<typeof this.convertTimestamps<T>>;
   }
 
   /**
@@ -582,7 +626,7 @@ export class ProductosService {
       // Crear productos usando batch
       const batch = writeBatch(db);
       productosIniciales.forEach(producto => {
-        const docRef = doc(collection(db, 'productos'));
+        const docRef = doc(collection(db, this.getTenantPath('productos')));
         batch.set(docRef, {
           ...producto,
           createdAt: serverTimestamp(),

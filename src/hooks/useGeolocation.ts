@@ -126,20 +126,28 @@ export const useGeolocation = () => {
   // Asignar la función actual a startRef
   startRef.current = startGeolocation;
 
+  // Solicitar geolocalización automáticamente al montar el componente
   useEffect(() => {
     startGeolocation();
-
+ 
     return () => {
       mountedRef.current = false;
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [startGeolocation]); // Ahora es seguro incluir startGeolocation
+  }, [startGeolocation]);
 
   const forceUpdate = useCallback(() => {
     retryCountRef.current = 0;
     startGeolocation();
-  }, [startGeolocation]); // También es seguro incluirla aquí
+  }, [startGeolocation]);
 
-  return { ...state, isTracking: watchIdRef.current !== null, forceUpdate };
+  // Función para iniciar geolocalización manualmente
+  const startLocationTracking = useCallback(() => {
+    if (!state.loading && !state.coords) {
+      startGeolocation();
+    }
+  }, [state.loading, state.coords, startGeolocation]);
+
+  return { ...state, isTracking: watchIdRef.current !== null, forceUpdate, startLocationTracking };
 }; 

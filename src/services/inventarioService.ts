@@ -11,25 +11,54 @@ import {
   limit,
   writeBatch,
   serverTimestamp,
-  Timestamp,
-  startAfter,
-  endBefore
+  Timestamp
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { 
+import { db, auth } from '../config/firebase';
+import {
   MovimientoInventario,
   AjusteInventario,
   InventarioVehiculoDinamico,
   ReporteInventario,
   MetricasInventario,
   FiltrosMovimientos,
-  TipoMovimiento,
-  Producto
+  TipoMovimiento
 } from '../types';
 import { ProductosService } from './productosService';
 
 export class InventarioService {
-  
+
+  /**
+   * Obtener la ruta del tenant del usuario actual
+   */
+  private static getTenantPath(collectionName: string): string {
+    const user = auth.currentUser;
+    if (!user || !user.uid) {
+      throw new Error('Usuario no autenticado');
+    }
+    return `tenants/${user.uid}/${collectionName}`;
+  }
+
+  /**
+   * Obtener la ruta del tenant para movimientos de inventario
+   */
+  private static getMovimientosPath(): string {
+    return this.getTenantPath('movimientosInventario');
+  }
+
+  /**
+   * Obtener la ruta del tenant para ajustes de inventario
+   */
+  private static getAjustesPath(): string {
+    return this.getTenantPath('ajustesInventario');
+  }
+
+  /**
+   * Obtener la ruta del tenant para inventario vehicular
+   */
+  private static getInventarioVehicularPath(): string {
+    return this.getTenantPath('inventarioVehicular');
+  }
+
   /**
    * Registrar movimiento de inventario
    */
@@ -79,14 +108,14 @@ export class InventarioService {
       }
 
       // Actualizar stock del producto
-      const productoRef = doc(db, 'productos', productoId);
+      const productoRef = doc(db, this.getTenantPath('productos'), productoId);
       batch.update(productoRef, {
         stock: nuevaCantidad,
         updatedAt: serverTimestamp()
       });
 
       // Crear movimiento
-      const movimientoRef = doc(collection(db, 'movimientosInventario'));
+      const movimientoRef = doc(collection(db, this.getMovimientosPath()));
       const movimientoData = {
         productoId,
         tipo,
@@ -116,7 +145,7 @@ export class InventarioService {
    */
   static async getMovimientos(filtros?: FiltrosMovimientos, limite = 50): Promise<MovimientoInventario[]> {
     try {
-      let q = collection(db, 'movimientosInventario');
+      let q: ReturnType<typeof collection> | ReturnType<typeof query> = collection(db, this.getMovimientosPath());
       const constraints = [];
 
       // Aplicar filtros
@@ -149,14 +178,18 @@ export class InventarioService {
       constraints.push(limit(limite));
 
       if (constraints.length > 0) {
-        q = query(collection(db, 'movimientosInventario'), ...constraints);
+        q = query(collection(db, this.getMovimientosPath()), ...constraints);
       }
 
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...this.convertTimestamps(doc.data())
-      })) as MovimientoInventario[];
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertedData = this.convertTimestamps(data);
+        return {
+          id: doc.id,
+          ...convertedData
+        } as MovimientoInventario;
+      });
     } catch (error) {
       console.error('Error al obtener movimientos:', error);
       throw error;
@@ -170,7 +203,7 @@ export class InventarioService {
     ajuste: Omit<AjusteInventario, 'id' | 'createdAt' | 'updatedAt' | 'estado'>
   ): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, 'ajustesInventario'), {
+      const docRef = await addDoc(collection(db, this.getAjustesPath()), {
         ...ajuste,
         estado: 'pendiente',
         createdAt: serverTimestamp(),
@@ -192,7 +225,7 @@ export class InventarioService {
       const batch = writeBatch(db);
       
       // Obtener ajuste
-      const ajusteRef = doc(db, 'ajustesInventario', ajusteId);
+      const ajusteRef = doc(db, this.getAjustesPath(), ajusteId);
       const ajusteDoc = await getDoc(ajusteRef);
       
       if (!ajusteDoc.exists()) {
@@ -220,7 +253,7 @@ export class InventarioService {
         });
 
         // Crear movimiento de ajuste
-        const movimientoRef = doc(collection(db, 'movimientosInventario'));
+        const movimientoRef = doc(collection(db, this.getMovimientosPath()));
         batch.set(movimientoRef, {
           productoId: productoAjuste.productoId,
           tipo: TipoMovimiento.AJUSTE,
@@ -282,7 +315,7 @@ export class InventarioService {
         });
 
         // Crear movimiento de venta
-        const movimientoRef = doc(collection(db, 'movimientosInventario'));
+        const movimientoRef = doc(collection(db, this.getMovimientosPath()));
         batch.set(movimientoRef, {
           productoId: item.productoId,
           tipo: TipoMovimiento.VENTA,
@@ -332,7 +365,7 @@ export class InventarioService {
         });
 
         // Crear movimiento de devolución
-        const movimientoRef = doc(collection(db, 'movimientosInventario'));
+        const movimientoRef = doc(collection(db, this.getMovimientosPath()));
         batch.set(movimientoRef, {
           productoId: item.productoId,
           tipo: TipoMovimiento.DEVOLUCION,
@@ -365,7 +398,7 @@ export class InventarioService {
     inventario: Omit<InventarioVehiculoDinamico, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<string> {
     try {
-      const docRef = await addDoc(collection(db, 'inventarioVehicular'), {
+      const docRef = await addDoc(collection(db, this.getInventarioVehicularPath()), {
         ...inventario,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -396,14 +429,16 @@ export class InventarioService {
         constraints.unshift(where('conductor', '==', conductor));
       }
 
-      const q = query(collection(db, 'inventarioVehicular'), ...constraints);
+      const q = query(collection(db, this.getInventarioVehicularPath()), ...constraints);
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
+        const data = doc.data();
+        const convertedData = this.convertTimestamps(data);
         return {
           id: doc.id,
-          ...this.convertTimestamps(doc.data())
+          ...convertedData
         } as InventarioVehiculoDinamico;
       }
 
@@ -422,7 +457,7 @@ export class InventarioService {
     productos: { productoId: string; cantidad: number }[]
   ): Promise<void> {
     try {
-      const docRef = doc(db, 'inventarioVehicular', id);
+      const docRef = doc(db, this.getInventarioVehicularPath(), id);
       await updateDoc(docRef, {
         productos,
         updatedAt: serverTimestamp()
@@ -621,23 +656,29 @@ export class InventarioService {
     return Math.floor(diferencia / (1000 * 60 * 60 * 24));
   }
 
-  private static convertTimestamps(data: any): any {
+  private static convertTimestamps<T = unknown>(data: T): T extends Timestamp
+    ? Date
+    : T extends (infer U)[]
+      ? ReturnType<typeof this.convertTimestamps<U>>[]
+      : T extends Record<string, unknown>
+        ? { [K in keyof T]: ReturnType<typeof this.convertTimestamps<T[K]>> }
+        : T {
     if (data instanceof Timestamp) {
-      return data.toDate();
+      return data.toDate() as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
+
     if (Array.isArray(data)) {
-      return data.map(item => this.convertTimestamps(item));
+      return data.map(item => this.convertTimestamps(item)) as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
+
     if (data && typeof data === 'object') {
-      const converted: any = {};
+      const converted: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(data)) {
         converted[key] = this.convertTimestamps(value);
       }
-      return converted;
+      return converted as ReturnType<typeof this.convertTimestamps<T>>;
     }
-    
-    return data;
+
+    return data as ReturnType<typeof this.convertTimestamps<T>>;
   }
 }

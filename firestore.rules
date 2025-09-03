@@ -31,17 +31,17 @@ service cloud.firestore {
 
     // Reglas para tenants - Simplificadas
     match /tenants/{tenantId} {
-      allow create: if isAuthenticated() && 
-        request.auth.token.email == tenantId; // Solo el usuario puede crear su propio tenant
+      allow create: if isAuthenticated() &&
+        request.auth.uid == tenantId; // Solo el usuario puede crear su propio tenant
       allow read, write: if isAuthenticated() && 
-        (request.auth.token.email == tenantId || // Owner del tenant (usando email)
+        (request.auth.uid == tenantId || // Owner del tenant (usando email)
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     // Reglas para datos de tenant
     match /tenants/{tenantId}/{collection}/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.token.email == tenantId || // Owner del tenant (usando email)
+        (request.auth.uid == tenantId || // Owner del tenant (usando email)
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
@@ -55,25 +55,57 @@ service cloud.firestore {
     // Reglas específicas para colecciones comunes en tenants (backup)
     match /tenants/{tenantId}/clientes/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.token.email == tenantId || // Owner del tenant
+        (request.auth.uid == tenantId || // Owner del tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/entregas/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.token.email == tenantId || // Owner del tenant
+        (request.auth.uid == tenantId || // Owner del tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/inventario/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.token.email == tenantId || // Owner del tenant
+        (request.auth.uid == tenantId || // Owner del tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/productos/{document=**} {
-      allow read, write: if isAuthenticated() && 
-        (request.auth.token.email == tenantId || // Owner del tenant
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/movimientosInventario/{document=**} {
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/ajustesInventario/{document=**} {
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/inventarioVehicular/{document=**} {
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    match /tenants/{tenantId}/categoriasProductos/{document=**} {
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == tenantId || // Owner del tenant
+         isAdmin(request.auth.uid)); // Admin del sistema
+    }
+
+    // Regla específica para colección visitas - IMPORTANTE para RutaHoy
+    match /tenants/{tenantId}/visitas/{document=**} {
+      allow read, write: if isAuthenticated() &&
+        (request.auth.uid == tenantId || // Owner del tenant
+         getUserRole(request.auth.uid) in ['admin', 'sodero', 'manager', 'owner'] || // Roles permitidos
          isAdmin(request.auth.uid)); // Admin del sistema
     }
   }

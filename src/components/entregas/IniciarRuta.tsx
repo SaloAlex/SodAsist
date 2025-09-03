@@ -10,6 +10,7 @@ interface IniciarRutaProps {
   onUpdateCliente?: (clienteId: string, estado: EstadoVisita) => void;
   onReorderRoute?: (clientesOrdenados: ClienteConRuta[]) => void;
   ubicacionActual?: { lat: number; lng: number };
+  onRequestLocation?: () => void;
 }
 
 interface PuntoRuta {
@@ -32,7 +33,8 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
   onEndRoute,
   onUpdateCliente,
   onReorderRoute,
-  ubicacionActual
+  ubicacionActual,
+  onRequestLocation
 }) => {
   const [isActive, setIsActive] = useState(false);
   const [clientesCompletados, setClientesCompletados] = useState(0);
@@ -332,6 +334,20 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Punto de inicio
+                {!ubicacionActual && onRequestLocation && (
+                  <button
+                    onClick={onRequestLocation}
+                    className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                    type="button"
+                  >
+                    📍 Obtener ubicación actual
+                  </button>
+                )}
+                {ubicacionActual && (
+                  <span className="ml-2 text-xs text-green-600">
+                    📍 Ubicación disponible
+                  </span>
+                )}
               </label>
               <select
                 className="w-full border border-gray-300 rounded-md shadow-sm p-3 sm:p-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -373,6 +389,20 @@ export const IniciarRuta: React.FC<IniciarRutaProps> = ({
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Punto final (opcional)
+                {!ubicacionActual && onRequestLocation && (
+                  <button
+                    onClick={onRequestLocation}
+                    className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                    type="button"
+                  >
+                    📍 Obtener ubicación actual
+                  </button>
+                )}
+                {ubicacionActual && (
+                  <span className="ml-2 text-xs text-green-600">
+                    📍 Ubicación disponible
+                  </span>
+                )}
               </label>
               <select
                 className="w-full border border-gray-300 rounded-md shadow-sm p-3 sm:p-2 text-sm sm:text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"

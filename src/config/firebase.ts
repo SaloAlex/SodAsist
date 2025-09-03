@@ -8,7 +8,7 @@ import { getTenantFirebaseConfig, getCurrentTenant } from './tenantConfig';
 const firebaseConfig = getTenantFirebaseConfig();
 const currentTenant = getCurrentTenant();
 
-console.log(`🏢 Inicializando Firebase para tenant: ${currentTenant.name} (${currentTenant.projectId})`);
+console.log(`🏢 Firebase: Inicializando para ${currentTenant.name} (${currentTenant.projectId})`);
 
 // Validar configuración del tenant
 const requiredConfig = {
@@ -26,8 +26,7 @@ const missingVars = Object.entries(requiredConfig)
   .map(([key]) => key);
 
 if (missingVars.length > 0) {
-  console.error('🚨 Configuración de Firebase faltante para tenant:', currentTenant.name);
-  console.error('📝 Variables faltantes:', missingVars);
+  console.error('🚨 Firebase: Configuración faltante:', missingVars);
   throw new Error(`Configuración faltante para tenant ${currentTenant.name}: ${missingVars.join(', ')}`);
 }
 
@@ -40,6 +39,6 @@ export const functions = getFunctions(app);
 // Exportar información del tenant
 export { currentTenant };
 
-
+console.log('✅ Firebase: Inicializado correctamente');
 
 export default app;

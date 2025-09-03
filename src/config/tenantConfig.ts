@@ -98,11 +98,11 @@ export const getCurrentTenant = (): TenantConfig => {
     return tenant;
   }
 
-  // Si no encuentra por dominio, usar el default
+  // Si no encuentra por dominio, usar el default con el proyecto correcto
   return {
     ...TENANTS.default,
     name: 'VaListo',
-    projectId: hostname === 'probando.almarketing.site' ? 'sodapp-5cb8a' : 'valisto-demo'
+    projectId: 'sodapp-5cb8a'  // Usar siempre el mismo proyecto
   };
 };
 

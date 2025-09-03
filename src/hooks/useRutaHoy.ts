@@ -27,9 +27,12 @@ interface UseRutaHoyReturn {
   exportarRuta: () => Promise<Blob>;
   enviarNotificacion: (clienteId: string, mensaje: string) => Promise<void>;
   zonaActual: string | null;
+  startLocationTracking: () => void;
 }
 
 export const useRutaHoy = (): UseRutaHoyReturn => {
+  console.log('🚀 useRutaHoy: Hook iniciando');
+  
   const [clientes, setClientes] = useState<ClienteConRuta[]>([]);
   const [rutaOptimizada, setRutaOptimizada] = useState<RutaOptimizada | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,8 +43,21 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
 
   const { userData, loading: authLoading } = useAuthStore();
   
+  console.log('🔍 useRutaHoy: Estado de autenticación:', {
+    userData: !!userData,
+    userDataRol: userData?.rol,
+    authLoading,
+    userDataEmail: userData?.email
+  });
+  
   // Integrar geolocalización de forma segura
-  const { coords: ubicacionActual, error: errorUbicacion, loading: loadingLocation } = useGeolocation();
+  const { coords: ubicacionActual, error: errorUbicacion, loading: loadingLocation, startLocationTracking } = useGeolocation();
+  
+  console.log('🔍 useRutaHoy: Estado de geolocalización:', {
+    ubicacionActual: !!ubicacionActual,
+    errorUbicacion,
+    loadingLocation
+  });
   
   const hasLoadedRef = useRef(false);
   const lastDateRef = useRef<string>('');
@@ -58,30 +74,51 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
     return false;
   }, []);
 
-     // Monitor cambios en geolocalización - solo para desarrollo
-   useEffect(() => {
-     if (ubicacionActual && !hasLoadedRef.current) {
-       // Ubicación obtenida correctamente
-     }
-   }, [ubicacionActual, errorUbicacion, loadingLocation]);
+  // Monitor cambios en geolocalización - solo cuando sea necesario
+  useEffect(() => {
+    // Solo iniciar geolocalización si no se ha cargado y el usuario está autenticado
+    if (!hasLoadedRef.current && userData && !loadingLocation && !ubicacionActual) {
+      console.log('📍 useRutaHoy: Iniciando geolocalización automáticamente...');
+      // Iniciar geolocalización inmediatamente
+      startLocationTracking();
+    }
+  }, [userData, loadingLocation, ubicacionActual, startLocationTracking]);
 
    
 
   // Cargar datos solo una vez - SIN mountedRef
   useEffect(() => {
-    // Verificar si cambió el día
-    if (checkDateChange()) {
-      return; // El estado se limpió, se ejecutará en el siguiente render
-    }
-    
-    if (hasLoadedRef.current || authLoading || !userData) {
+    console.log('🔍 useRutaHoy: useEffect principal ejecutándose', {
+      hasLoadedRef: hasLoadedRef.current,
+      authLoading,
+      userData: !!userData,
+      userDataRol: userData?.rol
+    });
+
+    // No cargar si ya se está cargando o no hay usuario
+    if (authLoading || !userData) {
+      console.log('🔍 useRutaHoy: Esperando autenticación o usuario');
       return;
     }
+
+    // Si ya se cargaron los datos, no hacer nada
+    if (hasLoadedRef.current) {
+      console.log('🔍 useRutaHoy: Datos ya cargados, omitiendo');
+      return;
+    }
+
+    console.log('🚀 useRutaHoy: Iniciando carga de datos...');
 
     const cargarDatos = async () => {
       try {
         setLoading(true);
         setError(null);
+
+        // Verificar si cambió el día ANTES de cargar
+        const diaCambio = checkDateChange();
+        if (diaCambio) {
+          console.log('🔄 useRutaHoy: Día cambió, estado limpiado, continuando carga');
+        }
 
         // Permitir acceso a admin, sodero, owner y manager
         if (!['admin', 'sodero', 'owner', 'manager'].includes(userData.rol)) {
@@ -106,14 +143,13 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         
         // Obtener visitas usando la ruta del tenant
         const user = auth.currentUser;
-        if (!user || !user.email) {
-          throw new Error('Usuario no autenticado o sin email');
+        if (!user || !user.uid) {
+          throw new Error('Usuario no autenticado');
         }
-        
-        
-        
+
+
         const visitasQuery = query(
-          collection(db, `tenants/${user.email}/visitas`),
+          collection(db, `tenants/${user.uid}/visitas`),
           where('fecha', '>=', Timestamp.fromDate(today)),
           orderBy('fecha', 'desc')
         );
@@ -206,12 +242,18 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         }
 
         hasLoadedRef.current = true;
+        console.log('✅ useRutaHoy: Datos cargados exitosamente', {
+          clientesCargados: clientesFiltrados.length,
+          visitasCompletadas: visitasFinales.size
+        });
 
       } catch (err) {
+        console.error('❌ useRutaHoy: Error en carga de datos:', err);
         setError(err instanceof Error ? err : new Error('Error desconocido'));
         toast.error('Error al cargar los datos');
       } finally {
         setLoading(false);
+        console.log('🔍 useRutaHoy: useEffect completado, loading:', false);
       }
     };
 
@@ -547,6 +589,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
     filtrarPorZona,
     exportarRuta,
     enviarNotificacion,
-    zonaActual: zonaSeleccionada
+    zonaActual: zonaSeleccionada,
+    startLocationTracking
   };
 }; 

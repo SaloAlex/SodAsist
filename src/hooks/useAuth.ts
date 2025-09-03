@@ -22,6 +22,7 @@ export const useAuth = () => {
       
       if (!firebaseUser) {
         setUserData(null);
+        setInitialized(true); // ✅ Marcar como inicializado
         return;
       }
 

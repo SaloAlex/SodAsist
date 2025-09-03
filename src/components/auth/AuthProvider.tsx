@@ -8,10 +8,17 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  console.log('🚀 AuthProvider: Iniciando');
   useAuth(); // Este hook maneja la suscripción a los cambios de autenticación
   const { loading, initialized } = useAuthStore();
+  
+  console.log('🔍 AuthProvider: Estado de autenticación:', {
+    loading,
+    initialized
+  });
 
   if (!initialized || loading) {
+    console.log('⏳ AuthProvider: Mostrando spinner de carga');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <LoadingSpinner size="lg" />
@@ -19,5 +26,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
   }
 
+  console.log('✅ AuthProvider: Autenticación inicializada, renderizando children');
   return <>{children}</>;
 }; 

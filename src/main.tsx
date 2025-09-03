@@ -4,6 +4,16 @@ import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App';
 
+// Log global de errores (solo producción)
+if (import.meta.env.PROD) {
+  window.addEventListener('error', (e) => {
+    console.error('[GlobalError]', e.message, e.error?.stack || '');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[PromiseRejection]', e.reason);
+  });
+}
+
 const router = createBrowserRouter([
   {
     path: '/*',

@@ -14,6 +14,8 @@ import { HistorialVisitas } from '../components/entregas/HistorialVisitas';
 type VisitaHistorial = Visita;
 
 export const RutaHoy: React.FC = () => {
+  console.log('🚀 RutaHoy: Componente iniciando renderizado');
+  
   const {
     clientes,
     visitasCompletadas,
@@ -29,11 +31,26 @@ export const RutaHoy: React.FC = () => {
     actualizarOrdenManual,
     filtrarPorZona,
     zonaActual,
-    error
+    error,
+    startLocationTracking
   } = useRutaHoy();
   
-  // DEBUG: Verificar cuando se ejecuta el componente
+  console.log('✅ RutaHoy: Hook useRutaHoy ejecutado correctamente', {
+    clientes: clientes?.length || 0,
+    loading,
+    error: !!error,
+    ubicacionActual: !!ubicacionActual
+  });
   
+  // DEBUG: Verificar cuando se ejecuta el componente
+  console.log('🔍 RutaHoy: Estado del componente:', {
+    clientesLength: clientes?.length || 0,
+    loading,
+    error: !!error,
+    ubicacionActual: !!ubicacionActual,
+    rutaOptimizada: !!rutaOptimizada
+  });
+
 
   const { loading: authLoading, userData } = useAuthStore();
 
@@ -489,6 +506,7 @@ export const RutaHoy: React.FC = () => {
               ubicacionActual={ubicacionActual || undefined}
               onUpdateCliente={(clienteId, estado) => marcarVisita(clienteId, estado)}
               onReorderRoute={(clientesOrdenados) => actualizarOrdenManual(clientesOrdenados.map(c => c.id!))}
+              onRequestLocation={startLocationTracking}
               className="w-full"
             />
           </div>

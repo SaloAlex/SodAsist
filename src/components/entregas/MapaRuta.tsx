@@ -192,8 +192,8 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
       }, 100);
     };
 
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
+    window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('orientationchange', handleResize, { passive: true });
 
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -301,6 +301,10 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
           tilt: 0,
           heading: 0,
           mapTypeId: google.maps.MapTypeId.ROADMAP,
+          // Configuración para event listeners pasivos (evita warnings de rendimiento)
+          disableDoubleClickZoom: false,
+          draggableCursor: 'grab',
+          draggingCursor: 'grabbing',
           // Reducir la calidad en móviles para mejor rendimiento
           ...(window.innerWidth < 768 && {
             zoomControlOptions: {
@@ -328,6 +332,23 @@ export const MapaRuta: React.FC<MapaRutaProps> = ({
           // Prevenir parpadeo en iOS
           mapDiv.style.webkitBackfaceVisibility = 'hidden';
           mapDiv.style.backfaceVisibility = 'hidden';
+
+          // Configuraciones adicionales para event listeners pasivos
+          mapDiv.style.touchAction = 'manipulation';
+          mapDiv.style.userSelect = 'none';
+
+          // Aplicar prefijos de navegador usando propiedades extendidas
+          const style = mapDiv.style as CSSStyleDeclaration & {
+            webkitUserSelect?: string;
+            msUserSelect?: string;
+          };
+          style.webkitUserSelect = 'none';
+          style.msUserSelect = 'none';
+
+          // Optimizar para dispositivos móviles
+          if ('ontouchstart' in window) {
+            mapDiv.style.touchAction = 'pan-x pan-y pinch-zoom';
+          }
         }
 
         // Crear marcadores para los clientes
