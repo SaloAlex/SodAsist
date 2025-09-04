@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { Entrega, Cliente, InventarioVehiculo } from '../../types';
+import { Entrega, Cliente, Producto } from '../../types';
 import { FirebaseService } from '../../services/firebaseService';
+import { ProductosService } from '../../services/productosService';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { LoadingSpinner } from '../common/LoadingSpinner';
@@ -14,7 +15,6 @@ import {
   CreditCard,
   FileText,
   AlertTriangle,
-  Truck,
   Calculator,
   MapPin,
   CheckCircle,
@@ -41,37 +41,73 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { PRECIOS } from '../../config/precios';
 // import { getTenantCollectionPath, getCurrentTenantId } from '../../config/tenantConfig';
 import './EntregaForm.css';
 
-// Schema dinámico que se actualiza con el inventario disponible
-const createSchema = (inventario: InventarioVehiculo | null) => yup.object().shape({
-  clienteId: yup.string().required('Cliente requerido'),
-  sodas: yup.number()
-    .min(0, 'Mínimo 0')
-    .max(inventario?.sodas || 999, `Máximo ${inventario?.sodas || 0} disponibles`)
-    .required('Cantidad requerida'),
-  bidones10: yup.number()
-    .min(0, 'Mínimo 0')
-    .max(inventario?.bidones10 || 999, `Máximo ${inventario?.bidones10 || 0} disponibles`)
-    .required('Cantidad requerida'),
-  bidones20: yup.number()
-    .min(0, 'Mínimo 0')
-    .max(inventario?.bidones20 || 999, `Máximo ${inventario?.bidones20 || 0} disponibles`)
-    .required('Cantidad requerida'),
-  envasesDevueltos: yup.number().min(0, 'Mínimo 0').required('Cantidad requerida'),
-  total: yup.number().min(0, 'Mínimo 0').required('Total requerido'),
-  pagado: yup.boolean().required(),
-  medioPago: yup.string().when('pagado', {
-    is: true,
-    then: (schema) => schema.oneOf(['efectivo', 'transferencia', 'tarjeta'] as const, 'Medio de pago inválido').required('Medio de pago requerido'),
-    otherwise: (schema) => schema.nullable(),
-  }),
-  observaciones: yup.string(),
-});
+// Schema dinámico que se actualiza con los productos disponibles
+const createSchema = (productos: Producto[]) => {
+  const schemaFields: Record<string, yup.AnySchema> = {
+    clienteId: yup.string().required('Cliente requerido'),
+    total: yup.number()
+      .transform((_value, originalValue) => {
+        // Si el valor original es una cadena vacía o no es un número válido, devolver 0
+        if (originalValue === '' || originalValue === null || originalValue === undefined) {
+          return 0;
+        }
+        const num = Number(originalValue);
+        return isNaN(num) ? 0 : num;
+      })
+      .min(0, 'Mínimo 0')
+      .required('Total requerido'),
+    pagado: yup.boolean().required(),
+    medioPago: yup.string().when('pagado', {
+      is: true,
+      then: (schema) => schema.oneOf(['efectivo', 'transferencia', 'tarjeta'] as const, 'Medio de pago inválido').required('Medio de pago requerido'),
+      otherwise: (schema) => schema.nullable(),
+    }),
+    observaciones: yup.string(),
+    envasesDevueltos: yup.number()
+      .transform((_value, originalValue) => {
+        // Si el valor original es una cadena vacía o no es un número válido, devolver 0
+        if (originalValue === '' || originalValue === null || originalValue === undefined) {
+          return 0;
+        }
+        const num = Number(originalValue);
+        return isNaN(num) ? 0 : num;
+      })
+      .min(0, 'Mínimo 0')
+      .required('Cantidad requerida'),
+  };
 
-type EntregaFormData = yup.InferType<ReturnType<typeof createSchema>>;
+  // Agregar campos dinámicos para cada producto
+  productos.forEach(producto => {
+    const fieldName = `producto_${producto.id}`;
+    schemaFields[fieldName] = yup.number()
+      .transform((_value, originalValue) => {
+        // Si el valor original es una cadena vacía o no es un número válido, devolver 0
+        if (originalValue === '' || originalValue === null || originalValue === undefined) {
+          return 0;
+        }
+        const num = Number(originalValue);
+        return isNaN(num) ? 0 : num;
+      })
+      .min(0, 'Mínimo 0')
+      .max(producto.stock || 999, `Máximo ${producto.stock || 0} disponibles`)
+      .required('Cantidad requerida');
+  });
+
+  return yup.object().shape(schemaFields);
+};
+
+type EntregaFormData = {
+  clienteId: string;
+  total: number;
+  pagado: boolean;
+  medioPago?: string;
+  observaciones?: string;
+  envasesDevueltos: number;
+  [key: string]: string | number | boolean | undefined; // Para campos dinámicos de productos
+};
 
 interface HistorialEntrega {
   fecha: Date;
@@ -96,7 +132,7 @@ export const EntregaForm: React.FC = () => {
   const { user } = useAuthStore();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
-  const [inventario, setInventario] = useState<InventarioVehiculo | null>(null);
+  const [productos, setProductos] = useState<Producto[]>([]);
   const [historialCliente, setHistorialCliente] = useState<HistorialEntrega[]>([]);
   const [clienteStats, setClienteStats] = useState<ClienteStats | null>(null);
   
@@ -110,9 +146,7 @@ export const EntregaForm: React.FC = () => {
   const [showConfirmacionEntrega, setShowConfirmacionEntrega] = useState(false);
   const [entregaRegistrada, setEntregaRegistrada] = useState<{
     clienteId: string;
-    sodas: number;
-    bidones10: number;
-    bidones20: number;
+    productos: { productoId: string; cantidad: number; precio: number; nombre: string; subtotal: number }[];
     envasesDevueltos: number;
     total: number;
     pagado: boolean;
@@ -135,7 +169,7 @@ export const EntregaForm: React.FC = () => {
     trigger,
     reset,
   } = useForm<EntregaFormData>({
-    resolver: yupResolver(createSchema(inventario)),
+    resolver: yupResolver(createSchema(productos)) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     defaultValues: {
       sodas: 0,
       bidones10: 0,
@@ -147,13 +181,7 @@ export const EntregaForm: React.FC = () => {
     mode: 'onChange'
   });
 
-  const watchedValues = watch(['sodas', 'bidones10', 'bidones20']);
   const allValues = watch();
-
-  // Valores individuales de watchedValues para dependencias limpias en useEffect
-  const sodasWatched = watchedValues[0];
-  const bidones10Watched = watchedValues[1];
-  const bidones20Watched = watchedValues[2];
 
   // Pasos del wizard
   const steps = [
@@ -169,7 +197,7 @@ export const EntregaForm: React.FC = () => {
       title: 'Productos',
       description: 'Cantidades y productos a entregar',
       icon: Package,
-      fields: ['sodas', 'bidones10', 'bidones20', 'envasesDevueltos']
+      fields: ['envasesDevueltos']
     },
     {
       id: 3,
@@ -188,42 +216,51 @@ export const EntregaForm: React.FC = () => {
   ];
 
 
-  // Calcular total automáticamente
-  useEffect(() => {
-    const total = (sodasWatched || 0) * PRECIOS.soda + 
-                  (bidones10Watched || 0) * PRECIOS.bidon10 + 
-                  (bidones20Watched || 0) * PRECIOS.bidon20;
-    setValue('total', total);
-  }, [sodasWatched, bidones10Watched, bidones20Watched, setValue]); // Dependencias limpias
+  // Calcular total dinámicamente
+  const totalCalculado = useMemo(() => {
+    if (productos.length === 0) return 0;
+    
+    let total = 0;
+    productos.forEach(producto => {
+      const fieldName = `producto_${producto.id}`;
+      const cantidad = allValues[fieldName] as number || 0;
+      total += cantidad * producto.precioVenta;
+    });
+    
+    return total;
+  }, [productos, allValues]);
 
-  // Revalidar formulario cuando cambie el inventario
+  // No actualizar el campo total automáticamente para evitar bucles infinitos
+  // El total se calcula dinámicamente y se usa directamente en la UI
+
+  // Revalidar formulario cuando cambien los productos
   useEffect(() => {
-    if (inventario) {
+    if (productos.length > 0) {
       trigger(); // Revalidar todos los campos
     }
-  }, [inventario, trigger]);
+  }, [productos, trigger]);
 
   // Cargar datos iniciales
   useEffect(() => {
     loadClientes();
-    loadInventario();
+    loadProductos();
   }, []);
 
-  // Recargar inventario cuando el usuario regresa a la página
+  // Recargar productos cuando el usuario regresa a la página
   useEffect(() => {
     const handleFocus = () => {
-      loadInventario();
+      loadProductos();
     };
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        loadInventario();
+        loadProductos();
       }
     };
 
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -267,14 +304,15 @@ export const EntregaForm: React.FC = () => {
     loadClienteFromUrl();
   }, [location.search, setValue]);
 
-  const loadInventario = async () => {
+
+  const loadProductos = async () => {
     try {
-      const inv = await FirebaseService.getInventarioActual();
-      setInventario(inv);
+      const productosData = await ProductosService.getProductos({ activo: true });
+      setProductos(productosData);
     } catch (err) {
-      console.error('Error al cargar inventario:', err);
-      toast.error('Error al cargar inventario del vehículo');
-      setInventario(null);
+      console.error('Error al cargar productos:', err);
+      toast.error('Error al cargar productos');
+      setProductos([]);
     }
   };
 
@@ -388,29 +426,29 @@ export const EntregaForm: React.FC = () => {
   }, [setValue]);
 
   const validarInventario = (data: EntregaFormData): boolean => {
-    if (!inventario) {
-      toast('Inventario no disponible. La entrega se registrará sin validación de stock.', { 
+    if (!productos || productos.length === 0) {
+      toast('Productos no disponibles. La entrega se registrará sin validación de stock.', { 
         icon: '⚠️',
         duration: 5000
       });
       return true; // Permitir la entrega temporalmente
     }
 
-    const suficienteSodas = (inventario.sodas || 0) >= data.sodas;
-    const suficienteBidones10 = (inventario.bidones10 || 0) >= data.bidones10;
-    const suficienteBidones20 = (inventario.bidones20 || 0) >= data.bidones20;
+    let todosLosProductosDisponibles = true;
 
-    if (!suficienteSodas) {
-      toast.error(`Stock insuficiente: Solo quedan ${inventario.sodas} sodas`);
-    }
-    if (!suficienteBidones10) {
-      toast.error(`Stock insuficiente: Solo quedan ${inventario.bidones10} bidones de 10L`);
-    }
-    if (!suficienteBidones20) {
-      toast.error(`Stock insuficiente: Solo quedan ${inventario.bidones20} bidones de 20L`);
-    }
+    // Validar cada producto dinámicamente
+    productos.forEach(producto => {
+      const fieldName = `producto_${producto.id}`;
+      const cantidadSolicitada = (data[fieldName] as number) || 0;
+      const stockDisponible = producto.stock || 0;
 
-    return suficienteSodas && suficienteBidones10 && suficienteBidones20;
+      if (cantidadSolicitada > stockDisponible) {
+        toast.error(`Stock insuficiente: Solo quedan ${stockDisponible} ${producto.nombre}`);
+        todosLosProductosDisponibles = false;
+      }
+    });
+
+    return todosLosProductosDisponibles;
   };
 
   // Función para calcular días de vencimiento
@@ -470,7 +508,7 @@ export const EntregaForm: React.FC = () => {
   const nextStep = async () => {
     const currentStepData = steps.find(s => s.id === currentStep);
     if (currentStepData) {
-      const isStepValid = await trigger(currentStepData.fields as (keyof EntregaFormData)[]);
+      const isStepValid = await trigger(currentStepData.fields as string[]);
       if (isStepValid) {
         setCurrentStep(prev => Math.min(prev + 1, steps.length));
       }
@@ -511,13 +549,26 @@ export const EntregaForm: React.FC = () => {
       if (!isValid(now)) {
         throw new Error('Error al generar la fecha');
       }
+      // Crear array de productos entregados
+      const productosEntregados = productos
+        .map(producto => {
+          const fieldName = `producto_${producto.id}`;
+          const cantidad = (data[fieldName] as number) || 0;
+          return cantidad > 0 ? {
+            productoId: producto.id!,
+            nombre: producto.nombre,
+            cantidad,
+            precio: producto.precioVenta,
+            subtotal: cantidad * producto.precioVenta
+          } : null;
+        })
+        .filter((producto): producto is NonNullable<typeof producto> => producto !== null);
+
       const entregaData: Omit<Entrega, 'id'> = {
         clienteId: data.clienteId,
-        sodas: data.sodas,
-        bidones10: data.bidones10,
-        bidones20: data.bidones20,
+        productos: productosEntregados,
         envasesDevueltos: data.envasesDevueltos,
-        total: data.total,
+        total: totalCalculado,
         pagado: data.pagado,
         fecha: now,
         createdAt: now,
@@ -557,9 +608,9 @@ export const EntregaForm: React.FC = () => {
       let nuevoSaldo = clienteData?.saldoPendiente || 0;
 
       if (data.pagado) {
-        nuevoSaldo = Math.max(0, nuevoSaldo - data.total);
+        nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
       } else {
-        nuevoSaldo = nuevoSaldo + data.total;
+        nuevoSaldo = nuevoSaldo + totalCalculado;
       }
 
       const batch = writeBatch(db);
@@ -579,25 +630,62 @@ export const EntregaForm: React.FC = () => {
         updatedAt: serverTimestamp(),
       });
 
-      if (inventario) {
-        const nuevoInventario = {
-          ...inventario,
-          sodas: (inventario.sodas || 0) - data.sodas,
-          bidones10: (inventario.bidones10 || 0) - data.bidones10,
-          bidones20: (inventario.bidones20 || 0) - data.bidones20,
-          envasesDevueltos: (inventario.envasesDevueltos || 0) + data.envasesDevueltos,
-          updatedAt: serverTimestamp()
-        };
 
-        const inventarioCollectionPath = `tenants/${userTenantId}/inventarioVehiculo`;
-        batch.update(doc(db, inventarioCollectionPath, inventario.id), nuevoInventario);
-      }
+      // Actualizar stock de productos individuales
+      // Verificar que los productos existan antes de actualizar
+      const stockUpdates = productosEntregados.map(async (producto) => {
+        const productoData = productos.find(p => p.id === producto.productoId);
+        if (!productoData) return null;
+        
+        const nuevoStock = (productoData.stock || 0) - producto.cantidad;
+        
+        // Verificar si el producto existe en la colección del tenant
+        const tenantProductoRef = doc(db, `tenants/${userTenantId}/productos`, producto.productoId);
+        
+        try {
+          const productoDoc = await getDoc(tenantProductoRef);
+          
+          if (productoDoc.exists()) {
+            // El producto existe, actualizar el stock
+            return {
+              ref: tenantProductoRef,
+              data: {
+                stock: nuevoStock,
+                updatedAt: serverTimestamp()
+              }
+            };
+          } else {
+            // El producto no existe, crear un log de advertencia
+            console.warn(`Producto ${producto.productoId} no existe en la colección del tenant. Saltando actualización de stock.`);
+            return null;
+          }
+        } catch (error) {
+          console.warn(`Error al verificar producto ${producto.productoId}:`, error);
+          return null;
+        }
+      });
+
+      // Esperar a que se resuelvan todas las verificaciones
+      const stockUpdateResults = await Promise.all(stockUpdates);
+      
+      // Agregar solo las actualizaciones válidas al batch
+      stockUpdateResults.forEach(update => {
+        if (update) {
+          batch.update(update.ref, update.data);
+        }
+      });
 
       await batch.commit();
       
       // Guardar datos de la entrega para mostrar en el modal de confirmación
       const entregaCompleta = {
-        ...entregaData,
+        clienteId: data.clienteId,
+        productos: productosEntregados,
+        envasesDevueltos: data.envasesDevueltos,
+        total: totalCalculado,
+        pagado: data.pagado,
+        medioPago: data.medioPago,
+        observaciones: data.observaciones,
         cliente: clienteData as Cliente,
         nuevoSaldo: nuevoSaldo,
         fechaRegistro: now
@@ -692,103 +780,6 @@ export const EntregaForm: React.FC = () => {
     </div>
   );
 
-  // Widget de inventario mejorado - Responsive
-  const InventarioWidget = () => (
-    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold text-blue-800 dark:text-blue-300">
-              Inventario del Vehículo
-            </h3>
-            <p className="text-xs text-blue-600 dark:text-blue-400">
-              Stock disponible en tu vehículo para entregas
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => navigate('/inventario?tab=vehiculo')}
-            className="flex items-center px-2 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            title="Gestionar inventario del vehículo"
-          >
-            <Package className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Gestionar</span>
-          </button>
-          <button
-            onClick={loadInventario}
-            className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/30 rounded-lg transition-colors"
-            title="Actualizar inventario del vehículo"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        {[
-          { label: 'Sodas', value: inventario?.sodas || 0, icon: Package, color: 'blue' },
-          { label: 'Bidones 10L', value: inventario?.bidones10 || 0, icon: Package, color: 'green' },
-          { label: 'Bidones 20L', value: inventario?.bidones20 || 0, icon: Package, color: 'purple' }
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="text-center p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <Icon className={`h-5 w-5 sm:h-6 sm:w-6 mx-auto mb-1 sm:mb-2 text-${color}-600 dark:text-${color}-400`} />
-            <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-            <p className="text-xs text-gray-600 dark:text-gray-400">{label}</p>
-            {value === 0 && (
-              <div className="mt-1 px-1 sm:px-2 py-0.5 bg-red-200 dark:bg-red-800/30 text-red-700 dark:text-red-300 text-xs rounded-full font-medium">
-                Sin stock
-              </div>
-            )}
-            {value > 0 && value < 5 && (
-              <div className="mt-1 px-1 sm:px-2 py-0.5 bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs rounded-full">
-                Stock muy bajo
-              </div>
-            )}
-            {value >= 5 && value < 10 && (
-              <div className="mt-1 px-1 sm:px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 text-xs rounded-full">
-                Stock bajo
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      
-      {/* Información adicional del inventario */}
-      {inventario ? (
-        <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
-          <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
-            <span>Última actualización: {inventario.updatedAt ? new Date(inventario.updatedAt).toLocaleTimeString() : 'N/A'}</span>
-            <span>Envases devueltos: {inventario.envasesDevueltos || 0}</span>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-700">
-          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
-                  No hay inventario cargado
-                </p>
-                <p className="text-xs text-orange-600 dark:text-orange-300">
-                  Carga el stock inicial del vehículo para validar entregas
-                </p>
-              </div>
-              <button
-                onClick={() => navigate('/inventario?tab=vehiculo')}
-                className="flex items-center px-3 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-              >
-                <Package className="h-3 w-3 mr-1" />
-                Cargar Stock
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 
   // Panel de cliente mejorado - Responsive
   const ClientePanel = () => {
@@ -848,15 +839,13 @@ export const EntregaForm: React.FC = () => {
             
             <button
               onClick={() => {
-                if (inventario) {
+                if (productos.length > 0) {
                   // Sugerir cantidades basadas en el stock disponible (máximo 50% del stock)
-                  const sugerenciaSodas = Math.floor((inventario.sodas || 0) * 0.5);
-                  const sugerenciaBidones10 = Math.floor((inventario.bidones10 || 0) * 0.5);
-                  const sugerenciaBidones20 = Math.floor((inventario.bidones20 || 0) * 0.5);
-                  
-                  setValue('sodas', sugerenciaSodas);
-                  setValue('bidones10', sugerenciaBidones10);
-                  setValue('bidones20', sugerenciaBidones20);
+                  productos.forEach(producto => {
+                    const fieldName = `producto_${producto.id}`;
+                    const sugerencia = Math.floor((producto.stock || 0) * 0.5);
+                    setValue(fieldName as string, sugerencia);
+                  });
                   
                   toast.success('Cantidades sugeridas basadas en stock disponible');
                 }
@@ -933,8 +922,6 @@ export const EntregaForm: React.FC = () => {
       case 1:
         return (
           <div className="space-y-6">
-            <InventarioWidget />
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <User className="inline h-4 w-4 mr-2" />
@@ -1046,6 +1033,7 @@ export const EntregaForm: React.FC = () => {
                   Productos a Entregar
                 </h3>
                 <button
+                  type="button"
                   onClick={() => setShowCalculator(!showCalculator)}
                   className={`flex items-center justify-center px-4 py-3 text-sm font-medium rounded-lg shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 w-full sm:w-auto min-w-[140px] calculator-button ${
                     showCalculator 
@@ -1064,46 +1052,40 @@ export const EntregaForm: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                {[
-                  { name: 'sodas', label: 'Sodas', price: PRECIOS.soda, icon: Package },
-                  { name: 'bidones10', label: 'Bidones 10L', price: PRECIOS.bidon10, icon: Package },
-                  { name: 'bidones20', label: 'Bidones 20L', price: PRECIOS.bidon20, icon: Package },
-                  { name: 'envasesDevueltos', label: 'Envases Devueltos', price: 0, icon: Package }
-                ].map(({ name, label, price, icon: Icon }) => {
-                  const stockDisponible = inventario && name !== 'envasesDevueltos' 
-                    ? (inventario[name as keyof InventarioVehiculo] as number) || 0 
-                    : null;
-                  const cantidadSolicitada = allValues[name as keyof EntregaFormData] as number || 0;
-                  const excedeStock = stockDisponible !== null && cantidadSolicitada > stockDisponible;
+                {/* Productos dinámicos */}
+                {productos.map((producto) => {
+                  const fieldName = `producto_${producto.id}` as keyof EntregaFormData;
+                  const stockDisponible = producto.stock || 0;
+                  const cantidadSolicitada = allValues[fieldName] as number || 0;
+                  const excedeStock = cantidadSolicitada > stockDisponible;
                   
                   return (
-                    <div key={name} className="space-y-2">
+                    <div key={producto.id} className="space-y-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        <Icon className="inline h-4 w-4 mr-2" />
-                        {label} {price > 0 && <span className="text-gray-500 text-xs sm:text-sm">(${price} c/u)</span>}
+                        <Package className="inline h-4 w-4 mr-2" />
+                        {producto.nombre} 
+                        <span className="text-gray-500 text-xs sm:text-sm">(${producto.precioVenta} c/u)</span>
                       </label>
-                      <div className="relative">
+                      <div className="space-y-1">
                         <input
-                          {...register(name as keyof EntregaFormData, { valueAsNumber: true })}
+                          {...register(fieldName as string, { valueAsNumber: true })}
                           type="number"
                           min="0"
-                          max={stockDisponible !== null ? stockDisponible : undefined}
+                          max={stockDisponible}
                           className={`w-full px-3 py-2 text-base sm:text-sm border rounded-lg focus:ring-2 focus:border-transparent dark:bg-gray-700 dark:text-white ${
                             excedeStock 
                               ? 'border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20' 
                               : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
                           }`}
                         />
-                        {stockDisponible !== null && (
-                          <div className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-xs ${
-                            excedeStock ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
-                          }`}>
-                            Stock: {stockDisponible}
-                          </div>
-                        )}
+                        <div className={`text-xs text-right ${
+                          excedeStock ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          Stock disponible: {stockDisponible}
+                        </div>
                       </div>
                       
-                      {/* Alertas de stock - Solo una por producto */}
+                      {/* Alertas de stock */}
                       {excedeStock && (
                         <div className="flex items-center space-x-1 text-xs text-red-600 dark:text-red-400">
                           <AlertTriangle className="h-3 w-3" />
@@ -1118,21 +1100,42 @@ export const EntregaForm: React.FC = () => {
                         </div>
                       )}
                       
-                      {!excedeStock && stockDisponible !== null && stockDisponible < 5 && stockDisponible > 0 && (
+                      {!excedeStock && stockDisponible < 5 && stockDisponible > 0 && (
                         <div className="flex items-center space-x-1 text-xs text-orange-600 dark:text-orange-400">
                           <AlertTriangle className="h-3 w-3" />
                           <span>Stock muy bajo</span>
                         </div>
                       )}
                       
-                      {errors[name as keyof EntregaFormData] && (
+                      {errors[fieldName] && (
                         <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">
-                          {errors[name as keyof EntregaFormData]?.message}
+                          {(errors[fieldName] as { message?: string })?.message}
                         </p>
                       )}
                     </div>
                   );
                 })}
+
+                {/* Campo para envases devueltos (siempre presente) */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <Package className="inline h-4 w-4 mr-2" />
+                    Envases Devueltos
+                  </label>
+                  <div className="relative">
+                    <input
+                      {...register('envasesDevueltos', { valueAsNumber: true })}
+                      type="number"
+                      min="0"
+                      className="w-full px-3 py-2 text-base sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                    />
+                  </div>
+                  {errors.envasesDevueltos && (
+                    <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">
+                      {errors.envasesDevueltos?.message}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Calculadora visual mejorada */}
@@ -1143,34 +1146,30 @@ export const EntregaForm: React.FC = () => {
                     Desglose de Precios
                   </h4>
                   <div className="space-y-3 text-sm">
-                    <div className="flex justify-between items-center py-1">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        Sodas: {allValues.sodas} × ${PRECIOS.soda}
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        ${((allValues.sodas || 0) * PRECIOS.soda).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center py-1">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        Bidones 10L: {allValues.bidones10} × ${PRECIOS.bidon10}
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        ${((allValues.bidones10 || 0) * PRECIOS.bidon10).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center py-1">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        Bidones 20L: {allValues.bidones20} × ${PRECIOS.bidon20}
-                      </span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        ${((allValues.bidones20 || 0) * PRECIOS.bidon20).toFixed(2)}
-                      </span>
-                    </div>
+                    {/* Productos dinámicos */}
+                    {productos.map((producto) => {
+                      const fieldName = `producto_${producto.id}` as keyof EntregaFormData;
+                      const cantidad = allValues[fieldName] as number || 0;
+                      const subtotal = cantidad * producto.precioVenta;
+                      
+                      if (cantidad === 0) return null;
+                      
+                      return (
+                        <div key={producto.id} className="flex justify-between items-center py-1">
+                          <span className="text-gray-600 dark:text-gray-300">
+                            {producto.nombre}: {cantidad} × ${producto.precioVenta}
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            ${subtotal.toFixed(2)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    
                     <div className="border-t border-gray-300 dark:border-gray-500 pt-3 flex justify-between items-center font-semibold text-base">
                       <span className="text-gray-700 dark:text-gray-200">Total:</span>
                       <span className="text-green-600 dark:text-green-400 font-bold">
-                        ${allValues.total?.toFixed(2) || '0.00'}
+                        ${totalCalculado.toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -1195,7 +1194,7 @@ export const EntregaForm: React.FC = () => {
                     Total a Cobrar
                   </label>
                   <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                    ${allValues.total?.toFixed(2) || '0.00'}
+                    ${totalCalculado.toFixed(2)}
                   </div>
                 </div>
 
@@ -1248,11 +1247,11 @@ export const EntregaForm: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       <span className="text-sm text-amber-800 dark:text-amber-200">
-                        Se agregará ${allValues.total?.toFixed(2)} al saldo pendiente del cliente
+                        Se agregará ${totalCalculado.toFixed(2)} al saldo pendiente del cliente
                       </span>
                     </div>
                     <div className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                      Nuevo saldo: ${(((clienteSeleccionado?.saldoPendiente || 0) + (allValues.total || 0)).toFixed(2))}
+                      Nuevo saldo: ${(((clienteSeleccionado?.saldoPendiente || 0) + totalCalculado).toFixed(2))}
                     </div>
                   </div>
                 )}
@@ -1393,17 +1392,26 @@ export const EntregaForm: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Productos</h4>
                   <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-1">
-                    {allValues.sodas > 0 && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300"><span className="font-medium text-gray-900 dark:text-white">{allValues.sodas}</span> Sodas</p>
-                    )}
-                    {allValues.bidones10 > 0 && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300"><span className="font-medium text-gray-900 dark:text-white">{allValues.bidones10}</span> Bidones 10L</p>
-                    )}
-                    {allValues.bidones20 > 0 && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300"><span className="font-medium text-gray-900 dark:text-white">{allValues.bidones20}</span> Bidones 20L</p>
-                    )}
+                    {/* Productos dinámicos */}
+                    {productos.map((producto) => {
+                      const fieldName = `producto_${producto.id}`;
+                      const cantidad = (allValues[fieldName] as number) || 0;
+                      
+                      if (cantidad > 0) {
+                        return (
+                          <p key={producto.id} className="text-sm text-gray-700 dark:text-gray-300">
+                            <span className="font-medium text-gray-900 dark:text-white">{cantidad}</span> {producto.nombre}
+                          </p>
+                        );
+                      }
+                      return null;
+                    })}
+                    
+                    {/* Envases devueltos */}
                     {allValues.envasesDevueltos > 0 && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300"><span className="font-medium text-gray-900 dark:text-white">{allValues.envasesDevueltos}</span> Envases Devueltos</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium text-gray-900 dark:text-white">{allValues.envasesDevueltos}</span> Envases Devueltos
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1411,7 +1419,7 @@ export const EntregaForm: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pago</h4>
                   <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">${allValues.total?.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">${totalCalculado.toFixed(2)}</p>
                     <p className={`text-sm ${allValues.pagado ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {allValues.pagado ? `Pagado - ${allValues.medioPago}` : 'Pendiente de pago'}
                     </p>
@@ -1460,7 +1468,7 @@ export const EntregaForm: React.FC = () => {
       <StepProgress />
 
       {/* Contenido del formulario */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6"> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
         {renderCurrentStep()}
 
         {/* Botones de navegación - Responsive */}
@@ -1694,25 +1702,17 @@ export const EntregaForm: React.FC = () => {
                     <Package className="h-4 w-4 mr-2" />
                     Productos Entregados
                   </h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    {entregaRegistrada.sodas > 0 && (
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.sodas}</div>
-                        <div className="text-green-600 dark:text-green-400">Sodas</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                    {/* Productos dinámicos */}
+                    {entregaRegistrada.productos?.map((producto) => (
+                      <div key={producto.productoId} className="text-center">
+                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{producto.cantidad}</div>
+                        <div className="text-green-600 dark:text-green-400">{producto.nombre}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">${producto.subtotal.toFixed(2)}</div>
                       </div>
-                    )}
-                    {entregaRegistrada.bidones10 > 0 && (
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.bidones10}</div>
-                        <div className="text-green-600 dark:text-green-400">Bidones 10L</div>
-                      </div>
-                    )}
-                    {entregaRegistrada.bidones20 > 0 && (
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.bidones20}</div>
-                        <div className="text-green-600 dark:text-green-400">Bidones 20L</div>
-                      </div>
-                    )}
+                    ))}
+                    
+                    {/* Envases devueltos */}
                     {entregaRegistrada.envasesDevueltos > 0 && (
                       <div className="text-center">
                         <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.envasesDevueltos}</div>

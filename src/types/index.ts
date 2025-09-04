@@ -64,13 +64,24 @@ export interface Cliente {
   zona?: string;
 }
 
+export interface ProductoEntrega {
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  precio: number;
+  subtotal: number;
+}
+
 export interface Entrega {
   id: string;
   clienteId: string;
   fecha: Date;
-  sodas: number;
-  bidones10: number;
-  bidones20: number;
+  // Campos legacy para compatibilidad
+  sodas?: number;
+  bidones10?: number;
+  bidones20?: number;
+  // Nuevo campo para productos dinámicos
+  productos?: ProductoEntrega[];
   envasesDevueltos: number;
   total: number;
   pagado: boolean;

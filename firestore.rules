@@ -84,7 +84,8 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && 
         (collection == 'users' || // Usuarios (manejado arriba)
          collection == 'tenants' || // Tenants (manejado arriba)
-         collection == 'clientes'); // Permitir lectura de clientes globales para migración
+         collection == 'clientes' || // Permitir lectura de clientes globales para migración
+         collection == 'productos'); // Permitir actualización de productos globales
     }
 
     // Reglas específicas para colecciones comunes en tenants - Con sistema de roles
