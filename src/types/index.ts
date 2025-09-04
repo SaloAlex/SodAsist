@@ -85,6 +85,8 @@ export interface Entrega {
   envasesDevueltos: number;
   total: number;
   pagado: boolean;
+  tipoPago?: 'no_pagado' | 'pagado_completo' | 'pago_parcial';
+  montoPagado?: number;
   medioPago?: 'efectivo' | 'transferencia' | 'tarjeta';
   firmaURL?: string;
   fotoEntregaURL?: string;

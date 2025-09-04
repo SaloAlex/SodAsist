@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { onEntregaCreate } from './triggers/onEntregaCreate';
 import { genFacturaPdf } from './functions/genFacturaPdf';
@@ -14,10 +14,10 @@ export const generateFacturaPdf = genFacturaPdf;
 export const getKpisDailyData = getKpisDaily;
 
 // Scheduled functions
-export const generateDailyKpis = functions.pubsub
-  .schedule('0 1 * * *') // Daily at 1 AM
-  .timeZone('America/Argentina/Buenos_Aires')
-  .onRun(async () => {
+export const generateDailyKpis = onSchedule({
+  schedule: '0 1 * * *', // Daily at 1 AM
+  timeZone: 'America/Argentina/Buenos_Aires'
+}, async () => {
     const db = admin.firestore();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);

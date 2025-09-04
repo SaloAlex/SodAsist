@@ -1,13 +1,29 @@
-import * as functions from 'firebase-functions';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 
-export const getKpisDaily = functions.https.onCall(async (data: any, context: functions.https.CallableContext) => {
+interface KpiData {
+  litrosVendidos?: number;
+  cobranzasTotal?: number;
+  clientesAtendidos?: number;
+  entregasRealizadas?: number;
+  porcentajeMora?: number;
+  fecha: admin.firestore.Timestamp;
+}
+
+interface KpiTotals {
+  litrosVendidos: number;
+  cobranzasTotal: number;
+  clientesAtendidos: number;
+  entregasRealizadas: number;
+}
+
+export const getKpisDaily = onCall(async (request) => {
   // Verify authentication
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
   
-  const { startDate, endDate } = data as { startDate?: string; endDate?: string };
+  const { startDate, endDate } = request.data as { startDate?: string; endDate?: string };
   
   try {
     const db = admin.firestore();
@@ -30,7 +46,7 @@ export const getKpisDaily = functions.https.onCall(async (data: any, context: fu
     }));
     
     // Calculate totals and averages
-    const totals = kpis.reduce((acc, kpi: any) => ({
+    const totals = kpis.reduce((acc: KpiTotals, kpi: KpiData) => ({
       litrosVendidos: acc.litrosVendidos + (kpi.litrosVendidos || 0),
       cobranzasTotal: acc.cobranzasTotal + (kpi.cobranzasTotal || 0),
       clientesAtendidos: acc.clientesAtendidos + (kpi.clientesAtendidos || 0),
@@ -47,7 +63,7 @@ export const getKpisDaily = functions.https.onCall(async (data: any, context: fu
       cobranzasTotal: kpis.length > 0 ? totals.cobranzasTotal / kpis.length : 0,
       clientesAtendidos: kpis.length > 0 ? totals.clientesAtendidos / kpis.length : 0,
       entregasRealizadas: kpis.length > 0 ? totals.entregasRealizadas / kpis.length : 0,
-      porcentajeMora: kpis.length > 0 ? kpis.reduce((acc: number, kpi: any) => acc + (kpi.porcentajeMora || 0), 0) / kpis.length : 0,
+      porcentajeMora: kpis.length > 0 ? kpis.reduce((acc: number, kpi: KpiData) => acc + (kpi.porcentajeMora || 0), 0) / kpis.length : 0,
     };
     
     return {
@@ -63,6 +79,6 @@ export const getKpisDaily = functions.https.onCall(async (data: any, context: fu
     
   } catch (error) {
     console.error('Error getting KPIs:', error);
-    throw new functions.https.HttpsError('internal', 'Error retrieving KPIs');
+    throw new HttpsError('internal', 'Error retrieving KPIs');
   }
 });

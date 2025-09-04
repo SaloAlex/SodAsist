@@ -1,17 +1,17 @@
-import * as functions from 'firebase-functions';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import PDFDocument from 'pdfkit';
 
-export const genFacturaPdf = functions.https.onCall(async (data: any, context: functions.https.CallableContext) => {
+export const genFacturaPdf = onCall(async (request) => {
   // Verify authentication
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
   
-  const { entregaId } = data as { entregaId: string };
+  const { entregaId } = request.data as { entregaId: string };
   
   if (!entregaId) {
-    throw new functions.https.HttpsError('invalid-argument', 'entregaId is required');
+    throw new HttpsError('invalid-argument', 'entregaId is required');
   }
   
   try {
@@ -21,7 +21,7 @@ export const genFacturaPdf = functions.https.onCall(async (data: any, context: f
     // Get delivery data
     const entregaDoc = await db.collection('entregas').doc(entregaId).get();
     if (!entregaDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'Entrega not found');
+      throw new HttpsError('not-found', 'Entrega not found');
     }
     
     const entrega = entregaDoc.data();
@@ -29,7 +29,7 @@ export const genFacturaPdf = functions.https.onCall(async (data: any, context: f
     // Get client data
     const clienteDoc = await db.collection('clientes').doc(entrega?.clienteId).get();
     if (!clienteDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'Cliente not found');
+      throw new HttpsError('not-found', 'Cliente not found');
     }
     
     const cliente = clienteDoc.data();
@@ -100,8 +100,8 @@ export const genFacturaPdf = functions.https.onCall(async (data: any, context: f
     return new Promise((resolve, reject) => {
       doc.pipe(stream);
       
-      stream.on('error', (error) => {
-        reject(new functions.https.HttpsError('internal', 'Error saving PDF'));
+      stream.on('error', () => {
+        reject(new HttpsError('internal', 'Error saving PDF'));
       });
       
       stream.on('finish', async () => {
@@ -118,8 +118,8 @@ export const genFacturaPdf = functions.https.onCall(async (data: any, context: f
           });
           
           resolve({ url: publicUrl });
-        } catch (error) {
-          reject(new functions.https.HttpsError('internal', 'Error making PDF public'));
+        } catch {
+          reject(new HttpsError('internal', 'Error making PDF public'));
         }
       });
       
@@ -128,6 +128,6 @@ export const genFacturaPdf = functions.https.onCall(async (data: any, context: f
     
   } catch (error) {
     console.error('Error generating PDF:', error);
-    throw new functions.https.HttpsError('internal', 'Error generating PDF');
+    throw new HttpsError('internal', 'Error generating PDF');
   }
 });

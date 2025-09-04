@@ -89,8 +89,8 @@ export const InventarioVehiculoForm: React.FC<InventarioVehiculoFormProps> = ({
         updatedAt: now,
       };
 
-      // Si estamos editando un inventario existente, usar su ID
-      const docId = inventarioActual?.id || `inventario_${now.getTime()}`;
+      // Usar un ID fijo para el inventario actual del vehículo
+      const docId = 'actual';
       const inventarioRef = doc(db, inventarioCollectionPath, docId);
       
       await setDoc(inventarioRef, {

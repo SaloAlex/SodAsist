@@ -61,7 +61,7 @@ export class InventarioService {
    * Obtener la ruta del tenant para inventario vehicular
    */
   private static getInventarioVehicularPath(): string {
-    return this.getTenantPath('inventarioVehicular');
+    return this.getTenantPath('inventarioVehiculo');
   }
 
   /**

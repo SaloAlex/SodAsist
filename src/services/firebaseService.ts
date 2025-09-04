@@ -621,31 +621,20 @@ export class FirebaseService {
         return null;
       }
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const collectionPath = `tenants/${user.email}/inventarioVehiculo`;
+      // Buscar el documento con ID 'actual' en lugar de buscar por fecha
+      const inventarioRef = doc(db, `tenants/${user.email}/inventarioVehiculo`, 'actual');
+      const inventarioDoc = await getDoc(inventarioRef);
       
-      const q = query(
-        collection(db, collectionPath),
-        where('fecha', '>=', Timestamp.fromDate(today)),
-        orderBy('fecha', 'desc'),
-        limit(1)
-      );
-
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        const doc = querySnapshot.docs[0];
-        const data = doc.data();
+      if (inventarioDoc.exists()) {
+        const data = inventarioDoc.data();
         
         if (!data) {
-          console.warn(`Inventario ${doc.id} no tiene datos`);
+          console.warn('Inventario actual no tiene datos');
           return null;
         }
         
         const inventario = {
-          id: doc.id,
+          id: inventarioDoc.id,
           fecha: data.fecha.toDate(),
           sodas: data.sodas || 0,
           bidones10: data.bidones10 || 0,

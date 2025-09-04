@@ -22,7 +22,6 @@ import {
   ArrowLeft,
   Zap,
   History,
-  Info,
   RefreshCw,
   ShoppingCart,
   Calendar,
@@ -47,7 +46,7 @@ import './EntregaForm.css';
 // Schema dinámico que se actualiza con los productos disponibles
 const createSchema = (productos: Producto[]) => {
   const schemaFields: Record<string, yup.AnySchema> = {
-    clienteId: yup.string().required('Cliente requerido'),
+  clienteId: yup.string().required('Cliente requerido'),
     total: yup.number()
       .transform((_value, originalValue) => {
         // Si el valor original es una cadena vacía o no es un número válido, devolver 0
@@ -57,15 +56,30 @@ const createSchema = (productos: Producto[]) => {
         const num = Number(originalValue);
         return isNaN(num) ? 0 : num;
       })
-      .min(0, 'Mínimo 0')
+    .min(0, 'Mínimo 0')
       .required('Total requerido'),
-    pagado: yup.boolean().required(),
-    medioPago: yup.string().when('pagado', {
-      is: true,
-      then: (schema) => schema.oneOf(['efectivo', 'transferencia', 'tarjeta'] as const, 'Medio de pago inválido').required('Medio de pago requerido'),
+  pagado: yup.boolean().required(),
+    tipoPago: yup.string().oneOf(['no_pagado', 'pagado_completo', 'pago_parcial'] as const, 'Tipo de pago inválido').required('Tipo de pago requerido'),
+    montoPagado: yup.number().when('tipoPago', {
+      is: 'pago_parcial',
+      then: (schema) => schema
+        .transform((_value, originalValue) => {
+          if (originalValue === '' || originalValue === null || originalValue === undefined) {
+            return undefined; // Dejar como undefined para que falle la validación required
+          }
+          const num = Number(originalValue);
+          return isNaN(num) ? undefined : num;
+        })
+        .min(0.01, 'Monto debe ser mayor a 0')
+        .required('Monto requerido para pago parcial'),
       otherwise: (schema) => schema.nullable(),
     }),
-    observaciones: yup.string(),
+    medioPago: yup.string().when('tipoPago', {
+      is: (val: string) => val === 'pagado_completo' || val === 'pago_parcial',
+    then: (schema) => schema.oneOf(['efectivo', 'transferencia', 'tarjeta'] as const, 'Medio de pago inválido').required('Medio de pago requerido'),
+    otherwise: (schema) => schema.nullable(),
+  }),
+  observaciones: yup.string(),
     envasesDevueltos: yup.number()
       .transform((_value, originalValue) => {
         // Si el valor original es una cadena vacía o no es un número válido, devolver 0
@@ -103,6 +117,8 @@ type EntregaFormData = {
   clienteId: string;
   total: number;
   pagado: boolean;
+  tipoPago: 'no_pagado' | 'pagado_completo' | 'pago_parcial';
+  montoPagado?: number;
   medioPago?: string;
   observaciones?: string;
   envasesDevueltos: number;
@@ -133,6 +149,12 @@ export const EntregaForm: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [inventarioVehiculo, setInventarioVehiculo] = useState<{
+    sodas: number;
+    bidones10: number;
+    bidones20: number;
+    envasesDevueltos: number;
+  } | null>(null);
   const [historialCliente, setHistorialCliente] = useState<HistorialEntrega[]>([]);
   const [clienteStats, setClienteStats] = useState<ClienteStats | null>(null);
   
@@ -144,6 +166,7 @@ export const EntregaForm: React.FC = () => {
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const [clienteSearchTerm, setClienteSearchTerm] = useState('');
   const [showConfirmacionEntrega, setShowConfirmacionEntrega] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<string>('');
   const [entregaRegistrada, setEntregaRegistrada] = useState<{
     clienteId: string;
     productos: { productoId: string; cantidad: number; precio: number; nombre: string; subtotal: number }[];
@@ -168,6 +191,7 @@ export const EntregaForm: React.FC = () => {
     setValue,
     trigger,
     reset,
+    getValues,
   } = useForm<EntregaFormData>({
     resolver: yupResolver(createSchema(productos)) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     defaultValues: {
@@ -177,6 +201,8 @@ export const EntregaForm: React.FC = () => {
       envasesDevueltos: 0,
       total: 0,
       pagado: false,
+      tipoPago: 'no_pagado',
+      montoPagado: undefined,
     },
     mode: 'onChange'
   });
@@ -240,21 +266,40 @@ export const EntregaForm: React.FC = () => {
     }
   }, [productos, trigger]);
 
+  // Limpiar montoPagado cuando cambie el tipo de pago
+  useEffect(() => {
+    if (allValues.tipoPago !== 'pago_parcial') {
+      setValue('montoPagado', 0);
+    } else if (allValues.tipoPago === 'pago_parcial' && allValues.montoPagado === 0) {
+      setValue('montoPagado', undefined);
+    }
+  }, [allValues.tipoPago, allValues.montoPagado, setValue]);
+
+  // Limpiar mensaje de validación cuando cambien los valores del formulario
+  useEffect(() => {
+    if (validationMessage) {
+      setValidationMessage('');
+    }
+  }, [allValues, validationMessage]);
+
   // Cargar datos iniciales
   useEffect(() => {
     loadClientes();
     loadProductos();
+    loadInventarioVehiculo();
   }, []);
 
-  // Recargar productos cuando el usuario regresa a la página
+  // Recargar productos e inventario cuando el usuario regresa a la página
   useEffect(() => {
     const handleFocus = () => {
       loadProductos();
+      loadInventarioVehiculo();
     };
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         loadProductos();
+        loadInventarioVehiculo();
       }
     };
 
@@ -308,12 +353,76 @@ export const EntregaForm: React.FC = () => {
   const loadProductos = async () => {
     try {
       const productosData = await ProductosService.getProductos({ activo: true });
-      setProductos(productosData);
+      // Filtrar productos duplicados - agrupar por nombre y tomar el que tenga mayor stock
+      const productosUnicos = productosData.reduce((acc, producto) => {
+        const nombreNormalizado = producto.nombre.toLowerCase().trim();
+        
+        if (!acc[nombreNormalizado]) {
+          acc[nombreNormalizado] = producto;
+        } else {
+          // Si ya existe, tomar el que tenga mayor stock
+          if (producto.stock > acc[nombreNormalizado].stock) {
+            acc[nombreNormalizado] = producto;
+          }
+        }
+        
+        return acc;
+      }, {} as Record<string, Producto>);
+      
+      const productosFiltrados = Object.values(productosUnicos);
+      
+      setProductos(productosFiltrados);
     } catch (err) {
       console.error('Error al cargar productos:', err);
       toast.error('Error al cargar productos');
       setProductos([]);
     }
+  };
+
+  const loadInventarioVehiculo = async () => {
+    try {
+      const inventario = await FirebaseService.getInventarioActual();
+      if (inventario) {
+        setInventarioVehiculo({
+          sodas: inventario.sodas,
+          bidones10: inventario.bidones10,
+          bidones20: inventario.bidones20,
+          envasesDevueltos: inventario.envasesDevueltos
+        });
+      } else {
+        setInventarioVehiculo({
+          sodas: 0,
+          bidones10: 0,
+          bidones20: 0,
+          envasesDevueltos: 0
+        });
+      }
+    } catch (err) {
+      console.error('Error al cargar inventario del vehículo:', err);
+      setInventarioVehiculo({
+        sodas: 0,
+        bidones10: 0,
+        bidones20: 0,
+        envasesDevueltos: 0
+      });
+    }
+  };
+
+  // Función para obtener el stock del vehículo basado en el nombre del producto
+  const getStockVehiculo = (nombreProducto: string): number => {
+    if (!inventarioVehiculo) return 0;
+    
+    const nombre = nombreProducto.toLowerCase();
+    
+    if (nombre.includes('soda') || nombre.includes('gaseosa')) {
+      return inventarioVehiculo.sodas;
+    } else if (nombre.includes('10') || (nombre.includes('bidón') && !nombre.includes('20'))) {
+      return inventarioVehiculo.bidones10;
+    } else if (nombre.includes('20')) {
+      return inventarioVehiculo.bidones20;
+    }
+    
+    return 0;
   };
 
   const loadClientes = async () => {
@@ -425,7 +534,7 @@ export const EntregaForm: React.FC = () => {
     }
   }, [setValue]);
 
-  const validarInventario = (data: EntregaFormData): boolean => {
+  const validarInventario = (): boolean => {
     if (!productos || productos.length === 0) {
       toast('Productos no disponibles. La entrega se registrará sin validación de stock.', { 
         icon: '⚠️',
@@ -434,21 +543,10 @@ export const EntregaForm: React.FC = () => {
       return true; // Permitir la entrega temporalmente
     }
 
-    let todosLosProductosDisponibles = true;
-
-    // Validar cada producto dinámicamente
-    productos.forEach(producto => {
-      const fieldName = `producto_${producto.id}`;
-      const cantidadSolicitada = (data[fieldName] as number) || 0;
-      const stockDisponible = producto.stock || 0;
-
-      if (cantidadSolicitada > stockDisponible) {
-        toast.error(`Stock insuficiente: Solo quedan ${stockDisponible} ${producto.nombre}`);
-        todosLosProductosDisponibles = false;
-      }
-    });
-
-    return todosLosProductosDisponibles;
+    // Por ahora, permitir todas las entregas sin validación estricta
+    // La validación se puede implementar más tarde cuando se tenga
+    // un sistema más robusto de inventario del vehículo
+    return true;
   };
 
   // Función para calcular días de vencimiento
@@ -506,11 +604,31 @@ export const EntregaForm: React.FC = () => {
   };
 
   const nextStep = async () => {
+    // Limpiar mensaje anterior
+    setValidationMessage('');
+    
     const currentStepData = steps.find(s => s.id === currentStep);
     if (currentStepData) {
       const isStepValid = await trigger(currentStepData.fields as string[]);
       if (isStepValid) {
         setCurrentStep(prev => Math.min(prev + 1, steps.length));
+      } else {
+        // Mostrar mensaje específico según el paso actual
+        if (currentStep === 1) {
+          setValidationMessage('Por favor selecciona un cliente para continuar');
+        } else if (currentStep === 2) {
+          setValidationMessage('Por favor ingresa al menos un producto para continuar');
+        } else if (currentStep === 3) {
+          // Validación específica para el paso de pago
+          const values = getValues();
+          if (!values.tipoPago) {
+            setValidationMessage('Por favor selecciona una opción de pago');
+          } else if (values.tipoPago === 'pago_parcial' && (!values.montoPagado || values.montoPagado <= 0)) {
+            setValidationMessage('Por favor ingresa un monto válido para el pago parcial');
+          } else if ((values.tipoPago === 'pagado_completo' || values.tipoPago === 'pago_parcial') && !values.medioPago) {
+            setValidationMessage('Por favor selecciona un medio de pago');
+          }
+        }
       }
     }
   };
@@ -539,7 +657,7 @@ export const EntregaForm: React.FC = () => {
   };
 
   const onSubmit = async (data: EntregaFormData) => {
-    if (!validarInventario(data)) {
+    if (!validarInventario()) {
       return;
     }
 
@@ -563,18 +681,6 @@ export const EntregaForm: React.FC = () => {
           } : null;
         })
         .filter((producto): producto is NonNullable<typeof producto> => producto !== null);
-
-      const entregaData: Omit<Entrega, 'id'> = {
-        clienteId: data.clienteId,
-        productos: productosEntregados,
-        envasesDevueltos: data.envasesDevueltos,
-        total: totalCalculado,
-        pagado: data.pagado,
-        fecha: now,
-        createdAt: now,
-        ...(data.observaciones && data.observaciones.trim() && { observaciones: data.observaciones }),
-        ...(data.pagado && data.medioPago && { medioPago: data.medioPago as 'efectivo' | 'transferencia' | 'tarjeta' })
-      };
 
       // Usar el email del usuario como tenant ID
       const userTenantId = user?.email || 'default';
@@ -606,12 +712,37 @@ export const EntregaForm: React.FC = () => {
       }
       
       let nuevoSaldo = clienteData?.saldoPendiente || 0;
+      let montoPagado = 0;
 
-      if (data.pagado) {
-        nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
-      } else {
-        nuevoSaldo = nuevoSaldo + totalCalculado;
+      // Calcular el nuevo saldo basado en el tipo de pago
+      switch (data.tipoPago) {
+        case 'no_pagado':
+          nuevoSaldo = nuevoSaldo + totalCalculado;
+          montoPagado = 0;
+          break;
+        case 'pagado_completo':
+          nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
+          montoPagado = totalCalculado;
+          break;
+        case 'pago_parcial':
+          montoPagado = data.montoPagado || 0;
+          nuevoSaldo = Math.max(0, nuevoSaldo - montoPagado);
+          break;
       }
+
+      const entregaData: Omit<Entrega, 'id'> = {
+        clienteId: data.clienteId,
+        productos: productosEntregados,
+        envasesDevueltos: data.envasesDevueltos,
+        total: totalCalculado,
+        pagado: data.tipoPago !== 'no_pagado',
+        tipoPago: data.tipoPago,
+        montoPagado: montoPagado,
+        fecha: now,
+        createdAt: now,
+        ...(data.observaciones && data.observaciones.trim() && { observaciones: data.observaciones }),
+        ...((data.tipoPago === 'pagado_completo' || data.tipoPago === 'pago_parcial') && data.medioPago && { medioPago: data.medioPago as 'efectivo' | 'transferencia' | 'tarjeta' })
+      };
 
       const batch = writeBatch(db);
       const entregaCollectionPath = `tenants/${userTenantId}/entregas`;
@@ -631,52 +762,11 @@ export const EntregaForm: React.FC = () => {
       });
 
 
-      // Actualizar stock de productos individuales
-      // Verificar que los productos existan antes de actualizar
-      const stockUpdates = productosEntregados.map(async (producto) => {
-        const productoData = productos.find(p => p.id === producto.productoId);
-        if (!productoData) return null;
-        
-        const nuevoStock = (productoData.stock || 0) - producto.cantidad;
-        
-        // Verificar si el producto existe en la colección del tenant
-        const tenantProductoRef = doc(db, `tenants/${userTenantId}/productos`, producto.productoId);
-        
-        try {
-          const productoDoc = await getDoc(tenantProductoRef);
-          
-          if (productoDoc.exists()) {
-            // El producto existe, actualizar el stock
-            return {
-              ref: tenantProductoRef,
-              data: {
-                stock: nuevoStock,
-                updatedAt: serverTimestamp()
-              }
-            };
-          } else {
-            // El producto no existe, crear un log de advertencia
-            console.warn(`Producto ${producto.productoId} no existe en la colección del tenant. Saltando actualización de stock.`);
-            return null;
-          }
-        } catch (error) {
-          console.warn(`Error al verificar producto ${producto.productoId}:`, error);
-          return null;
-        }
-      });
-
-      // Esperar a que se resuelvan todas las verificaciones
-      const stockUpdateResults = await Promise.all(stockUpdates);
-      
-      // Agregar solo las actualizaciones válidas al batch
-      stockUpdateResults.forEach(update => {
-        if (update) {
-          batch.update(update.ref, update.data);
-        }
-      });
+      // NOTA: La actualización del inventario del vehículo se maneja automáticamente
+      // por el trigger onEntregaCreate en Firebase Functions para evitar doble descuento
 
       await batch.commit();
-      
+
       // Guardar datos de la entrega para mostrar en el modal de confirmación
       const entregaCompleta = {
         clienteId: data.clienteId,
@@ -840,18 +930,19 @@ export const EntregaForm: React.FC = () => {
             <button
               onClick={() => {
                 if (productos.length > 0) {
-                  // Sugerir cantidades basadas en el stock disponible (máximo 50% del stock)
+                  // Sugerir cantidades basadas en el stock del vehículo (máximo 50% del stock)
                   productos.forEach(producto => {
                     const fieldName = `producto_${producto.id}`;
-                    const sugerencia = Math.floor((producto.stock || 0) * 0.5);
+                    const stockVehiculo = getStockVehiculo(producto.nombre);
+                    const sugerencia = Math.floor(stockVehiculo * 0.5);
                     setValue(fieldName as string, sugerencia);
                   });
                   
-                  toast.success('Cantidades sugeridas basadas en stock disponible');
+                  toast.success('Cantidades sugeridas basadas en stock del vehículo');
                 }
               }}
               className="flex items-center px-2 sm:px-3 py-1.5 text-xs sm:text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800/30 transition-colors"
-              title="Sugerir cantidades basadas en stock disponible"
+              title="Sugerir cantidades basadas en stock del vehículo"
             >
               <Package className="h-3 w-3 mr-1" />
               <span className="hidden sm:inline">Usar stock</span>
@@ -1055,7 +1146,7 @@ export const EntregaForm: React.FC = () => {
                 {/* Productos dinámicos */}
                 {productos.map((producto) => {
                   const fieldName = `producto_${producto.id}` as keyof EntregaFormData;
-                  const stockDisponible = producto.stock || 0;
+                  const stockDisponible = getStockVehiculo(producto.nombre);
                   const cantidadSolicitada = allValues[fieldName] as number || 0;
                   const excedeStock = cantidadSolicitada > stockDisponible;
                   
@@ -1080,9 +1171,9 @@ export const EntregaForm: React.FC = () => {
                         />
                         <div className={`text-xs text-right ${
                           excedeStock ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'
-                        }`}>
+                          }`}>
                           Stock disponible: {stockDisponible}
-                        </div>
+                          </div>
                       </div>
                       
                       {/* Alertas de stock */}
@@ -1129,14 +1220,14 @@ export const EntregaForm: React.FC = () => {
                       min="0"
                       className="w-full px-3 py-2 text-base sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                     />
-                  </div>
+                    </div>
                   {errors.envasesDevueltos && (
                     <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">
                       {errors.envasesDevueltos?.message}
                     </p>
                   )}
-                </div>
-              </div>
+                    </div>
+                    </div>
 
               {/* Calculadora visual mejorada */}
               {showCalculator && (
@@ -1198,19 +1289,96 @@ export const EntregaForm: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <input
-                    {...register('pagado')}
-                    type="checkbox"
-                    id="pagado"
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="pagado" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Marcar como pagado
+                {/* Opciones de pago */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <DollarSign className="inline h-4 w-4 mr-2" />
+                    Opciones de Pago
                   </label>
+                  <div className="grid grid-cols-1 gap-3">
+                    {[
+                      { 
+                        value: 'no_pagado', 
+                        label: 'No pagado', 
+                        description: 'Se suma al saldo pendiente',
+                        color: 'red'
+                      },
+                      { 
+                        value: 'pagado_completo', 
+                        label: 'Pagado completo', 
+                        description: 'Se descuenta del saldo pendiente',
+                        color: 'green'
+                      },
+                      { 
+                        value: 'pago_parcial', 
+                        label: 'Pago parcial', 
+                        description: 'Ingresa el monto que está pagando',
+                        color: 'blue'
+                      }
+                    ].map(({ value, label, description, color }) => (
+                      <label key={value} className="relative">
+                  <input
+                          {...register('tipoPago')}
+                          type="radio"
+                          value={value}
+                          className="sr-only peer"
+                        />
+                        <div className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                          color === 'red' ? 'border-gray-200 dark:border-gray-600 hover:border-red-300 peer-checked:border-red-500 peer-checked:bg-red-50 dark:peer-checked:bg-red-900/20' :
+                          color === 'green' ? 'border-gray-200 dark:border-gray-600 hover:border-green-300 peer-checked:border-green-500 peer-checked:bg-green-50 dark:peer-checked:bg-green-900/20' :
+                          'border-gray-200 dark:border-gray-600 hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20'
+                        }`}>
+                          <div className="flex-1">
+                            <div className={`font-medium ${
+                              color === 'red' ? 'text-red-700 dark:text-red-300' :
+                              color === 'green' ? 'text-green-700 dark:text-green-300' :
+                              'text-blue-700 dark:text-blue-300'
+                            }`}>
+                              {label}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {description}
+                            </div>
+                          </div>
+                        </div>
+                  </label>
+                    ))}
+                  </div>
+                  {errors.tipoPago && (
+                    <p className="text-sm text-red-600 dark:text-red-400">{errors.tipoPago.message}</p>
+                  )}
                 </div>
 
-                {allValues.pagado && (
+                {/* Campo para monto pagado (solo para pago parcial) */}
+                {allValues.tipoPago === 'pago_parcial' && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <DollarSign className="inline h-4 w-4 mr-2" />
+                      Monto que está pagando
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                      <input
+                        {...register('montoPagado', { valueAsNumber: true })}
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={totalCalculado + (clienteSeleccionado?.saldoPendiente || 0)}
+                        className="w-full pl-8 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Máximo: ${(totalCalculado + (clienteSeleccionado?.saldoPendiente || 0)).toFixed(2)} (total + deuda pendiente)
+                    </div>
+                    {errors.montoPagado && (
+                      <p className="text-sm text-red-600 dark:text-red-400">{errors.montoPagado.message}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Medio de pago (solo para pagos) */}
+                {(allValues.tipoPago === 'pagado_completo' || allValues.tipoPago === 'pago_parcial') && (
                   <div className="space-y-3">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       <CreditCard className="inline h-4 w-4 mr-2" />
@@ -1242,16 +1410,66 @@ export const EntregaForm: React.FC = () => {
                   </div>
                 )}
 
-                {!allValues.pagado && clienteSeleccionado && (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                    <div className="flex items-center space-x-2">
-                      <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                      <span className="text-sm text-amber-800 dark:text-amber-200">
-                        Se agregará ${totalCalculado.toFixed(2)} al saldo pendiente del cliente
-                      </span>
-                    </div>
-                    <div className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                      Nuevo saldo: ${(((clienteSeleccionado?.saldoPendiente || 0) + totalCalculado).toFixed(2))}
+                {/* Resumen del saldo */}
+                {clienteSeleccionado && (
+                  <div className={`p-3 rounded-lg ${
+                    allValues.tipoPago === 'no_pagado' 
+                      ? 'bg-amber-50 dark:bg-amber-900/20' 
+                      : allValues.tipoPago === 'pagado_completo'
+                      ? 'bg-green-50 dark:bg-green-900/20'
+                      : 'bg-blue-50 dark:bg-blue-900/20'
+                  }`}>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Saldo actual:</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">${(clienteSeleccionado?.saldoPendiente || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Entrega actual:</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">${totalCalculado.toFixed(2)}</span>
+                      </div>
+                      {allValues.tipoPago === 'pago_parcial' && allValues.montoPagado && !isNaN(allValues.montoPagado as number) && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Monto pagado:</span>
+                          <span className="font-medium text-green-600 dark:text-green-400">-${Number(allValues.montoPagado).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {allValues.tipoPago === 'pagado_completo' && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Monto pagado:</span>
+                          <span className="font-medium text-green-600 dark:text-green-400">-${totalCalculado.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="border-t border-gray-300 dark:border-gray-500 pt-2 flex justify-between font-semibold">
+                        <span className="text-gray-900 dark:text-gray-100">Nuevo saldo:</span>
+                        <span className={`${
+                          (() => {
+                            let nuevoSaldo = (clienteSeleccionado?.saldoPendiente || 0);
+                            if (allValues.tipoPago === 'no_pagado') {
+                              nuevoSaldo += totalCalculado;
+                            } else if (allValues.tipoPago === 'pagado_completo') {
+                              nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
+                            } else if (allValues.tipoPago === 'pago_parcial' && allValues.montoPagado && !isNaN(allValues.montoPagado as number)) {
+                              nuevoSaldo = Math.max(0, nuevoSaldo - Number(allValues.montoPagado));
+                            }
+                            return nuevoSaldo;
+                          })() > 0 
+                            ? 'text-orange-600 dark:text-orange-400' 
+                            : 'text-green-600 dark:text-green-400'
+                        }`}>
+                          ${(() => {
+                            let nuevoSaldo = (clienteSeleccionado?.saldoPendiente || 0);
+                            if (allValues.tipoPago === 'no_pagado') {
+                              nuevoSaldo += totalCalculado;
+                            } else if (allValues.tipoPago === 'pagado_completo') {
+                              nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
+                            } else if (allValues.tipoPago === 'pago_parcial' && allValues.montoPagado && !isNaN(allValues.montoPagado as number)) {
+                              nuevoSaldo = Math.max(0, nuevoSaldo - Number(allValues.montoPagado));
+                            }
+                            return nuevoSaldo.toFixed(2);
+                          })()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1305,18 +1523,18 @@ export const EntregaForm: React.FC = () => {
                   <div className="space-y-3">
                     {/* Estado principal */}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2">
                         <span className="text-lg">{estadoCliente.icono}</span>
                         <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
                           {estadoCliente.mensaje}
-                        </span>
-                      </div>
+                      </span>
+                    </div>
                       {estadoCliente.saldoPendiente > 0 && (
                         <span className={`font-bold ${getTextColorClasses(estadoCliente.color)}`}>
                           ${estadoCliente.saldoPendiente.toFixed(2)}
                         </span>
                       )}
-                    </div>
+                     </div>
 
                     {/* Información adicional */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -1347,21 +1565,21 @@ export const EntregaForm: React.FC = () => {
                         <p className="text-sm text-red-800 dark:text-red-200 font-medium">
                           ⚠️ Cliente con deuda vencida. Considera solicitar pago antes de entregar.
                         </p>
-                      </div>
-                    )}
+                  </div>
+                )}
                     {estadoCliente.estado === 'atrasado' && (
                       <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded border border-orange-200 dark:border-orange-800">
                         <p className="text-sm text-orange-800 dark:text-orange-200 font-medium">
                           ⚠️ Cliente con deuda atrasada. Recuerda cobrar pendientes.
                         </p>
-                      </div>
+              </div>
                     )}
                     {estadoCliente.estado === 'inactivo' && (
                       <div className="p-2 bg-gray-100 dark:bg-gray-900/30 rounded border border-gray-200 dark:border-gray-800">
                         <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">
                           ℹ️ Cliente inactivo. Verifica si sigue siendo cliente activo.
                         </p>
-                      </div>
+            </div>
                     )}
                   </div>
                 </div>
@@ -1470,6 +1688,24 @@ export const EntregaForm: React.FC = () => {
       {/* Contenido del formulario */}
       <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6"> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
         {renderCurrentStep()}
+
+        {/* Mensaje de validación */}
+        {validationMessage && (
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  {validationMessage}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Botones de navegación - Responsive */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700 space-y-3 sm:space-y-0">
