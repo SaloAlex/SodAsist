@@ -8,23 +8,28 @@ import {
   Download,
   Upload,
   Edit,
-  Trash2
+  Trash2,
+  RefreshCw,
+  Truck
 } from 'lucide-react';
 import { 
   Producto, 
   CategoriaProducto,
   FiltrosProductos,
   PaginacionProductos,
-  ResultadoPaginado
+  ResultadoPaginado,
+  InventarioVehiculo
 } from '../types';
 import { ProductosService } from '../services/productosService';
+import { FirebaseService } from '../services/firebaseService';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { InventarioDashboard } from '../components/inventario/InventarioDashboard';
 import { ProductoForm } from '../components/inventario/ProductoForm';
 import { CategoriaManager } from '../components/inventario/CategoriaManager';
+import { InventarioVehiculoForm } from '../components/inventario/InventarioVehiculoForm';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   useProductosPaginados,
   useCategorias, 
@@ -35,7 +40,7 @@ import {
 import { Pagination } from '../components/common/Pagination';
 import clsx from 'clsx';
 
-type VistaInventario = 'dashboard' | 'productos' | 'movimientos' | 'categorias';
+type VistaInventario = 'dashboard' | 'productos' | 'movimientos' | 'categorias' | 'vehiculo';
 
 
 interface ProductoTableProps {
@@ -271,6 +276,7 @@ const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDele
 export const Inventario: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
   // Estados principales
   const [vistaActual, setVistaActual] = useState<VistaInventario>('dashboard');
@@ -280,6 +286,7 @@ export const Inventario: React.FC = () => {
   const [mostrandoFormProducto, setMostrandoFormProducto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<Producto | undefined>();
   const [mostrandoCategorias, setMostrandoCategorias] = useState(false);
+  const [inventarioVehiculo, setInventarioVehiculo] = useState<InventarioVehiculo | null>(null);
   
   // Estados para filtros
   const [filtros, setFiltros] = useState<FiltrosProductos>({});
@@ -323,6 +330,35 @@ export const Inventario: React.FC = () => {
   // Estados derivados
   const loading = loadingProductos || loadingCategorias;
   const error = errorProductos || errorCategorias;
+
+  // Cargar inventario del vehículo
+  const loadInventarioVehiculo = async () => {
+    try {
+      const inventario = await FirebaseService.getInventarioActual();
+      setInventarioVehiculo(inventario);
+    } catch (error) {
+      console.error('Error al cargar inventario del vehículo:', error);
+    }
+  };
+
+  // Cargar inventario del vehículo al montar el componente
+  useEffect(() => {
+    loadInventarioVehiculo();
+  }, []);
+
+  // Manejar parámetro de URL para ir directamente a la pestaña del vehículo
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'vehiculo') {
+      setVistaActual('vehiculo');
+    }
+  }, [searchParams]);
+
+  // Manejar guardado del inventario del vehículo
+  const handleInventarioVehiculoSave = (inventario: InventarioVehiculo) => {
+    setInventarioVehiculo(inventario);
+    toast.success('Inventario del vehículo actualizado correctamente');
+  };
 
   // Verificar autenticación
   useEffect(() => {
@@ -465,6 +501,19 @@ export const Inventario: React.FC = () => {
           </button>
           
           <button
+            onClick={() => setVistaActual('vehiculo')}
+            className={clsx(
+              'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+              vistaActual === 'vehiculo'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            )}
+          >
+            <Truck className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Vehículo</span>
+          </button>
+          
+          <button
             onClick={() => setVistaActual('movimientos')}
             className={clsx(
               'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
@@ -490,28 +539,53 @@ export const Inventario: React.FC = () => {
   );
 
   const renderBarraAcciones = () => {
-    if (vistaActual !== 'productos') return null;
+    if (vistaActual !== 'productos' && vistaActual !== 'vehiculo') return null;
 
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
         <div className="px-4 sm:px-6 py-4">
           <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
-            {/* Barra de búsqueda */}
-            <div className="flex-1 sm:max-w-lg">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 flex-shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Buscar productos..."
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
-                />
-              </div>
-            </div>
+            {vistaActual === 'productos' ? (
+              <>
+                {/* Barra de búsqueda */}
+                <div className="flex-1 sm:max-w-lg">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Buscar productos..."
+                      value={busqueda}
+                      onChange={(e) => setBusqueda(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Título para inventario del vehículo */}
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Gestión del Inventario del Vehículo
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Administra el stock que llevas en el camión
+                  </p>
+                </div>
+              </>
+            )}
             
             {/* Filtros y acciones */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
+              {vistaActual === 'vehiculo' && (
+                <button
+                  onClick={loadInventarioVehiculo}
+                  className="flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Actualizar
+                </button>
+              )}
               <div className="relative">
                 <select
                   value={filtros.categoria || ''}
@@ -654,6 +728,16 @@ export const Inventario: React.FC = () => {
               </p>
             </div>
           </div>
+        );
+      
+      case 'vehiculo':
+        return (
+          <InventarioVehiculoForm
+            inventarioActual={inventarioVehiculo}
+            onSave={handleInventarioVehiculoSave}
+            onCancel={() => setVistaActual('dashboard')}
+            isLoading={procesando}
+          />
         );
       
       default:

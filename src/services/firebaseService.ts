@@ -20,7 +20,6 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { Cliente, Entrega, User, InventarioVehiculo } from '../types';
-import { getTenantCollectionPath } from '../config/tenantConfig';
 
 // Generic CRUD operations
 export class FirebaseService {
@@ -233,7 +232,6 @@ export class FirebaseService {
     }
     
     const collectionPath = `tenants/${user.email}/entregas`;
-    console.log('Loading entregas from path:', collectionPath);
     const q = query(
       collection(db, collectionPath),
       orderBy('fecha', 'desc')
@@ -309,7 +307,6 @@ export class FirebaseService {
     }
     
     const collectionPath = `tenants/${user.email}/entregas`;
-    console.log('Loading entregas by date range from path:', collectionPath);
     const q = query(
       collection(db, collectionPath),
       where('fecha', '>=', Timestamp.fromDate(startDate)),
@@ -389,8 +386,6 @@ export class FirebaseService {
 
   static async createUserDocument(userData: Omit<User, 'id'>): Promise<void> {
     try {
-      console.log('🔧 Iniciando createUserDocument con datos:', userData);
-      
       // Verificar que tenemos los datos necesarios
       if (!userData.uid) {
         throw new Error('UID del usuario es requerido');
@@ -400,32 +395,23 @@ export class FirebaseService {
       }
 
       // Crear documento de usuario
-      console.log('📝 Creando documento de usuario en /users/', userData.uid);
       const userRef = doc(db, 'users', userData.uid);
       await setDoc(userRef, {
         ...userData,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
-      console.log('✅ Documento de usuario creado exitosamente');
 
       // Nota: Las colecciones del tenant se crearán automáticamente cuando se necesiten
       // No es necesario crearlas aquí para evitar problemas de permisos
     } catch (error) {
-      console.error('❌ Error al crear documento de usuario:', error);
-      console.error('❌ Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        userData: userData
-      });
+      console.error('Error al crear documento de usuario:', error);
       throw error;
     }
   }
 
   static async createTenantDocument(tenantData: { id: string; email: string; [key: string]: unknown }): Promise<void> {
     try {
-      console.log('🔧 Iniciando createTenantDocument con datos:', tenantData);
-      
       // Verificar que tenemos los datos necesarios
       if (!tenantData.id) {
         throw new Error('ID del tenant es requerido');
@@ -435,28 +421,20 @@ export class FirebaseService {
       }
 
       // Crear documento de tenant
-      console.log('📝 Creando documento de tenant en /tenants/', tenantData.id);
       const tenantRef = doc(db, 'tenants', tenantData.id);
       await setDoc(tenantRef, {
         ...tenantData,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
-      console.log('✅ Documento de tenant creado exitosamente');
     } catch (error) {
-      console.error('❌ Error al crear documento de tenant:', error);
-      console.error('❌ Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        tenantData: tenantData
-      });
+      console.error('Error al crear documento de tenant:', error);
       throw error;
     }
   }
 
   static async initializeTenantCollections(email: string): Promise<void> {
     try {
-      console.log('🏗️ Inicializando colecciones para tenant:', email);
       const tenantPath = `tenants/${email}`;
       
       // Crear colecciones básicas
@@ -464,57 +442,31 @@ export class FirebaseService {
       
       // Crear todas las colecciones en paralelo para mayor velocidad
       const promises = collections.map(async (collectionName) => {
-        console.log(`📁 Creando colección: ${tenantPath}/${collectionName}`);
         const collectionRef = collection(db, `${tenantPath}/${collectionName}`);
         // Crear un documento inicial vacío para que exista la colección
         const docRef = await addDoc(collectionRef, {
           _init: true,
           createdAt: Timestamp.now()
         });
-        console.log(`✅ Colección ${collectionName} creada con documento:`, docRef.id);
         return docRef;
       });
 
       await Promise.all(promises);
-      console.log('✅ Todas las colecciones del tenant inicializadas');
     } catch (error) {
-      console.error('❌ Error al inicializar colecciones del tenant:', error);
-      console.error('❌ Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        email: email
-      });
+      console.error('Error al inicializar colecciones del tenant:', error);
       throw error;
     }
   }
 
   static async isFirstUser(): Promise<boolean> {
     try {
-      console.log('🔍 Verificando si es el primer usuario...');
       // Usar la colección users directamente
       const usersRef = collection(db, 'users');
       const usersSnapshot = await getDocs(query(usersRef, limit(10))); // Obtener hasta 10 usuarios para debug
-      const isEmpty = usersSnapshot.empty;
-      const userCount = usersSnapshot.size;
       
-      console.log('📊 Colección users está vacía:', isEmpty);
-      console.log('👥 Número de usuarios en la colección:', userCount);
-      
-      if (!isEmpty) {
-        console.log('📋 Usuarios existentes:');
-        usersSnapshot.docs.forEach((doc, index) => {
-          const data = doc.data();
-          console.log(`  ${index + 1}. UID: ${doc.id}, Email: ${data.email}, Rol: ${data.rol}`);
-        });
-      }
-      
-      return isEmpty;
+      return usersSnapshot.empty;
     } catch (error) {
-      console.error('❌ Error al verificar primer usuario:', error);
-      console.error('❌ Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
-      });
+      console.error('Error al verificar primer usuario:', error);
       throw error;
     }
   }
@@ -663,10 +615,17 @@ export class FirebaseService {
   // Método mejorado para obtener el inventario actual
   static async getInventarioActual(): Promise<InventarioVehiculo | null> {
     try {
+      const user = auth.currentUser;
+      if (!user?.email) {
+        console.warn('Usuario no autenticado para obtener inventario');
+        return null;
+      }
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const collectionPath = getTenantCollectionPath('inventarioVehiculo');
+      const collectionPath = `tenants/${user.email}/inventarioVehiculo`;
+      
       const q = query(
         collection(db, collectionPath),
         where('fecha', '>=', Timestamp.fromDate(today)),
@@ -675,14 +634,17 @@ export class FirebaseService {
       );
 
       const querySnapshot = await getDocs(q);
+      
       if (!querySnapshot.empty) {
         const doc = querySnapshot.docs[0];
         const data = doc.data();
+        
         if (!data) {
           console.warn(`Inventario ${doc.id} no tiene datos`);
           return null;
         }
-        return {
+        
+        const inventario = {
           id: doc.id,
           fecha: data.fecha.toDate(),
           sodas: data.sodas || 0,
@@ -691,7 +653,10 @@ export class FirebaseService {
           envasesDevueltos: data.envasesDevueltos || 0,
           updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
         };
+        
+        return inventario;
       }
+      
       return null;
     } catch (error) {
       console.error('Error al obtener inventario:', error);

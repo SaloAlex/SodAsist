@@ -25,7 +25,10 @@ import {
   Info,
   RefreshCw,
   ShoppingCart,
-  Calendar
+  Calendar,
+  X,
+  Plus,
+  Clock
 } from 'lucide-react';
 import { isValid } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -90,7 +93,7 @@ interface ClienteStats {
 export const EntregaForm: React.FC = () => {
   // Estados principales
   const [loading, setLoading] = useState(false);
-  const { user, userData } = useAuthStore();
+  const { user } = useAuthStore();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
   const [inventario, setInventario] = useState<InventarioVehiculo | null>(null);
@@ -104,6 +107,21 @@ export const EntregaForm: React.FC = () => {
   const [loadingPredictions, setLoadingPredictions] = useState(false);
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [showConfirmacionEntrega, setShowConfirmacionEntrega] = useState(false);
+  const [entregaRegistrada, setEntregaRegistrada] = useState<{
+    clienteId: string;
+    sodas: number;
+    bidones10: number;
+    bidones20: number;
+    envasesDevueltos: number;
+    total: number;
+    pagado: boolean;
+    medioPago?: string;
+    observaciones?: string;
+    cliente: Cliente;
+    nuevoSaldo: number;
+    fechaRegistro: Date;
+  } | null>(null);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -115,6 +133,7 @@ export const EntregaForm: React.FC = () => {
     watch,
     setValue,
     trigger,
+    reset,
   } = useForm<EntregaFormData>({
     resolver: yupResolver(createSchema(inventario)),
     defaultValues: {
@@ -190,6 +209,27 @@ export const EntregaForm: React.FC = () => {
     loadInventario();
   }, []);
 
+  // Recargar inventario cuando el usuario regresa a la página
+  useEffect(() => {
+    const handleFocus = () => {
+      loadInventario();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadInventario();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // Cerrar dropdown cuando se hace clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -229,13 +269,12 @@ export const EntregaForm: React.FC = () => {
 
   const loadInventario = async () => {
     try {
-      console.log('Loading inventario...');
       const inv = await FirebaseService.getInventarioActual();
-      console.log('Inventario loaded:', inv);
       setInventario(inv);
     } catch (err) {
       console.error('Error al cargar inventario:', err);
       toast.error('Error al cargar inventario del vehículo');
+      setInventario(null);
     }
   };
 
@@ -349,12 +388,11 @@ export const EntregaForm: React.FC = () => {
   }, [setValue]);
 
   const validarInventario = (data: EntregaFormData): boolean => {
-    console.log('validarInventario called with data:', data);
-    console.log('Current inventario:', inventario);
-    
     if (!inventario) {
-      console.log('No inventario available - allowing submission for now');
-      toast('Inventario no disponible. La entrega se registrará sin validación de stock.', { icon: '⚠️' });
+      toast('Inventario no disponible. La entrega se registrará sin validación de stock.', { 
+        icon: '⚠️',
+        duration: 5000
+      });
       return true; // Permitir la entrega temporalmente
     }
 
@@ -362,27 +400,17 @@ export const EntregaForm: React.FC = () => {
     const suficienteBidones10 = (inventario.bidones10 || 0) >= data.bidones10;
     const suficienteBidones20 = (inventario.bidones20 || 0) >= data.bidones20;
 
-    console.log('Stock validation:');
-    console.log('- Sodas:', { available: inventario.sodas, requested: data.sodas, sufficient: suficienteSodas });
-    console.log('- Bidones10:', { available: inventario.bidones10, requested: data.bidones10, sufficient: suficienteBidones10 });
-    console.log('- Bidones20:', { available: inventario.bidones20, requested: data.bidones20, sufficient: suficienteBidones20 });
-
     if (!suficienteSodas) {
-      console.log('Insufficient sodas stock');
       toast.error(`Stock insuficiente: Solo quedan ${inventario.sodas} sodas`);
     }
     if (!suficienteBidones10) {
-      console.log('Insufficient bidones10 stock');
       toast.error(`Stock insuficiente: Solo quedan ${inventario.bidones10} bidones de 10L`);
     }
     if (!suficienteBidones20) {
-      console.log('Insufficient bidones20 stock');
       toast.error(`Stock insuficiente: Solo quedan ${inventario.bidones20} bidones de 20L`);
     }
 
-    const result = suficienteSodas && suficienteBidones10 && suficienteBidones20;
-    console.log('Inventory validation result:', result);
-    return result;
+    return suficienteSodas && suficienteBidones10 && suficienteBidones20;
   };
 
   const nextStep = async () => {
@@ -399,35 +427,36 @@ export const EntregaForm: React.FC = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
+  // Función para finalizar la entrega y navegar al dashboard
+  const handleFinalizarEntrega = () => {
+    setShowConfirmacionEntrega(false);
+    setEntregaRegistrada(null);
+    navigate('/dashboard');
+  };
+
+  // Función para hacer otra entrega
+  const handleNuevaEntrega = () => {
+    setShowConfirmacionEntrega(false);
+    setEntregaRegistrada(null);
+    setCurrentStep(1);
+    // Resetear el formulario
+    reset();
+    setClienteSeleccionado(null);
+    setHistorialCliente([]);
+    setClienteStats(null);
+  };
+
   const onSubmit = async (data: EntregaFormData) => {
-    console.log('onSubmit called with data:', data);
-    console.log('Form is valid:', formIsValid);
-    console.log('Current step:', currentStep);
-    
-    console.log('Validating inventory...');
     if (!validarInventario(data)) {
-      console.log('Inventory validation failed');
       return;
     }
-    console.log('Inventory validation passed');
 
-    console.log('Setting loading to true...');
     setLoading(true);
     try {
-      console.log('Starting try block...');
-      console.log('User authenticated:', !!user);
-      console.log('User data:', userData);
-      console.log('User UID:', user?.uid);
-      console.log('User email:', user?.email);
-      console.log('User role:', userData?.rol);
-      console.log('User tenantId:', userData?.tenantId);
       const now = new Date();
       if (!isValid(now)) {
         throw new Error('Error al generar la fecha');
       }
-      console.log('Date validation passed');
-
-      console.log('Creating entregaData...');
       const entregaData: Omit<Entrega, 'id'> = {
         clienteId: data.clienteId,
         sodas: data.sodas,
@@ -441,30 +470,23 @@ export const EntregaForm: React.FC = () => {
         ...(data.observaciones && data.observaciones.trim() && { observaciones: data.observaciones }),
         ...(data.pagado && data.medioPago && { medioPago: data.medioPago as 'efectivo' | 'transferencia' | 'tarjeta' })
       };
-      console.log('entregaData created:', entregaData);
 
-      console.log('Getting cliente reference...');
       // Usar el email del usuario como tenant ID
       const userTenantId = user?.email || 'default';
       const clienteCollectionPath = `tenants/${userTenantId}/clientes`;
       const clienteRef = doc(db, clienteCollectionPath, data.clienteId);
-      console.log('Getting cliente document from path:', clienteCollectionPath);
       const clienteDoc = await getDoc(clienteRef);
-      console.log('Cliente document retrieved:', clienteDoc.exists());
       
       let clienteData;
       if (clienteDoc.exists()) {
         clienteData = clienteDoc.data();
-        console.log('Cliente found in tenant');
       } else {
-        console.log('Cliente not found in tenant, creating from global collection...');
         // Buscar el cliente en la colección global
         const globalClienteRef = doc(db, 'clientes', data.clienteId);
         const globalClienteDoc = await getDoc(globalClienteRef);
         
         if (globalClienteDoc.exists()) {
           clienteData = globalClienteDoc.data();
-          console.log('Cliente found in global collection, copying to tenant...');
           
           // Crear el cliente en el tenant
           await setDoc(clienteRef, {
@@ -473,28 +495,22 @@ export const EntregaForm: React.FC = () => {
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
-          console.log('Cliente created in tenant');
         } else {
           throw new Error('Cliente no encontrado en ninguna colección');
         }
       }
       
       let nuevoSaldo = clienteData?.saldoPendiente || 0;
-      console.log('Current cliente saldo:', nuevoSaldo);
 
       if (data.pagado) {
         nuevoSaldo = Math.max(0, nuevoSaldo - data.total);
-        console.log('Payment made, new saldo:', nuevoSaldo);
       } else {
         nuevoSaldo = nuevoSaldo + data.total;
-        console.log('Payment pending, new saldo:', nuevoSaldo);
       }
 
-      console.log('Creating batch...');
       const batch = writeBatch(db);
       const entregaCollectionPath = `tenants/${userTenantId}/entregas`;
       const entregaRef = doc(collection(db, entregaCollectionPath));
-      console.log('Creating entrega in path:', entregaCollectionPath);
 
       batch.set(entregaRef, entregaData);
 
@@ -510,7 +526,6 @@ export const EntregaForm: React.FC = () => {
       });
 
       if (inventario) {
-        console.log('Updating inventario...');
         const nuevoInventario = {
           ...inventario,
           sodas: (inventario.sodas || 0) - data.sodas,
@@ -522,19 +537,21 @@ export const EntregaForm: React.FC = () => {
 
         const inventarioCollectionPath = `tenants/${userTenantId}/inventarioVehiculo`;
         batch.update(doc(db, inventarioCollectionPath, inventario.id), nuevoInventario);
-        console.log('Inventario update added to batch in path:', inventarioCollectionPath);
-      } else {
-        console.log('No inventario to update - skipping inventario update');
       }
 
-      console.log('Committing batch...');
       await batch.commit();
-      console.log('Batch committed successfully');
-
-      console.log('Showing success toast...');
+      
+      // Guardar datos de la entrega para mostrar en el modal de confirmación
+      const entregaCompleta = {
+        ...entregaData,
+        cliente: clienteData as Cliente,
+        nuevoSaldo: nuevoSaldo,
+        fechaRegistro: now
+      };
+      
+      setEntregaRegistrada(entregaCompleta);
+      setShowConfirmacionEntrega(true);
       toast.success('Entrega registrada correctamente');
-      console.log('Navigating to dashboard...');
-      navigate('/dashboard');
     } catch (err) {
       console.error('Error al registrar entrega:', err);
       toast.error('Error al registrar entrega: ' + (err instanceof Error ? err.message : 'Error desconocido'));
@@ -636,13 +653,23 @@ export const EntregaForm: React.FC = () => {
             </p>
           </div>
         </div>
-        <button
-          onClick={loadInventario}
-          className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/30 rounded-lg transition-colors"
-          title="Actualizar inventario del vehículo"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => navigate('/inventario?tab=vehiculo')}
+            className="flex items-center px-2 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            title="Gestionar inventario del vehículo"
+          >
+            <Package className="h-3 w-3 mr-1" />
+            <span className="hidden sm:inline">Gestionar</span>
+          </button>
+          <button
+            onClick={loadInventario}
+            className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/30 rounded-lg transition-colors"
+            title="Actualizar inventario del vehículo"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
@@ -675,11 +702,34 @@ export const EntregaForm: React.FC = () => {
       </div>
       
       {/* Información adicional del inventario */}
-      {inventario && (
+      {inventario ? (
         <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
           <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
             <span>Última actualización: {inventario.updatedAt ? new Date(inventario.updatedAt).toLocaleTimeString() : 'N/A'}</span>
             <span>Envases devueltos: {inventario.envasesDevueltos || 0}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-700">
+          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                  No hay inventario cargado
+                </p>
+                <p className="text-xs text-orange-600 dark:text-orange-300">
+                  Carga el stock inicial del vehículo para validar entregas
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/inventario?tab=vehiculo')}
+                className="flex items-center px-3 py-1 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+              >
+                <Package className="h-3 w-3 mr-1" />
+                Cargar Stock
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1275,17 +1325,10 @@ export const EntregaForm: React.FC = () => {
                 type="submit"
                 disabled={loading || !formIsValid}
                 onClick={async () => {
-                  console.log('Submit button clicked');
-                  console.log('Loading:', loading);
-                  console.log('Form valid:', formIsValid);
-                  console.log('Current step:', currentStep);
-                  
                   // Forzar validación del formulario
                   const isValid = await trigger();
-                  console.log('Trigger validation result:', isValid);
                   
                   if (!isValid) {
-                    console.log('Form validation failed');
                     return;
                   }
                 }}
@@ -1308,6 +1351,184 @@ export const EntregaForm: React.FC = () => {
           </div>
         </div>
       </form>
+
+      {/* Modal de confirmación de entrega */}
+      {showConfirmacionEntrega && entregaRegistrada && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Header del modal */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      ¡Entrega Registrada Exitosamente!
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Revisa los detalles antes de finalizar
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleFinalizarEntrega}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Detalles de la entrega */}
+              <div className="space-y-6">
+                {/* Información del cliente */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-3 flex items-center">
+                    <User className="h-4 w-4 mr-2" />
+                    Información del Cliente
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Cliente:</span>
+                      <span className="ml-2 text-blue-900 dark:text-blue-100">{entregaRegistrada.cliente?.nombre}</span>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Teléfono:</span>
+                      <span className="ml-2 text-blue-900 dark:text-blue-100">{entregaRegistrada.cliente?.telefono || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Dirección:</span>
+                      <span className="ml-2 text-blue-900 dark:text-blue-100">{entregaRegistrada.cliente?.direccion || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Zona:</span>
+                      <span className="ml-2 text-blue-900 dark:text-blue-100">{entregaRegistrada.cliente?.zona || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Productos entregados */}
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 dark:text-green-100 mb-3 flex items-center">
+                    <Package className="h-4 w-4 mr-2" />
+                    Productos Entregados
+                  </h4>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    {entregaRegistrada.sodas > 0 && (
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.sodas}</div>
+                        <div className="text-green-600 dark:text-green-400">Sodas</div>
+                      </div>
+                    )}
+                    {entregaRegistrada.bidones10 > 0 && (
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.bidones10}</div>
+                        <div className="text-green-600 dark:text-green-400">Bidones 10L</div>
+                      </div>
+                    )}
+                    {entregaRegistrada.bidones20 > 0 && (
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.bidones20}</div>
+                        <div className="text-green-600 dark:text-green-400">Bidones 20L</div>
+                      </div>
+                    )}
+                    {entregaRegistrada.envasesDevueltos > 0 && (
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-700 dark:text-green-300">{entregaRegistrada.envasesDevueltos}</div>
+                        <div className="text-green-600 dark:text-green-400">Envases Devueltos</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Información de pago */}
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+                  <h4 className="font-medium text-purple-900 dark:text-purple-100 mb-3 flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    Información de Pago
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-purple-700 dark:text-purple-300 font-medium">Total:</span>
+                      <span className="ml-2 text-lg font-bold text-purple-900 dark:text-purple-100">${entregaRegistrada.total}</span>
+                    </div>
+                    <div>
+                      <span className="text-purple-700 dark:text-purple-300 font-medium">Estado:</span>
+                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                        entregaRegistrada.pagado 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+                          : 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
+                      }`}>
+                        {entregaRegistrada.pagado ? 'Pagado' : 'Pendiente'}
+                      </span>
+                    </div>
+                    {entregaRegistrada.pagado && entregaRegistrada.medioPago && (
+                      <div>
+                        <span className="text-purple-700 dark:text-purple-300 font-medium">Método:</span>
+                        <span className="ml-2 text-purple-900 dark:text-purple-100 capitalize">{entregaRegistrada.medioPago}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-purple-700 dark:text-purple-300 font-medium">Nuevo Saldo:</span>
+                      <span className={`ml-2 font-bold ${
+                        entregaRegistrada.nuevoSaldo > 0 
+                          ? 'text-orange-600 dark:text-orange-400'
+                          : 'text-green-600 dark:text-green-400'
+                      }`}>
+                        ${entregaRegistrada.nuevoSaldo}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Observaciones */}
+                {entregaRegistrada.observaciones && (
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-2 flex items-center">
+                      <FileText className="h-4 w-4 mr-2" />
+                      Observaciones
+                    </h4>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">{entregaRegistrada.observaciones}</p>
+                  </div>
+                )}
+
+                {/* Fecha y hora */}
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center text-gray-600 dark:text-gray-400">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      <span>Fecha: {entregaRegistrada.fechaRegistro.toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex items-center text-gray-600 dark:text-gray-400">
+                      <Clock className="h-4 w-4 mr-2" />
+                      <span>Hora: {entregaRegistrada.fechaRegistro.toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+                <button
+                  onClick={handleNuevaEntrega}
+                  className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nueva Entrega
+                </button>
+                <button
+                  onClick={handleFinalizarEntrega}
+                  className="flex-1 flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Finalizar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
