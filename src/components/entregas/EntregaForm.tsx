@@ -1322,7 +1322,7 @@ export const EntregaForm: React.FC = () => {
               </button>
             ) : (
               <button
-                type="submit"
+                type="button"
                 disabled={loading || !formIsValid}
                 onClick={async () => {
                   // Forzar validación del formulario
@@ -1331,6 +1331,10 @@ export const EntregaForm: React.FC = () => {
                   if (!isValid) {
                     return;
                   }
+                  
+                  // Obtener los datos del formulario y ejecutar onSubmit manualmente
+                  const formData = watch();
+                  await onSubmit(formData);
                 }}
                 className="flex items-center justify-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
               >
