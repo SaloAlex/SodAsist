@@ -413,6 +413,60 @@ export const EntregaForm: React.FC = () => {
     return suficienteSodas && suficienteBidones10 && suficienteBidones20;
   };
 
+  // Función para calcular días de vencimiento
+  const calcularDiasVencimiento = (fechaUltimaEntrega?: Date): number => {
+    if (!fechaUltimaEntrega) return 0;
+    const hoy = new Date();
+    const diffTime = hoy.getTime() - fechaUltimaEntrega.getTime();
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  // Función para obtener el estado del cliente
+  const obtenerEstadoCliente = () => {
+    if (!clienteSeleccionado) return null;
+
+    const saldoPendiente = clienteSeleccionado.saldoPendiente || 0;
+    const diasVencimiento = calcularDiasVencimiento(clienteSeleccionado.ultimaEntregaFecha);
+    
+    let estado = 'al-dia';
+    let mensaje = 'Cliente al día';
+    let color = 'green';
+    let icono = '✅';
+
+    if (saldoPendiente > 0) {
+      if (diasVencimiento > 30) {
+        estado = 'vencido';
+        mensaje = `Deuda vencida (${diasVencimiento} días)`;
+        color = 'red';
+        icono = '🚨';
+      } else if (diasVencimiento > 15) {
+        estado = 'atrasado';
+        mensaje = `Deuda atrasada (${diasVencimiento} días)`;
+        color = 'orange';
+        icono = '⚠️';
+      } else {
+        estado = 'deuda';
+        mensaje = 'Tiene deuda pendiente';
+        color = 'yellow';
+        icono = '💰';
+      }
+    } else if (diasVencimiento > 60) {
+      estado = 'inactivo';
+      mensaje = `Cliente inactivo (${diasVencimiento} días)`;
+      color = 'gray';
+      icono = '😴';
+    }
+
+    return {
+      estado,
+      mensaje,
+      color,
+      icono,
+      saldoPendiente,
+      diasVencimiento
+    };
+  };
+
   const nextStep = async () => {
     const currentStepData = steps.find(s => s.id === currentStep);
     if (currentStepData) {
@@ -1204,6 +1258,116 @@ export const EntregaForm: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Estado del Cliente */}
+            {clienteSeleccionado && (() => {
+              const estadoCliente = obtenerEstadoCliente();
+              if (!estadoCliente) return null;
+
+              const getColorClasses = (color: string) => {
+                switch (color) {
+                  case 'red':
+                    return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+                  case 'orange':
+                    return 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
+                  case 'yellow':
+                    return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
+                  case 'gray':
+                    return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800';
+                  default:
+                    return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
+                }
+              };
+
+              const getTextColorClasses = (color: string) => {
+                switch (color) {
+                  case 'red':
+                    return 'text-red-800 dark:text-red-200';
+                  case 'orange':
+                    return 'text-orange-800 dark:text-orange-200';
+                  case 'yellow':
+                    return 'text-yellow-800 dark:text-yellow-200';
+                  case 'gray':
+                    return 'text-gray-800 dark:text-gray-200';
+                  default:
+                    return 'text-green-800 dark:text-green-200';
+                }
+              };
+
+              return (
+                <div className={`rounded-lg border p-4 ${getColorClasses(estadoCliente.color)}`}>
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <User className="h-4 w-4 mr-2" />
+                    <span className={getTextColorClasses(estadoCliente.color)}>
+                      Estado del Cliente
+                    </span>
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    {/* Estado principal */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">{estadoCliente.icono}</span>
+                        <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                          {estadoCliente.mensaje}
+                        </span>
+                      </div>
+                      {estadoCliente.saldoPendiente > 0 && (
+                        <span className={`font-bold ${getTextColorClasses(estadoCliente.color)}`}>
+                          ${estadoCliente.saldoPendiente.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Información adicional */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                          Saldo actual:
+                        </span>
+                        <span className={`ml-2 ${getTextColorClasses(estadoCliente.color)}`}>
+                          ${estadoCliente.saldoPendiente.toFixed(2)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                          Última entrega:
+                        </span>
+                        <span className={`ml-2 ${getTextColorClasses(estadoCliente.color)}`}>
+                          {estadoCliente.diasVencimiento === 0 
+                            ? 'Hoy' 
+                            : `${estadoCliente.diasVencimiento} días`
+                          }
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Advertencias específicas */}
+                    {estadoCliente.estado === 'vencido' && (
+                      <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded border border-red-200 dark:border-red-800">
+                        <p className="text-sm text-red-800 dark:text-red-200 font-medium">
+                          ⚠️ Cliente con deuda vencida. Considera solicitar pago antes de entregar.
+                        </p>
+                      </div>
+                    )}
+                    {estadoCliente.estado === 'atrasado' && (
+                      <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded border border-orange-200 dark:border-orange-800">
+                        <p className="text-sm text-orange-800 dark:text-orange-200 font-medium">
+                          ⚠️ Cliente con deuda atrasada. Recuerda cobrar pendientes.
+                        </p>
+                      </div>
+                    )}
+                    {estadoCliente.estado === 'inactivo' && (
+                      <div className="p-2 bg-gray-100 dark:bg-gray-900/30 rounded border border-gray-200 dark:border-gray-800">
+                        <p className="text-sm text-gray-800 dark:text-gray-200 font-medium">
+                          ℹ️ Cliente inactivo. Verifica si sigue siendo cliente activo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
 
@@ -1411,6 +1575,118 @@ export const EntregaForm: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Estado Financiero del Cliente */}
+                {entregaRegistrada.cliente && (() => {
+                  const estadoCliente = obtenerEstadoCliente();
+                  if (!estadoCliente) return null;
+
+                  const getColorClasses = (color: string) => {
+                    switch (color) {
+                      case 'red':
+                        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+                      case 'orange':
+                        return 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
+                      case 'yellow':
+                        return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
+                      case 'gray':
+                        return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800';
+                      default:
+                        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
+                    }
+                  };
+
+                  const getTextColorClasses = (color: string) => {
+                    switch (color) {
+                      case 'red':
+                        return 'text-red-800 dark:text-red-200';
+                      case 'orange':
+                        return 'text-orange-800 dark:text-orange-200';
+                      case 'yellow':
+                        return 'text-yellow-800 dark:text-yellow-200';
+                      case 'gray':
+                        return 'text-gray-800 dark:text-gray-200';
+                      default:
+                        return 'text-green-800 dark:text-green-200';
+                    }
+                  };
+
+                  return (
+                    <div className={`rounded-lg border p-4 ${getColorClasses(estadoCliente.color)}`}>
+                      <h4 className="font-medium mb-3 flex items-center">
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        <span className={getTextColorClasses(estadoCliente.color)}>
+                          Estado Financiero del Cliente
+                        </span>
+                      </h4>
+                      
+                      <div className="space-y-3">
+                        {/* Estado principal */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-lg">{estadoCliente.icono}</span>
+                            <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                              {estadoCliente.mensaje}
+                            </span>
+                          </div>
+                          {estadoCliente.saldoPendiente > 0 && (
+                            <span className={`font-bold ${getTextColorClasses(estadoCliente.color)}`}>
+                              ${estadoCliente.saldoPendiente.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Información detallada */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                              Saldo anterior:
+                            </span>
+                            <span className={`ml-2 ${getTextColorClasses(estadoCliente.color)}`}>
+                              ${estadoCliente.saldoPendiente.toFixed(2)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                              Última entrega:
+                            </span>
+                            <span className={`ml-2 ${getTextColorClasses(estadoCliente.color)}`}>
+                              {estadoCliente.diasVencimiento === 0 
+                                ? 'Hoy' 
+                                : `${estadoCliente.diasVencimiento} días`
+                              }
+                            </span>
+                          </div>
+                          <div>
+                            <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                              Nuevo saldo:
+                            </span>
+                            <span className={`ml-2 font-bold ${getTextColorClasses(estadoCliente.color)}`}>
+                              ${entregaRegistrada.nuevoSaldo.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Resumen de cambio */}
+                        <div className="p-3 bg-white/50 dark:bg-black/20 rounded border">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className={`font-medium ${getTextColorClasses(estadoCliente.color)}`}>
+                              Cambio en saldo:
+                            </span>
+                            <span className={`font-bold ${
+                              entregaRegistrada.nuevoSaldo > estadoCliente.saldoPendiente 
+                                ? 'text-red-600 dark:text-red-400' 
+                                : 'text-green-600 dark:text-green-400'
+                            }`}>
+                              {entregaRegistrada.nuevoSaldo > estadoCliente.saldoPendiente ? '+' : ''}
+                              ${(entregaRegistrada.nuevoSaldo - estadoCliente.saldoPendiente).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Productos entregados */}
                 <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
