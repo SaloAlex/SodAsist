@@ -12,8 +12,10 @@ import {
 } from 'lucide-react';
 import { 
   Producto, 
-  CategoriaProducto, 
-  FiltrosProductos 
+  CategoriaProducto,
+  FiltrosProductos,
+  PaginacionProductos,
+  ResultadoPaginado
 } from '../types';
 import { ProductosService } from '../services/productosService';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -23,18 +25,34 @@ import { CategoriaManager } from '../components/inventario/CategoriaManager';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { 
+  useProductosPaginados,
+  useCategorias, 
+  useCrearProducto, 
+  useActualizarProducto, 
+  useEliminarProducto
+} from '../hooks/useProductosQuery';
+import { Pagination } from '../components/common/Pagination';
 import clsx from 'clsx';
 
 type VistaInventario = 'dashboard' | 'productos' | 'movimientos' | 'categorias';
+
 
 interface ProductoTableProps {
   productos: Producto[];
   onEdit: (producto: Producto) => void;
   onDelete: (id: string) => void;
   loading?: boolean;
+  categorias: CategoriaProducto[];
 }
 
-const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDelete, loading }) => {
+const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDelete, loading, categorias }) => {
+  // Función para obtener el nombre de la categoría por ID
+  const obtenerNombreCategoria = (categoriaId: string): string => {
+    const categoria = categorias.find(cat => cat.id === categoriaId);
+    return categoria ? categoria.nombre : categoriaId; // Fallback al ID si no se encuentra
+  };
+
   if (productos.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
@@ -96,7 +114,7 @@ const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDele
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                    {producto.categoria}
+                    {obtenerNombreCategoria(producto.categoria)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -156,88 +174,92 @@ const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDele
       </div>
 
       {/* Vista de cards para móvil */}
-      <div className="md:hidden space-y-4">
+      <div className="md:hidden space-y-3">
         {productos.map((producto) => (
           <div 
             key={producto.id} 
-            className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
           >
             {/* Header del card */}
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center space-x-3 flex-1 min-w-0">
-                <Package className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {producto.nombre}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {producto.codigo}
-                  </p>
+            <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                  <Package className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {producto.nombre}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {producto.codigo}
+                    </p>
+                  </div>
                 </div>
+                
+                {/* Estado */}
+                <span className={clsx(
+                  'px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0',
+                  producto.activo
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                )}>
+                  {producto.activo ? 'Activo' : 'Inactivo'}
+                </span>
               </div>
-              
-              {/* Estado */}
-              <span className={clsx(
-                'px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0',
-                producto.activo
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-              )}>
-                {producto.activo ? 'Activo' : 'Inactivo'}
-              </span>
             </div>
 
             {/* Información del producto */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Categoría</p>
-                <p className="text-sm text-gray-900 dark:text-white">{producto.categoria}</p>
+            <div className="p-3">
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Categoría</p>
+                  <p className="text-sm text-gray-900 dark:text-white truncate">{obtenerNombreCategoria(producto.categoria)}</p>
+                </div>
+                
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Precio</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">${producto.precioVenta}</p>
+                </div>
               </div>
-              
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Precio</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">${producto.precioVenta}</p>
-              </div>
-            </div>
 
-            {/* Stock */}
-            <div className="mb-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock</p>
-              <div className="flex items-center">
-                <span className={clsx(
-                  'text-sm font-medium',
-                  producto.stock <= producto.stockMinimo
-                    ? 'text-red-600 dark:text-red-400'
-                    : producto.stock <= producto.stockMinimo * 2
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-green-600 dark:text-green-400'
-                )}>
-                  {producto.stock}
-                </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                  / {producto.stockMinimo} mínimo
-                </span>
+              {/* Stock */}
+              <div className="mb-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock</p>
+                <div className="flex items-center">
+                  <span className={clsx(
+                    'text-sm font-medium',
+                    producto.stock <= producto.stockMinimo
+                      ? 'text-red-600 dark:text-red-400'
+                      : producto.stock <= producto.stockMinimo * 2
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-green-600 dark:text-green-400'
+                  )}>
+                    {producto.stock}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                    / {producto.stockMinimo} mín
+                  </span>
+                </div>
               </div>
-            </div>
 
-            {/* Acciones */}
-            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => onEdit(producto)}
-                className="flex items-center space-x-2 px-3 py-2 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                disabled={loading}
-              >
-                <Edit className="h-4 w-4" />
-                <span className="text-sm">Editar</span>
-              </button>
-              <button
-                onClick={() => onDelete(producto.id)}
-                className="flex items-center space-x-2 px-3 py-2 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                disabled={loading}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span className="text-sm">Eliminar</span>
-              </button>
+              {/* Acciones */}
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <button
+                  onClick={() => onEdit(producto)}
+                  className="flex items-center space-x-1 px-2 py-1.5 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                  disabled={loading}
+                >
+                  <Edit className="h-3 w-3" />
+                  <span className="text-xs">Editar</span>
+                </button>
+                <button
+                  onClick={() => onDelete(producto.id)}
+                  className="flex items-center space-x-1 px-2 py-1.5 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                  disabled={loading}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span className="text-xs">Eliminar</span>
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -252,9 +274,6 @@ export const Inventario: React.FC = () => {
   
   // Estados principales
   const [vistaActual, setVistaActual] = useState<VistaInventario>('dashboard');
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
-  const [loading, setLoading] = useState(true);
   const [procesando, setProcesando] = useState(false);
   
   // Estados para formularios y modales
@@ -265,6 +284,45 @@ export const Inventario: React.FC = () => {
   // Estados para filtros
   const [filtros, setFiltros] = useState<FiltrosProductos>({});
   const [busqueda, setBusqueda] = useState('');
+  
+  // Estados para paginación
+  const [paginacion, setPaginacion] = useState<PaginacionProductos>({
+    pagina: 1,
+    limite: 20,
+    ordenarPor: 'nombre',
+    orden: 'asc'
+  });
+
+  // React Query hooks
+  const filtrosCompletos = { ...filtros, busqueda: busqueda.trim() || undefined };
+  const { 
+    data: resultadoPaginado,
+    isLoading: loadingProductos, 
+    error: errorProductos,
+    refetch: refetchProductos 
+  } = useProductosPaginados(filtrosCompletos, paginacion);
+  
+  // Extraer datos de la respuesta paginada
+  const productos = (resultadoPaginado as ResultadoPaginado<Producto> | undefined)?.datos || [];
+  const infoPaginacion = (resultadoPaginado as ResultadoPaginado<Producto> | undefined)?.paginacion;
+  
+  const { 
+    data: categorias = [], 
+    isLoading: loadingCategorias, 
+    error: errorCategorias,
+    refetch: refetchCategorias 
+  } = useCategorias();
+
+  // Mutations
+  const crearProductoMutation = useCrearProducto();
+  const actualizarProductoMutation = useActualizarProducto();
+  const eliminarProductoMutation = useEliminarProducto();
+  // Prefetch disponible para optimizaciones futuras
+  // const { prefetchProductos, prefetchCategorias } = usePrefetchProductos();
+
+  // Estados derivados
+  const loading = loadingProductos || loadingCategorias;
+  const error = errorProductos || errorCategorias;
 
   // Verificar autenticación
   useEffect(() => {
@@ -274,72 +332,49 @@ export const Inventario: React.FC = () => {
     }
   }, [user, navigate]);
 
-  const cargarDatos = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [productosData, categoriasDataRaw] = await Promise.all([
-        ProductosService.getProductos(filtros),
-        ProductosService.getCategorias()
-      ]);
-      
-      // Filtrar categorías duplicadas (mantener la más reciente)
-      const categoriasUnicas = categoriasDataRaw.reduce((acc, categoria) => {
-        const existente = acc.find(cat => cat.nombre.toLowerCase() === categoria.nombre.toLowerCase());
-        if (!existente) {
-          acc.push(categoria);
-        } else if (categoria.updatedAt > existente.updatedAt) {
-          // Reemplazar con la más reciente
-          const index = acc.indexOf(existente);
-          acc[index] = categoria;
+  // Función para reintentar carga en caso de error
+  const reintentarCarga = useCallback(() => {
+    refetchProductos();
+    refetchCategorias();
+  }, [refetchProductos, refetchCategorias]);
+
+  // Funciones para manejar paginación
+  const handlePageChange = useCallback((nuevaPagina: number) => {
+    setPaginacion(prev => ({ ...prev, pagina: nuevaPagina }));
+  }, []);
+
+  const handleLimitChange = useCallback((nuevoLimite: number) => {
+    setPaginacion(prev => ({ ...prev, limite: nuevoLimite, pagina: 1 }));
+  }, []);
+
+  const handleSortChange = useCallback((ordenarPor: string, orden: 'asc' | 'desc') => {
+    setPaginacion(prev => ({ 
+      ...prev, 
+      ordenarPor: ordenarPor as 'nombre' | 'precioVenta' | 'stock' | 'createdAt' | 'updatedAt', 
+      orden, 
+      pagina: 1 
+    }));
+  }, []);
+
+  // Crear productos iniciales si no hay productos
+  useEffect(() => {
+    const crearProductosIniciales = async () => {
+      if (productos.length === 0 && user && !loadingProductos && !errorProductos) {
+        try {
+          toast.loading('Creando productos iniciales...', { id: 'productos-iniciales' });
+          await ProductosService.crearProductosIniciales(user.uid);
+          refetchProductos();
+          toast.success('Productos iniciales creados', { id: 'productos-iniciales' });
+        } catch (error) {
+          console.error('Error al crear productos iniciales:', error);
+          toast.error('Error al crear productos iniciales', { id: 'productos-iniciales' });
         }
-        return acc;
-      }, [] as CategoriaProducto[]);
-      
-      setProductos(productosData);
-      setCategorias(categoriasUnicas);
-      
-      // Si no hay productos, crear productos iniciales
-      if (productosData.length === 0 && user) {
-        await ProductosService.crearProductosIniciales(user.uid);
-        const nuevosProductos = await ProductosService.getProductos();
-        setProductos(nuevosProductos);
-        toast.success('Productos iniciales creados');
-      }
-    } catch (error) {
-      console.error('Error al cargar datos:', error);
-      toast.error('Error al cargar datos del inventario');
-    } finally {
-      setLoading(false);
-    }
-  }, [filtros, user]);
-
-  // Cargar datos iniciales
-  useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
-
-  // Aplicar filtros cuando cambien
-  useEffect(() => {
-    const aplicarFiltros = async () => {
-      try {
-        setLoading(true);
-        const filtrosCompletos = {
-          ...filtros,
-          busqueda: busqueda.trim() || undefined
-        };
-        const productosData = await ProductosService.getProductos(filtrosCompletos);
-        setProductos(productosData);
-      } catch (error) {
-        console.error('Error al aplicar filtros:', error);
-        toast.error('Error al filtrar productos');
-      } finally {
-        setLoading(false);
       }
     };
 
-    const debounceTimeout = setTimeout(aplicarFiltros, 300);
-    return () => clearTimeout(debounceTimeout);
-  }, [filtros, busqueda]);
+    crearProductosIniciales();
+  }, [productos.length, user, loadingProductos, errorProductos, refetchProductos]);
+
 
   const handleCrearProducto = () => {
     setProductoEditando(undefined);
@@ -357,27 +392,27 @@ export const Inventario: React.FC = () => {
       
       if (productoEditando) {
         // Actualizar producto existente
-        await ProductosService.actualizarProducto(productoEditando.id, {
-          ...data,
-          updatedBy: user!.uid
+        await actualizarProductoMutation.mutateAsync({
+          id: productoEditando.id,
+          producto: {
+            ...data,
+            updatedBy: user!.uid
+          }
         });
-        toast.success('Producto actualizado correctamente');
       } else {
         // Crear nuevo producto
-        await ProductosService.crearProducto({
+        await crearProductoMutation.mutateAsync({
           ...data,
           createdBy: user!.uid,
           updatedBy: user!.uid
         } as Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>);
-        toast.success('Producto creado correctamente');
       }
 
-      await cargarDatos();
       setMostrandoFormProducto(false);
       setProductoEditando(undefined);
     } catch (error) {
       console.error('Error al guardar producto:', error);
-      toast.error(error instanceof Error ? error.message : 'Error al guardar producto');
+      // El error ya se maneja en las mutations
     } finally {
       setProcesando(false);
     }
@@ -390,12 +425,10 @@ export const Inventario: React.FC = () => {
 
     try {
       setProcesando(true);
-      await ProductosService.eliminarProducto(id);
-      toast.success('Producto eliminado correctamente');
-      await cargarDatos();
+      await eliminarProductoMutation.mutateAsync(id);
     } catch (error) {
       console.error('Error al eliminar producto:', error);
-      toast.error('Error al eliminar producto');
+      // El error ya se maneja en la mutation
     } finally {
       setProcesando(false);
     }
@@ -479,21 +512,52 @@ export const Inventario: React.FC = () => {
             
             {/* Filtros y acciones */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
-              <select
-                value={filtros.categoria || ''}
-                onChange={(e) => setFiltros({ ...filtros, categoria: e.target.value || undefined })}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
-              >
-                <option value="">Todas las categorías</option>
-                {categorias.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={filtros.categoria || ''}
+                  onChange={(e) => setFiltros({ ...filtros, categoria: e.target.value || undefined })}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm pr-8"
+                  disabled={loadingCategorias}
+                >
+                  <option value="">
+                    {loadingCategorias ? 'Cargando categorías...' : 'Todas las categorías'}
+                  </option>
+                  {categorias.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                  ))}
+                </select>
+                {loadingCategorias && (
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Selector de ordenamiento */}
+              <div className="flex items-center space-x-2">
+                <select
+                  value={`${paginacion.ordenarPor}-${paginacion.orden}`}
+                  onChange={(e) => {
+                    const [ordenarPor, orden] = e.target.value.split('-');
+                    handleSortChange(ordenarPor, orden as 'asc' | 'desc');
+                  }}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                >
+                  <option value="nombre-asc">Nombre A-Z</option>
+                  <option value="nombre-desc">Nombre Z-A</option>
+                  <option value="precioVenta-asc">Precio Menor</option>
+                  <option value="precioVenta-desc">Precio Mayor</option>
+                  <option value="stock-asc">Stock Menor</option>
+                  <option value="stock-desc">Stock Mayor</option>
+                  <option value="createdAt-desc">Más Recientes</option>
+                  <option value="createdAt-asc">Más Antiguos</option>
+                </select>
+              </div>
               
               <button
                 onClick={handleCrearProducto}
-                className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                disabled={loading}
+                className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || loadingCategorias}
               >
                 <Plus className="h-4 w-4 flex-shrink-0" />
                 <span className="whitespace-nowrap">Nuevo Producto</span>
@@ -514,6 +578,32 @@ export const Inventario: React.FC = () => {
       );
     }
 
+    // Mostrar error con opción de reintentar
+    if (error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <div className="text-center">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Error al cargar datos
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4 max-w-md">
+              {error?.message || 'Error desconocido'}
+            </p>
+          </div>
+          <button
+            onClick={reintentarCarga}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Reintentar</span>
+          </button>
+        </div>
+      );
+    }
+
     switch (vistaActual) {
       case 'dashboard':
         return (
@@ -525,12 +615,30 @@ export const Inventario: React.FC = () => {
       
       case 'productos':
         return (
-          <ProductoTable
-            productos={productos}
-            onEdit={handleEditarProducto}
-            onDelete={handleEliminarProducto}
-            loading={procesando}
-          />
+          <div className="space-y-6">
+            <ProductoTable
+              productos={productos}
+              onEdit={handleEditarProducto}
+              onDelete={handleEliminarProducto}
+              loading={procesando || loadingProductos}
+              categorias={categorias}
+            />
+            
+            {/* Componente de paginación */}
+            {infoPaginacion && (
+              <Pagination
+                paginaActual={infoPaginacion.paginaActual}
+                totalPaginas={infoPaginacion.totalPaginas}
+                totalElementos={infoPaginacion.totalElementos}
+                limite={infoPaginacion.limite}
+                tieneSiguiente={infoPaginacion.tieneSiguiente}
+                tieneAnterior={infoPaginacion.tieneAnterior}
+                onPageChange={handlePageChange}
+                onLimitChange={handleLimitChange}
+                className="bg-white dark:bg-gray-800 rounded-lg shadow p-4"
+              />
+            )}
+          </div>
         );
       
       case 'movimientos':
@@ -609,7 +717,7 @@ export const Inventario: React.FC = () => {
             <CategoriaManager
               onClose={() => {
                 setMostrandoCategorias(false);
-                cargarDatos(); // Recargar datos después de gestionar categorías
+                refetchCategorias(); // Recargar categorías después de gestionar categorías
               }}
             />
           </div>

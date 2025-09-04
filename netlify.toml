@@ -3,6 +3,12 @@
   command = "npm run build"
 
 [[redirects]]
+  from = "/assets/*"
+  to = "/assets/:splat"
+  status = 200
+  headers = {X-From = "Netlify"}
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

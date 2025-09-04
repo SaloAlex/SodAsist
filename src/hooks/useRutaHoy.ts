@@ -31,8 +31,6 @@ interface UseRutaHoyReturn {
 }
 
 export const useRutaHoy = (): UseRutaHoyReturn => {
-  console.log('🚀 useRutaHoy: Hook iniciando');
-  
   const [clientes, setClientes] = useState<ClienteConRuta[]>([]);
   const [rutaOptimizada, setRutaOptimizada] = useState<RutaOptimizada | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,21 +41,8 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
 
   const { userData, loading: authLoading } = useAuthStore();
   
-  console.log('🔍 useRutaHoy: Estado de autenticación:', {
-    userData: !!userData,
-    userDataRol: userData?.rol,
-    authLoading,
-    userDataEmail: userData?.email
-  });
-  
   // Integrar geolocalización de forma segura
   const { coords: ubicacionActual, error: errorUbicacion, loading: loadingLocation, startLocationTracking } = useGeolocation();
-  
-  console.log('🔍 useRutaHoy: Estado de geolocalización:', {
-    ubicacionActual: !!ubicacionActual,
-    errorUbicacion,
-    loadingLocation
-  });
   
   const hasLoadedRef = useRef(false);
   const lastDateRef = useRef<string>('');
@@ -78,7 +63,6 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
   useEffect(() => {
     // Solo iniciar geolocalización si no se ha cargado y el usuario está autenticado
     if (!hasLoadedRef.current && userData && !loadingLocation && !ubicacionActual) {
-      console.log('📍 useRutaHoy: Iniciando geolocalización automáticamente...');
       // Iniciar geolocalización inmediatamente
       startLocationTracking();
     }
@@ -88,26 +72,15 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
 
   // Cargar datos solo una vez - SIN mountedRef
   useEffect(() => {
-    console.log('🔍 useRutaHoy: useEffect principal ejecutándose', {
-      hasLoadedRef: hasLoadedRef.current,
-      authLoading,
-      userData: !!userData,
-      userDataRol: userData?.rol
-    });
-
     // No cargar si ya se está cargando o no hay usuario
     if (authLoading || !userData) {
-      console.log('🔍 useRutaHoy: Esperando autenticación o usuario');
       return;
     }
 
     // Si ya se cargaron los datos, no hacer nada
     if (hasLoadedRef.current) {
-      console.log('🔍 useRutaHoy: Datos ya cargados, omitiendo');
       return;
     }
-
-    console.log('🚀 useRutaHoy: Iniciando carga de datos...');
 
     const cargarDatos = async () => {
       try {
@@ -117,7 +90,7 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         // Verificar si cambió el día ANTES de cargar
         const diaCambio = checkDateChange();
         if (diaCambio) {
-          console.log('🔄 useRutaHoy: Día cambió, estado limpiado, continuando carga');
+          // Día cambió, estado limpiado, continuando carga
         }
 
         // Permitir acceso a admin, sodero, owner y manager
@@ -242,10 +215,6 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         }
 
         hasLoadedRef.current = true;
-        console.log('✅ useRutaHoy: Datos cargados exitosamente', {
-          clientesCargados: clientesFiltrados.length,
-          visitasCompletadas: visitasFinales.size
-        });
 
       } catch (err) {
         console.error('❌ useRutaHoy: Error en carga de datos:', err);
@@ -253,7 +222,6 @@ export const useRutaHoy = (): UseRutaHoyReturn => {
         toast.error('Error al cargar los datos');
       } finally {
         setLoading(false);
-        console.log('🔍 useRutaHoy: useEffect completado, loading:', false);
       }
     };
 

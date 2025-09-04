@@ -10,10 +10,12 @@ import {
   where,
   orderBy,
   limit,
+  getCountFromServer,
   writeBatch,
   serverTimestamp,
   Timestamp,
-  DocumentData
+  DocumentData,
+  QueryConstraint
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { auth } from '../config/firebase';
@@ -21,6 +23,8 @@ import {
   Producto,
   CategoriaProducto,
   FiltrosProductos,
+  PaginacionProductos,
+  ResultadoPaginado,
   UnidadMedida,
   TipoMovimiento
 } from '../types';
@@ -114,6 +118,102 @@ export class ProductosService {
       return productosFiltrados;
     } catch (error) {
       console.error('Error al obtener productos:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener productos con paginación y filtros del lado del servidor
+   */
+  static async getProductosPaginados(
+    filtros: FiltrosProductos = {},
+    paginacion: PaginacionProductos = { pagina: 1, limite: 20 }
+  ): Promise<ResultadoPaginado<Producto>> {
+    try {
+      const { pagina, limite, ordenarPor = 'nombre', orden = 'asc' } = paginacion;
+      const constraints: QueryConstraint[] = [];
+
+      // Aplicar filtros del lado del servidor
+      if (filtros.categoria) {
+        constraints.push(where('categoria', '==', filtros.categoria));
+      }
+      
+      if (filtros.activo !== undefined) {
+        constraints.push(where('activo', '==', filtros.activo));
+      }
+      
+      if (filtros.proveedor) {
+        constraints.push(where('proveedor', '==', filtros.proveedor));
+      }
+
+      if (filtros.conStock) {
+        constraints.push(where('stock', '>', 0));
+      }
+
+      if (filtros.stockBajo) {
+        // Para stock bajo, necesitamos hacer una consulta más compleja
+        // Por ahora, lo manejaremos en el cliente después de la paginación
+      }
+
+      // Ordenar
+      constraints.push(orderBy(ordenarPor, orden));
+
+      // Obtener el total de documentos para calcular paginación
+      const countQuery = query(collection(db, this.getTenantPath('productos')), ...constraints);
+      const countSnapshot = await getCountFromServer(countQuery);
+      const totalElementos = countSnapshot.data().count;
+
+      // Calcular paginación
+      const totalPaginas = Math.ceil(totalElementos / limite);
+
+      // Aplicar límite
+      constraints.push(limit(limite));
+
+      // Crear query final
+      const q = query(collection(db, this.getTenantPath('productos')), ...constraints);
+      const querySnapshot = await getDocs(q);
+      
+      const productos = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertedData = this.convertTimestamps(data as DocumentData) as Omit<Producto, 'id'>;
+        return {
+          id: doc.id,
+          ...convertedData
+        };
+      });
+
+      // Aplicar filtros que no se pueden hacer en Firestore
+      let productosFiltrados = productos;
+
+      // Filtro de búsqueda (se mantiene en cliente por limitaciones de Firestore)
+      if (filtros.busqueda) {
+        const busqueda = filtros.busqueda.toLowerCase();
+        productosFiltrados = productos.filter(p => 
+          p.nombre.toLowerCase().includes(busqueda) ||
+          p.descripcion?.toLowerCase().includes(busqueda) ||
+          p.codigo?.toLowerCase().includes(busqueda) ||
+          p.codigoBarras?.toLowerCase().includes(busqueda)
+        );
+      }
+
+      // Filtro de stock bajo (se mantiene en cliente)
+      if (filtros.stockBajo) {
+        productosFiltrados = productosFiltrados.filter(p => p.stock <= p.stockMinimo);
+      }
+
+      return {
+        datos: productosFiltrados,
+        paginacion: {
+          paginaActual: pagina,
+          totalPaginas,
+          totalElementos,
+          limite,
+          tieneSiguiente: pagina < totalPaginas,
+          tieneAnterior: pagina > 1
+        }
+      };
+    } catch (error) {
+      console.error('Error al obtener productos paginados:', error);
       throw error;
     }
   }

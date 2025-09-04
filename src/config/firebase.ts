@@ -8,8 +8,6 @@ import { getTenantFirebaseConfig, getCurrentTenant } from './tenantConfig';
 const firebaseConfig = getTenantFirebaseConfig();
 const currentTenant = getCurrentTenant();
 
-console.log(`🏢 Firebase: Inicializando para ${currentTenant.name} (${currentTenant.projectId})`);
-
 // Validar configuración del tenant
 const requiredConfig = {
   apiKey: firebaseConfig.apiKey,
@@ -38,7 +36,5 @@ export const functions = getFunctions(app);
 
 // Exportar información del tenant
 export { currentTenant };
-
-console.log('✅ Firebase: Inicializado correctamente');
 
 export default app;

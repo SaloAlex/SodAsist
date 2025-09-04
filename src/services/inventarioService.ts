@@ -10,6 +10,7 @@ import {
   orderBy,
   limit,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   Timestamp,
   DocumentData
@@ -22,7 +23,10 @@ import {
   ReporteInventario,
   MetricasInventario,
   FiltrosMovimientos,
-  TipoMovimiento
+  TipoMovimiento,
+  ValidacionStock,
+  ResultadoTransaccion,
+  Producto
 } from '../types';
 import { ProductosService } from './productosService';
 
@@ -138,6 +142,292 @@ export class InventarioService {
     } catch (error) {
       console.error('Error al registrar movimiento:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Validar movimiento de stock antes de ejecutarlo
+   */
+  private static validarMovimientoStock(validacion: ValidacionStock): { valido: boolean; errores: string[] } {
+    const errores: string[] = [];
+    const { stockActual, stockMinimo, stockMaximo, cantidadMovimiento, tipoMovimiento } = validacion;
+
+    // Validaciones básicas
+    if (cantidadMovimiento <= 0) {
+      errores.push('La cantidad debe ser mayor a 0');
+    }
+
+    if (stockActual < 0) {
+      errores.push('El stock actual no puede ser negativo');
+    }
+
+    // Validaciones específicas por tipo de movimiento
+    switch (tipoMovimiento) {
+      case TipoMovimiento.SALIDA:
+      case TipoMovimiento.VENTA:
+      case TipoMovimiento.MERMA:
+        if (cantidadMovimiento > stockActual) {
+          errores.push(`Stock insuficiente. Disponible: ${stockActual}, Solicitado: ${cantidadMovimiento}`);
+        }
+        break;
+
+      case TipoMovimiento.AJUSTE:
+        if (cantidadMovimiento < 0) {
+          errores.push('El stock ajustado no puede ser negativo');
+        }
+        break;
+
+      case TipoMovimiento.ENTRADA:
+      case TipoMovimiento.DEVOLUCION:
+        // Validar límite máximo si está definido
+        if (stockMaximo && (stockActual + cantidadMovimiento) > stockMaximo) {
+          errores.push(`El stock excedería el máximo permitido (${stockMaximo})`);
+        }
+        break;
+    }
+
+    // Validación de stock mínimo
+    const stockResultante = this.calcularStockResultante(stockActual, cantidadMovimiento, tipoMovimiento);
+    if (stockResultante < stockMinimo && tipoMovimiento !== TipoMovimiento.ENTRADA) {
+      errores.push(`El stock resultante (${stockResultante}) estaría por debajo del mínimo (${stockMinimo})`);
+    }
+
+    return {
+      valido: errores.length === 0,
+      errores
+    };
+  }
+
+  /**
+   * Calcular el stock resultante después de un movimiento
+   */
+  private static calcularStockResultante(stockActual: number, cantidad: number, tipo: TipoMovimiento): number {
+    switch (tipo) {
+      case TipoMovimiento.ENTRADA:
+      case TipoMovimiento.DEVOLUCION:
+        return stockActual + cantidad;
+      case TipoMovimiento.SALIDA:
+      case TipoMovimiento.VENTA:
+      case TipoMovimiento.MERMA:
+        return Math.max(0, stockActual - cantidad);
+      case TipoMovimiento.AJUSTE:
+        return cantidad;
+      case TipoMovimiento.TRANSFERENCIA:
+        return Math.max(0, stockActual + cantidad);
+      case TipoMovimiento.INICIAL:
+        return cantidad;
+      default:
+        return stockActual;
+    }
+  }
+
+  /**
+   * Registrar movimiento con transacción atómica y validaciones
+   */
+  static async registrarMovimientoAtomico(
+    productoId: string,
+    tipo: TipoMovimiento,
+    cantidad: number,
+    motivo: string,
+    usuario: string,
+    referencia?: string,
+    observaciones?: string
+  ): Promise<ResultadoTransaccion> {
+    try {
+      const resultado = await runTransaction(db, async (transaction) => {
+        // Obtener producto actual dentro de la transacción
+        const user = auth.currentUser;
+        if (!user) throw new Error('Usuario no autenticado');
+        const productoRef = doc(db, `tenants/${user.uid}/productos`, productoId);
+        const productoDoc = await transaction.get(productoRef);
+        
+        if (!productoDoc.exists()) {
+          throw new Error('Producto no encontrado');
+        }
+
+        const producto = productoDoc.data() as Producto;
+        const stockActual = producto.stock;
+        const cantidadMovimiento = Math.abs(cantidad);
+
+        // Crear validación
+        const validacion: ValidacionStock = {
+          productoId,
+          stockActual,
+          stockMinimo: producto.stockMinimo,
+          stockMaximo: producto.stockMaximo,
+          cantidadMovimiento,
+          tipoMovimiento: tipo
+        };
+
+        // Validar movimiento
+        const { valido, errores } = this.validarMovimientoStock(validacion);
+        if (!valido) {
+          return {
+            exito: false,
+            stockAnterior: stockActual,
+            stockNuevo: stockActual,
+            mensaje: 'Validación fallida',
+            errores
+          };
+        }
+
+        // Calcular nueva cantidad
+        const stockNuevo = this.calcularStockResultante(stockActual, cantidad, tipo);
+
+        // Actualizar producto
+        transaction.update(productoRef, {
+          stock: stockNuevo,
+          updatedAt: serverTimestamp(),
+          updatedBy: usuario
+        });
+
+        // Crear movimiento
+        const movimientoRef = doc(collection(db, this.getMovimientosPath()));
+        const movimientoData = {
+          productoId,
+          tipo,
+          cantidad: cantidadMovimiento,
+          stockAnterior: stockActual,
+          stockNuevo,
+          motivo,
+          usuario,
+          referencia,
+          observaciones,
+          fecha: serverTimestamp(),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+
+        transaction.set(movimientoRef, movimientoData);
+
+        return {
+          exito: true,
+          movimientoId: movimientoRef.id,
+          stockAnterior: stockActual,
+          stockNuevo,
+          mensaje: 'Movimiento registrado exitosamente'
+        };
+      });
+
+      return resultado;
+    } catch (error) {
+      console.error('Error en transacción atómica:', error);
+      return {
+        exito: false,
+        stockAnterior: 0,
+        stockNuevo: 0,
+        mensaje: 'Error en la transacción',
+        errores: [error instanceof Error ? error.message : 'Error desconocido']
+      };
+    }
+  }
+
+  /**
+   * Registrar múltiples movimientos en una sola transacción
+   */
+  static async registrarMovimientosMultiples(
+    movimientos: Array<{
+      productoId: string;
+      tipo: TipoMovimiento;
+      cantidad: number;
+      motivo: string;
+    }>,
+    usuario: string,
+    referencia?: string
+  ): Promise<ResultadoTransaccion[]> {
+    try {
+      const resultados: ResultadoTransaccion[] = [];
+
+      await runTransaction(db, async (transaction) => {
+        // Validar todos los movimientos primero
+        const user = auth.currentUser;
+        if (!user) throw new Error('Usuario no autenticado');
+        
+        for (const mov of movimientos) {
+          const productoRef = doc(db, `tenants/${user.uid}/productos`, mov.productoId);
+          const productoDoc = await transaction.get(productoRef);
+          
+          if (!productoDoc.exists()) {
+            resultados.push({
+              exito: false,
+              stockAnterior: 0,
+              stockNuevo: 0,
+              mensaje: `Producto ${mov.productoId} no encontrado`,
+              errores: ['Producto no encontrado']
+            });
+            continue;
+          }
+
+          const producto = productoDoc.data() as Producto;
+          const validacion: ValidacionStock = {
+            productoId: mov.productoId,
+            stockActual: producto.stock,
+            stockMinimo: producto.stockMinimo,
+            stockMaximo: producto.stockMaximo,
+            cantidadMovimiento: Math.abs(mov.cantidad),
+            tipoMovimiento: mov.tipo
+          };
+
+          const { valido, errores } = this.validarMovimientoStock(validacion);
+          if (!valido) {
+            resultados.push({
+              exito: false,
+              stockAnterior: producto.stock,
+              stockNuevo: producto.stock,
+              mensaje: 'Validación fallida',
+              errores
+            });
+            continue;
+          }
+
+          // Si llegamos aquí, el movimiento es válido
+          const stockNuevo = this.calcularStockResultante(producto.stock, mov.cantidad, mov.tipo);
+          
+          // Actualizar producto
+          transaction.update(productoRef, {
+            stock: stockNuevo,
+            updatedAt: serverTimestamp(),
+            updatedBy: usuario
+          });
+
+          // Crear movimiento
+          const movimientoRef = doc(collection(db, this.getMovimientosPath()));
+          const movimientoData = {
+            productoId: mov.productoId,
+            tipo: mov.tipo,
+            cantidad: Math.abs(mov.cantidad),
+            stockAnterior: producto.stock,
+            stockNuevo,
+            motivo: mov.motivo,
+            usuario,
+            referencia,
+            fecha: serverTimestamp(),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          };
+
+          transaction.set(movimientoRef, movimientoData);
+
+          resultados.push({
+            exito: true,
+            movimientoId: movimientoRef.id,
+            stockAnterior: producto.stock,
+            stockNuevo,
+            mensaje: 'Movimiento registrado exitosamente'
+          });
+        }
+      });
+
+      return resultados;
+    } catch (error) {
+      console.error('Error en transacción múltiple:', error);
+      return movimientos.map(() => ({
+        exito: false,
+        stockAnterior: 0,
+        stockNuevo: 0,
+        mensaje: 'Error en la transacción',
+        errores: [error instanceof Error ? error.message : 'Error desconocido']
+      }));
     }
   }
 

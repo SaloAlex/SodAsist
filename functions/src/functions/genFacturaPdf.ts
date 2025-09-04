@@ -2,13 +2,13 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import PDFDocument from 'pdfkit';
 
-export const genFacturaPdf = functions.https.onCall(async (data, context) => {
+export const genFacturaPdf = functions.https.onCall(async (data: any, context: functions.https.CallableContext) => {
   // Verify authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
   
-  const { entregaId } = data;
+  const { entregaId } = data as { entregaId: string };
   
   if (!entregaId) {
     throw new functions.https.HttpsError('invalid-argument', 'entregaId is required');
@@ -60,24 +60,24 @@ export const genFacturaPdf = functions.https.onCall(async (data, context) => {
     doc.text('DETALLE:', 50, y);
     y += 20;
     
-    if (entrega?.sodas > 0) {
+    if (entrega && entrega.sodas > 0) {
       doc.text(`Sodas: ${entrega.sodas} x $50 = $${entrega.sodas * 50}`, 50, y);
       y += 15;
     }
     
-    if (entrega?.bidones10 > 0) {
+    if (entrega && entrega.bidones10 > 0) {
       doc.text(`Bidones 10L: ${entrega.bidones10} x $300 = $${entrega.bidones10 * 300}`, 50, y);
       y += 15;
     }
     
-    if (entrega?.bidones20 > 0) {
+    if (entrega && entrega.bidones20 > 0) {
       doc.text(`Bidones 20L: ${entrega.bidones20} x $500 = $${entrega.bidones20 * 500}`, 50, y);
       y += 15;
     }
     
     // Total
     y += 20;
-    doc.fontSize(14).text(`TOTAL: $${entrega?.total}`, 50, y);
+    doc.fontSize(14).text(`TOTAL: $${entrega?.total || 0}`, 50, y);
     
     // Status
     y += 30;

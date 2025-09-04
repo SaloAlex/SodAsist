@@ -20,6 +20,7 @@ import {
 import { ProductosService } from '../../services/productosService';
 import { PreciosService } from '../../services/preciosService';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { useCategorias } from '../../hooks/useProductosQuery';
 import toast from 'react-hot-toast';
 
 const schema = yup.object().shape({
@@ -57,8 +58,13 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   onCancel,
   isLoading = false
 }) => {
-  const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
-  const [loadingCategorias, setLoadingCategorias] = useState(false);
+  // React Query hook para categorías
+  const { 
+    data: categorias = [], 
+    isLoading: loadingCategorias, 
+    error: errorCategorias,
+    refetch: refetchCategorias 
+  } = useCategorias();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [margenCalculado, setMargenCalculado] = useState({ pesos: 0, porcentaje: 0 });
   const [codigoGenerado, setCodigoGenerado] = useState<string>('');
@@ -102,36 +108,54 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   const watchPrecioVenta = watch('precioVenta') || 0;
   const watchCategoria = watch('categoria');
 
-  // Cargar categorías
-  useEffect(() => {
-    const loadCategorias = async () => {
-      setLoadingCategorias(true);
-      try {
-        const categoriasData = await ProductosService.getCategorias();
-        
-        // Filtrar duplicados por nombre (mantener el más reciente)
-        const categoriasUnicas = categoriasData.reduce((acc, categoria) => {
-          const existente = acc.find(cat => cat.nombre.toLowerCase() === categoria.nombre.toLowerCase());
-          if (!existente) {
-            acc.push(categoria);
-          } else if (categoria.updatedAt > existente.updatedAt) {
-            // Reemplazar con el más reciente
-            const index = acc.indexOf(existente);
-            acc[index] = categoria;
-          }
-          return acc;
-        }, [] as CategoriaProducto[]);
-        
-        setCategorias(categoriasUnicas);
-      } catch (error) {
-        console.error('Error al cargar categorías:', error);
-        toast.error('Error al cargar categorías');
-      } finally {
-        setLoadingCategorias(false);
+  // Función para cargar categorías con retry
+  const cargarCategorias = async () => {
+    setLoadingCategorias(true);
+    setErrorCategorias(null);
+    
+    try {
+      const categoriasData = await ProductosService.getCategorias();
+      
+      // Filtrar duplicados por nombre (mantener el más reciente)
+      const categoriasUnicas = categoriasData.reduce((acc, categoria) => {
+        const existente = acc.find(cat => cat.nombre.toLowerCase() === categoria.nombre.toLowerCase());
+        if (!existente) {
+          acc.push(categoria);
+        } else if (categoria.updatedAt > existente.updatedAt) {
+          // Reemplazar con el más reciente
+          const index = acc.indexOf(existente);
+          acc[index] = categoria;
+        }
+        return acc;
+      }, [] as CategoriaProducto[]);
+      
+      setCategorias(categoriasUnicas);
+    } catch (error) {
+      console.error('Error al cargar categorías:', error);
+      
+      // Manejo específico de errores
+      let errorMessage = 'Error al cargar categorías';
+      if (error && typeof error === 'object' && 'code' in error) {
+        if (error.code === 'permission-denied') {
+          errorMessage = 'Sin permisos para acceder a las categorías';
+        } else if (error.code === 'unavailable') {
+          errorMessage = 'Servicio temporalmente no disponible';
+        }
+      } else if (error && typeof error === 'object' && 'message' in error && 
+                 typeof error.message === 'string' && error.message.includes('network')) {
+        errorMessage = 'Error de conexión. Verifica tu internet';
       }
-    };
+      
+      setErrorCategorias(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setLoadingCategorias(false);
+    }
+  };
 
-    loadCategorias();
+  // Cargar categorías al montar el componente
+  useEffect(() => {
+    cargarCategorias();
   }, []);
 
   // Calcular margen cuando cambien los precios
@@ -152,6 +176,8 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
           setValue('codigo', codigo);
         } catch (error) {
           console.error('Error al generar código:', error);
+          // Si falla la generación automática, no mostrar error al usuario
+          // ya que puede ingresar el código manualmente
         }
       }
     };
@@ -245,18 +271,41 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Categoría *
               </label>
-              <select
-                {...register('categoria')}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                disabled={loadingCategorias}
-              >
-                <option value="">Seleccionar categoría</option>
-                {categorias.map(cat => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nombre}
+              <div className="relative">
+                <select
+                  {...register('categoria')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white pr-8"
+                  disabled={loadingCategorias}
+                >
+                  <option value="">
+                    {loadingCategorias ? 'Cargando categorías...' : 'Seleccionar categoría'}
                   </option>
-                ))}
-              </select>
+                  {categorias.map(cat => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nombre}
+                    </option>
+                  ))}
+                </select>
+                {loadingCategorias && (
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+              </div>
+              {errorCategorias && (
+                <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <p className="text-red-600 dark:text-red-400 text-sm">{errorCategorias}</p>
+                    <button
+                      type="button"
+                      onClick={cargarCategorias}
+                      className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 text-sm font-medium"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                </div>
+              )}
               {errors.categoria && (
                 <p className="text-red-500 text-sm mt-1">{errors.categoria.message}</p>
               )}

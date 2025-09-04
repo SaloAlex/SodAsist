@@ -19,7 +19,6 @@ import {
   CheckCircle,
   ArrowRight,
   ArrowLeft,
-  Save,
   Zap,
   History,
   Info,
@@ -39,11 +38,21 @@ import {
 import { db } from '../../config/firebase';
 import { PRECIOS } from '../../config/precios';
 
-const schema = yup.object().shape({
+// Schema dinámico que se actualiza con el inventario disponible
+const createSchema = (inventario: InventarioVehiculo | null) => yup.object().shape({
   clienteId: yup.string().required('Cliente requerido'),
-  sodas: yup.number().min(0, 'Mínimo 0').required('Cantidad requerida'),
-  bidones10: yup.number().min(0, 'Mínimo 0').required('Cantidad requerida'),
-  bidones20: yup.number().min(0, 'Mínimo 0').required('Cantidad requerida'),
+  sodas: yup.number()
+    .min(0, 'Mínimo 0')
+    .max(inventario?.sodas || 999, `Máximo ${inventario?.sodas || 0} disponibles`)
+    .required('Cantidad requerida'),
+  bidones10: yup.number()
+    .min(0, 'Mínimo 0')
+    .max(inventario?.bidones10 || 999, `Máximo ${inventario?.bidones10 || 0} disponibles`)
+    .required('Cantidad requerida'),
+  bidones20: yup.number()
+    .min(0, 'Mínimo 0')
+    .max(inventario?.bidones20 || 999, `Máximo ${inventario?.bidones20 || 0} disponibles`)
+    .required('Cantidad requerida'),
   envasesDevueltos: yup.number().min(0, 'Mínimo 0').required('Cantidad requerida'),
   total: yup.number().min(0, 'Mínimo 0').required('Total requerido'),
   pagado: yup.boolean().required(),
@@ -55,7 +64,7 @@ const schema = yup.object().shape({
   observaciones: yup.string(),
 });
 
-type EntregaFormData = yup.InferType<typeof schema>;
+type EntregaFormData = yup.InferType<ReturnType<typeof createSchema>>;
 
 interface HistorialEntrega {
   fecha: Date;
@@ -85,7 +94,6 @@ export const EntregaForm: React.FC = () => {
   
   // Estados de UI
   const [currentStep, setCurrentStep] = useState(1);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [loadingPredictions, setLoadingPredictions] = useState(false);
@@ -99,10 +107,9 @@ export const EntregaForm: React.FC = () => {
     formState: { errors, isValid: formIsValid },
     watch,
     setValue,
-    getValues,
     trigger,
   } = useForm<EntregaFormData>({
-    resolver: yupResolver(schema),
+    resolver: yupResolver(createSchema(inventario)),
     defaultValues: {
       sodas: 0,
       bidones10: 0,
@@ -154,43 +161,6 @@ export const EntregaForm: React.FC = () => {
     }
   ];
 
-  // Auto-guardado
-  useEffect(() => {
-    if (!autoSaveEnabled) return;
-    
-    const timer = setTimeout(() => {
-      const formData = getValues();
-      localStorage.setItem('entrega_draft', JSON.stringify({
-        ...formData,
-        timestamp: new Date().toISOString()
-      }));
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [autoSaveEnabled, sodasWatched, bidones10Watched, bidones20Watched, clienteSeleccionado?.id, getValues]); // Dependencias específicas y getValues agregado
-
-  // Cargar borrador al iniciar
-  useEffect(() => {
-    const draft = localStorage.getItem('entrega_draft');
-    if (draft) {
-      try {
-        const draftData = JSON.parse(draft);
-        const draftAge = Date.now() - new Date(draftData.timestamp).getTime();
-        
-        // Solo cargar si el borrador es de menos de 1 hora
-        if (draftAge < 60 * 60 * 1000) {
-          Object.keys(draftData).forEach(key => {
-            if (key !== 'timestamp' && draftData[key] !== undefined) {
-              setValue(key as keyof EntregaFormData, draftData[key]);
-            }
-          });
-          toast.success('Borrador cargado automáticamente');
-        }
-      } catch (error) {
-        console.error('Error al cargar borrador:', error);
-      }
-    }
-  }, [setValue]); // setValue es estable y evita warning de dependencia
 
   // Calcular total automáticamente
   useEffect(() => {
@@ -199,6 +169,13 @@ export const EntregaForm: React.FC = () => {
                   (bidones20Watched || 0) * PRECIOS.bidon20;
     setValue('total', total);
   }, [sodasWatched, bidones10Watched, bidones20Watched, setValue]); // Dependencias limpias
+
+  // Revalidar formulario cuando cambie el inventario
+  useEffect(() => {
+    if (inventario) {
+      trigger(); // Revalidar todos los campos
+    }
+  }, [inventario, trigger]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -449,9 +426,6 @@ export const EntregaForm: React.FC = () => {
 
       await batch.commit();
 
-      // Limpiar borrador
-      localStorage.removeItem('entrega_draft');
-
       toast.success('Entrega registrada correctamente');
       navigate('/dashboard');
     } catch (err) {
@@ -462,121 +436,183 @@ export const EntregaForm: React.FC = () => {
     }
   };
 
-  // Componente de progreso
+  // Componente de progreso - Responsive
   const StepProgress = () => (
-    <div className="mb-8">
-      <div className="flex items-center justify-between">
-        {steps.map((step, index) => {
-          const Icon = step.icon;
-          const isActive = currentStep === step.id;
-          const isCompleted = currentStep > step.id;
-          
-          return (
-            <React.Fragment key={step.id}>
-              <div className="flex flex-col items-center">
-                <div className={`
-                  w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300
-                  ${isActive ? 'bg-blue-600 text-white shadow-lg scale-110' : 
-                    isCompleted ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}
-                `}>
-                  {isCompleted ? <CheckCircle className="h-6 w-6" /> : <Icon className="h-6 w-6" />}
-                </div>
-                <div className="mt-2 text-center">
-                  <p className={`text-sm font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
+    <div className="mb-6 sm:mb-8">
+      {/* Versión móvil - Solo iconos */}
+      <div className="sm:hidden">
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => {
+            const Icon = step.icon;
+            const isActive = currentStep === step.id;
+            const isCompleted = currentStep > step.id;
+            
+            return (
+              <React.Fragment key={step.id}>
+                <div className="flex flex-col items-center">
+                  <div className={`
+                    w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
+                    ${isActive ? 'bg-blue-600 text-white shadow-lg scale-110' : 
+                      isCompleted ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}
+                  `}>
+                    {isCompleted ? <CheckCircle className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+                  </div>
+                  <p className={`text-xs font-medium mt-1 text-center ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
                     {step.title}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-500 max-w-20">
-                    {step.description}
-                  </p>
                 </div>
-              </div>
-              
-              {index < steps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-4 transition-colors duration-300 ${
-                  currentStep > step.id ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-700'
-                }`} />
-              )}
-            </React.Fragment>
-          );
-        })}
+                
+                {index < steps.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-2 transition-colors duration-300 ${
+                    currentStep > step.id ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-700'
+                  }`} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Versión desktop - Completa */}
+      <div className="hidden sm:block">
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => {
+            const Icon = step.icon;
+            const isActive = currentStep === step.id;
+            const isCompleted = currentStep > step.id;
+            
+            return (
+              <React.Fragment key={step.id}>
+                <div className="flex flex-col items-center">
+                  <div className={`
+                    w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300
+                    ${isActive ? 'bg-blue-600 text-white shadow-lg scale-110' : 
+                      isCompleted ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}
+                  `}>
+                    {isCompleted ? <CheckCircle className="h-6 w-6" /> : <Icon className="h-6 w-6" />}
+                  </div>
+                  <div className="mt-2 text-center">
+                    <p className={`text-sm font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                      {step.title}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 max-w-20">
+                      {step.description}
+                    </p>
+                  </div>
+                </div>
+                
+                {index < steps.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-4 transition-colors duration-300 ${
+                    currentStep > step.id ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-700'
+                  }`} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 
-  // Widget de inventario mejorado
+  // Widget de inventario mejorado - Responsive
   const InventarioWidget = () => (
-    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-4 mb-6">
+    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
-          <Truck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-300">
-            Inventario Disponible
-          </h3>
+          <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-blue-800 dark:text-blue-300">
+              Inventario del Vehículo
+            </h3>
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              Stock disponible en tu vehículo para entregas
+            </p>
+          </div>
         </div>
         <button
           onClick={loadInventario}
           className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/30 rounded-lg transition-colors"
-          title="Actualizar inventario"
+          title="Actualizar inventario del vehículo"
         >
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
       
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
           { label: 'Sodas', value: inventario?.sodas || 0, icon: Package, color: 'blue' },
           { label: 'Bidones 10L', value: inventario?.bidones10 || 0, icon: Package, color: 'green' },
           { label: 'Bidones 20L', value: inventario?.bidones20 || 0, icon: Package, color: 'purple' }
         ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <Icon className={`h-6 w-6 mx-auto mb-2 text-${color}-600 dark:text-${color}-400`} />
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+          <div key={label} className="text-center p-2 sm:p-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+            <Icon className={`h-5 w-5 sm:h-6 sm:w-6 mx-auto mb-1 sm:mb-2 text-${color}-600 dark:text-${color}-400`} />
+            <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
             <p className="text-xs text-gray-600 dark:text-gray-400">{label}</p>
-            {value < 10 && (
-              <div className="mt-1 px-2 py-0.5 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-full">
+            {value === 0 && (
+              <div className="mt-1 px-1 sm:px-2 py-0.5 bg-red-200 dark:bg-red-800/30 text-red-700 dark:text-red-300 text-xs rounded-full font-medium">
+                Sin stock
+              </div>
+            )}
+            {value > 0 && value < 5 && (
+              <div className="mt-1 px-1 sm:px-2 py-0.5 bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs rounded-full">
+                Stock muy bajo
+              </div>
+            )}
+            {value >= 5 && value < 10 && (
+              <div className="mt-1 px-1 sm:px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 text-xs rounded-full">
                 Stock bajo
               </div>
             )}
           </div>
         ))}
       </div>
+      
+      {/* Información adicional del inventario */}
+      {inventario && (
+        <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+          <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
+            <span>Última actualización: {inventario.updatedAt ? new Date(inventario.updatedAt).toLocaleTimeString() : 'N/A'}</span>
+            <span>Envases devueltos: {inventario.envasesDevueltos || 0}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 
-  // Panel de cliente mejorado
+  // Panel de cliente mejorado - Responsive
   const ClientePanel = () => {
     if (!clienteSeleccionado) return null;
 
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
-        <div className="flex items-start justify-between mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4 mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 space-y-3 sm:space-y-0">
           <div className="flex-1">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                <User className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <User className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
                   {clienteSeleccionado.nombre}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {clienteSeleccionado.direccion}
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 flex items-center">
+                  <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                  <span className="truncate">{clienteSeleccionado.direccion}</span>
                 </p>
               </div>
             </div>
 
-                         {(clienteSeleccionado?.saldoPendiente || 0) > 0 && (
-               <div className="mt-3 flex items-center space-x-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                 <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                 <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                   Saldo pendiente: ${(clienteSeleccionado?.saldoPendiente || 0).toFixed(2)}
-                 </span>
-               </div>
-             )}
+            {(clienteSeleccionado?.saldoPendiente || 0) > 0 && (
+              <div className="mt-3 flex items-center space-x-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Saldo pendiente: ${(clienteSeleccionado?.saldoPendiente || 0).toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-end space-x-2">
             <button
               onClick={() => setShowHistory(!showHistory)}
               className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -588,14 +624,38 @@ export const EntregaForm: React.FC = () => {
             <button
               onClick={() => generatePredictions(clienteSeleccionado.id!)}
               disabled={loadingPredictions}
-              className="flex items-center px-3 py-1.5 text-sm bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-800/30 transition-colors"
+              className="flex items-center px-2 sm:px-3 py-1.5 text-xs sm:text-sm bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-800/30 transition-colors"
             >
               {loadingPredictions ? (
                 <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
               ) : (
                 <Zap className="h-3 w-3 mr-1" />
               )}
-              Sugerir cantidades
+              <span className="hidden sm:inline">Sugerir cantidades</span>
+              <span className="sm:hidden">Sugerir</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                if (inventario) {
+                  // Sugerir cantidades basadas en el stock disponible (máximo 50% del stock)
+                  const sugerenciaSodas = Math.floor((inventario.sodas || 0) * 0.5);
+                  const sugerenciaBidones10 = Math.floor((inventario.bidones10 || 0) * 0.5);
+                  const sugerenciaBidones20 = Math.floor((inventario.bidones20 || 0) * 0.5);
+                  
+                  setValue('sodas', sugerenciaSodas);
+                  setValue('bidones10', sugerenciaBidones10);
+                  setValue('bidones20', sugerenciaBidones20);
+                  
+                  toast.success('Cantidades sugeridas basadas en stock disponible');
+                }
+              }}
+              className="flex items-center px-2 sm:px-3 py-1.5 text-xs sm:text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800/30 transition-colors"
+              title="Sugerir cantidades basadas en stock disponible"
+            >
+              <Package className="h-3 w-3 mr-1" />
+              <span className="hidden sm:inline">Usar stock</span>
+              <span className="sm:hidden">Stock</span>
             </button>
           </div>
         </div>
@@ -695,56 +755,91 @@ export const EntregaForm: React.FC = () => {
           <div className="space-y-6">
             <ClientePanel />
             
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-                  <ShoppingCart className="h-5 w-5 mr-2" />
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 space-y-3 sm:space-y-0">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                  <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   Productos a Entregar
                 </h3>
                 <button
                   onClick={() => setShowCalculator(!showCalculator)}
-                  className="flex items-center px-3 py-1.5 text-sm bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-800/30 transition-colors"
+                  className="flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-800/30 transition-colors w-full sm:w-auto"
                 >
                   <Calculator className="h-3 w-3 mr-1" />
                   Calculadora
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 {[
                   { name: 'sodas', label: 'Sodas', price: PRECIOS.soda, icon: Package },
                   { name: 'bidones10', label: 'Bidones 10L', price: PRECIOS.bidon10, icon: Package },
                   { name: 'bidones20', label: 'Bidones 20L', price: PRECIOS.bidon20, icon: Package },
                   { name: 'envasesDevueltos', label: 'Envases Devueltos', price: 0, icon: Package }
-                ].map(({ name, label, price, icon: Icon }) => (
-                  <div key={name} className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      <Icon className="inline h-4 w-4 mr-2" />
-                      {label} {price > 0 && <span className="text-gray-500">(${price} c/u)</span>}
-                    </label>
-                    <div className="relative">
-                      <input
-                        {...register(name as keyof EntregaFormData, { valueAsNumber: true })}
-                        type="number"
-                        min="0"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                      />
-                      {inventario && name !== 'envasesDevueltos' && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-500">
-                          Stock: {(() => {
-                            const value = inventario[name as keyof InventarioVehiculo];
-                            return typeof value === 'number' ? value : 0;
-                          })()}
+                ].map(({ name, label, price, icon: Icon }) => {
+                  const stockDisponible = inventario && name !== 'envasesDevueltos' 
+                    ? (inventario[name as keyof InventarioVehiculo] as number) || 0 
+                    : null;
+                  const cantidadSolicitada = allValues[name as keyof EntregaFormData] as number || 0;
+                  const excedeStock = stockDisponible !== null && cantidadSolicitada > stockDisponible;
+                  
+                  return (
+                    <div key={name} className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <Icon className="inline h-4 w-4 mr-2" />
+                        {label} {price > 0 && <span className="text-gray-500 text-xs sm:text-sm">(${price} c/u)</span>}
+                      </label>
+                      <div className="relative">
+                        <input
+                          {...register(name as keyof EntregaFormData, { valueAsNumber: true })}
+                          type="number"
+                          min="0"
+                          max={stockDisponible !== null ? stockDisponible : undefined}
+                          className={`w-full px-3 py-2 text-base sm:text-sm border rounded-lg focus:ring-2 focus:border-transparent dark:bg-gray-700 dark:text-white ${
+                            excedeStock 
+                              ? 'border-red-300 focus:ring-red-500 bg-red-50 dark:bg-red-900/20' 
+                              : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                          }`}
+                        />
+                        {stockDisponible !== null && (
+                          <div className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-xs ${
+                            excedeStock ? 'text-red-600 dark:text-red-400' : 'text-gray-500'
+                          }`}>
+                            Stock: {stockDisponible}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Alertas de stock - Solo una por producto */}
+                      {excedeStock && (
+                        <div className="flex items-center space-x-1 text-xs text-red-600 dark:text-red-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Excede el stock disponible ({stockDisponible})</span>
                         </div>
                       )}
+                      
+                      {!excedeStock && stockDisponible === 0 && (
+                        <div className="flex items-center space-x-1 text-xs text-red-600 dark:text-red-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Sin stock disponible</span>
+                        </div>
+                      )}
+                      
+                      {!excedeStock && stockDisponible !== null && stockDisponible < 5 && stockDisponible > 0 && (
+                        <div className="flex items-center space-x-1 text-xs text-orange-600 dark:text-orange-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Stock muy bajo</span>
+                        </div>
+                      )}
+                      
+                      {errors[name as keyof EntregaFormData] && (
+                        <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">
+                          {errors[name as keyof EntregaFormData]?.message}
+                        </p>
+                      )}
                     </div>
-                    {errors[name as keyof EntregaFormData] && (
-                      <p className="text-sm text-red-600 dark:text-red-400">
-                        {errors[name as keyof EntregaFormData]?.message}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Calculadora visual */}
@@ -778,9 +873,9 @@ export const EntregaForm: React.FC = () => {
       case 3:
         return (
           <div className="space-y-6">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center mb-4">
-                <DollarSign className="h-5 w-5 mr-2" />
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center mb-4">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                 Información de Pago
               </h3>
 
@@ -789,7 +884,7 @@ export const EntregaForm: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Total a Cobrar
                   </label>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                  <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                     ${allValues.total?.toFixed(2) || '0.00'}
                   </div>
                 </div>
@@ -812,7 +907,7 @@ export const EntregaForm: React.FC = () => {
                       <CreditCard className="inline h-4 w-4 mr-2" />
                       Medio de Pago
                     </label>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {[
                         { value: 'efectivo', label: 'Efectivo', icon: DollarSign },
                         { value: 'transferencia', label: 'Transferencia', icon: CreditCard },
@@ -825,9 +920,9 @@ export const EntregaForm: React.FC = () => {
                             value={value}
                             className="sr-only peer"
                           />
-                          <div className="flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20 transition-colors">
-                            <Icon className="h-6 w-6 text-gray-600 dark:text-gray-400 peer-checked:text-blue-600 dark:peer-checked:text-blue-400" />
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">{label}</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20 transition-colors">
+                            <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-gray-400 peer-checked:text-blue-600 dark:peer-checked:text-blue-400" />
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1 sm:mt-0 sm:ml-2">{label}</span>
                           </div>
                         </label>
                       ))}
@@ -860,13 +955,13 @@ export const EntregaForm: React.FC = () => {
         return (
           <div className="space-y-6">
             {/* Resumen de la entrega */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center mb-4">
-                <CheckCircle className="h-5 w-5 mr-2" />
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center mb-4">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                 Resumen de Entrega
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente</h4>
                   <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
@@ -927,38 +1022,17 @@ export const EntregaForm: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* Header mejorado */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-              <Package className="h-8 w-8 text-blue-600 mr-3" />
-              Nueva Entrega
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Registra una nueva entrega de productos
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-              <Save className="h-4 w-4 mr-1" />
-              {autoSaveEnabled ? 'Auto-guardado activo' : 'Auto-guardado desactivado'}
-            </div>
-            
-            <button
-              onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
-              className={`p-2 rounded-lg transition-colors ${
-                autoSaveEnabled 
-                  ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400' 
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-              }`}
-              title={`${autoSaveEnabled ? 'Desactivar' : 'Activar'} auto-guardado`}
-            >
-              <Save className="h-4 w-4" />
-            </button>
-          </div>
+    <div className="max-w-4xl mx-auto p-4 sm:p-6">
+      {/* Header simplificado - Responsive */}
+      <div className="mb-6 sm:mb-8">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+            <Package className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mr-2 sm:mr-3" />
+            Nueva Entrega
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+            Registra una nueva entrega de productos
+          </p>
         </div>
       </div>
 
@@ -969,12 +1043,12 @@ export const EntregaForm: React.FC = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {renderCurrentStep()}
 
-        {/* Botones de navegación */}
-        <div className="flex items-center justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+        {/* Botones de navegación - Responsive */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700 space-y-3 sm:space-y-0">
           <button
             type="button"
             onClick={currentStep === 1 ? () => navigate('/dashboard') : prevStep}
-            className="flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-full sm:w-auto"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             {currentStep === 1 ? 'Cancelar' : 'Anterior'}
@@ -985,7 +1059,7 @@ export const EntregaForm: React.FC = () => {
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center justify-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full sm:w-auto"
               >
                 Siguiente
                 <ArrowRight className="h-4 w-4 ml-2" />
@@ -994,7 +1068,7 @@ export const EntregaForm: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || !formIsValid}
-                className="flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
               >
                 {loading ? (
                   <>
@@ -1004,7 +1078,8 @@ export const EntregaForm: React.FC = () => {
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    Confirmar Entrega
+                    <span className="hidden sm:inline">Confirmar Entrega</span>
+                    <span className="sm:hidden">Confirmar</span>
                   </>
                 )}
               </button>

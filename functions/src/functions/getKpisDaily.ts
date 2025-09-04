@@ -1,13 +1,13 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 
-export const getKpisDaily = functions.https.onCall(async (data, context) => {
+export const getKpisDaily = functions.https.onCall(async (data: any, context: functions.https.CallableContext) => {
   // Verify authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
   
-  const { startDate, endDate } = data;
+  const { startDate, endDate } = data as { startDate?: string; endDate?: string };
   
   try {
     const db = admin.firestore();
@@ -30,7 +30,7 @@ export const getKpisDaily = functions.https.onCall(async (data, context) => {
     }));
     
     // Calculate totals and averages
-    const totals = kpis.reduce((acc, kpi) => ({
+    const totals = kpis.reduce((acc, kpi: any) => ({
       litrosVendidos: acc.litrosVendidos + (kpi.litrosVendidos || 0),
       cobranzasTotal: acc.cobranzasTotal + (kpi.cobranzasTotal || 0),
       clientesAtendidos: acc.clientesAtendidos + (kpi.clientesAtendidos || 0),
@@ -47,7 +47,7 @@ export const getKpisDaily = functions.https.onCall(async (data, context) => {
       cobranzasTotal: kpis.length > 0 ? totals.cobranzasTotal / kpis.length : 0,
       clientesAtendidos: kpis.length > 0 ? totals.clientesAtendidos / kpis.length : 0,
       entregasRealizadas: kpis.length > 0 ? totals.entregasRealizadas / kpis.length : 0,
-      porcentajeMora: kpis.length > 0 ? kpis.reduce((acc, kpi) => acc + (kpi.porcentajeMora || 0), 0) / kpis.length : 0,
+      porcentajeMora: kpis.length > 0 ? kpis.reduce((acc: number, kpi: any) => acc + (kpi.porcentajeMora || 0), 0) / kpis.length : 0,
     };
     
     return {

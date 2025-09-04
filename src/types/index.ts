@@ -504,6 +504,25 @@ export interface FiltrosProductos {
   fechaHasta?: Date;
 }
 
+export interface PaginacionProductos {
+  pagina: number;
+  limite: number;
+  ordenarPor?: 'nombre' | 'precioVenta' | 'stock' | 'createdAt' | 'updatedAt';
+  orden?: 'asc' | 'desc';
+}
+
+export interface ResultadoPaginado<T> {
+  datos: T[];
+  paginacion: {
+    paginaActual: number;
+    totalPaginas: number;
+    totalElementos: number;
+    limite: number;
+    tieneSiguiente: boolean;
+    tieneAnterior: boolean;
+  };
+}
+
 export interface FiltrosMovimientos {
   productoId?: string;
   tipo?: TipoMovimiento;
@@ -511,6 +530,24 @@ export interface FiltrosMovimientos {
   fechaDesde?: Date;
   fechaHasta?: Date;
   referencia?: string;
+}
+
+export interface ValidacionStock {
+  productoId: string;
+  stockActual: number;
+  stockMinimo: number;
+  stockMaximo?: number;
+  cantidadMovimiento: number;
+  tipoMovimiento: TipoMovimiento;
+}
+
+export interface ResultadoTransaccion {
+  exito: boolean;
+  movimientoId?: string;
+  stockAnterior: number;
+  stockNuevo: number;
+  mensaje: string;
+  errores?: string[];
 }
 
 // Interfaz para la entrega actualizada con productos dinámicos
