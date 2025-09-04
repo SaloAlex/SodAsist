@@ -1,0 +1,288 @@
+/* Estilos específicos para EntregaForm - Mejoras de responsividad */
+
+/* Selector personalizado de clientes */
+.cliente-dropdown-container {
+  position: relative;
+}
+
+/* Campo de búsqueda */
+.cliente-search-input {
+  font-size: 16px; /* Prevenir zoom en iOS */
+  padding: 12px 16px;
+  padding-left: 48px; /* Espacio para el icono de búsqueda */
+}
+
+/* Dropdown de clientes */
+.cliente-dropdown {
+  position: absolute;
+  z-index: 50;
+  width: 100%;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.dark .cliente-dropdown {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+/* Opciones del dropdown */
+.cliente-option {
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background-color 0.2s ease;
+}
+
+.cliente-option:hover {
+  background-color: #f9fafb;
+}
+
+.dark .cliente-option {
+  border-bottom-color: #4b5563;
+}
+
+.dark .cliente-option:hover {
+  background-color: #4b5563;
+}
+
+.cliente-option:last-child {
+  border-bottom: none;
+}
+
+/* Información del cliente en cada opción */
+.cliente-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cliente-nombre {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.dark .cliente-nombre {
+  color: #f9fafb;
+}
+
+.cliente-direccion {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.dark .cliente-direccion {
+  color: #9ca3af;
+}
+
+.cliente-telefono {
+  font-size: 12px;
+  color: #2563eb;
+}
+
+.dark .cliente-telefono {
+  color: #60a5fa;
+}
+
+/* Mejorar la experiencia en móviles */
+@media (max-width: 640px) {
+  .cliente-search-input {
+    font-size: 16px;
+    padding: 14px 16px;
+    padding-left: 48px; /* Mantener espacio para el icono en móviles */
+  }
+  
+  .cliente-option {
+    padding: 16px;
+  }
+  
+  .cliente-nombre {
+    font-size: 15px;
+  }
+  
+  .cliente-direccion {
+    font-size: 13px;
+  }
+  
+  .cliente-telefono {
+    font-size: 13px;
+  }
+}
+
+/* Animaciones */
+.cliente-dropdown {
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar personalizado para el dropdown */
+.cliente-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cliente-dropdown::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.cliente-dropdown::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.cliente-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark .cliente-dropdown::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark .cliente-dropdown::-webkit-scrollbar-thumb {
+  background: #6b7280;
+}
+
+.dark .cliente-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Estilos para el dropdown personalizado */
+.entrega-form-select-container {
+  position: relative;
+}
+
+/* Botón de calculadora mejorado */
+.calculator-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.calculator-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.calculator-button:hover::before {
+  left: 100%;
+}
+
+/* Efecto de pulso cuando está activo */
+.calculator-button.active {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.entrega-form-select-container::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #6b7280;
+  pointer-events: none;
+}
+
+/* Mejorar contraste en modo oscuro */
+.dark .entrega-form-select-container::after {
+  border-top-color: #9ca3af;
+}
+
+/* Animaciones suaves para el select */
+.entrega-form-select:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  transition: all 0.2s ease-in-out;
+}
+
+/* Estilos para las opciones del select */
+.entrega-form-select option {
+  background-color: white;
+  color: #374151;
+  padding: 8px 12px;
+}
+
+.dark .entrega-form-select option {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
+/* Mejorar la legibilidad en pantallas pequeñas */
+@media (max-width: 480px) {
+  .entrega-form-select {
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+  
+  .entrega-form-select option {
+    font-size: 14px;
+    padding: 6px 10px;
+  }
+}
+
+/* Estilos para el tooltip de información */
+.entrega-form-tip {
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  border-left: 3px solid #3b82f6;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.dark .entrega-form-tip {
+  background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+  border-left-color: #60a5fa;
+}
+
+/* Animación para el tooltip */
+.entrega-form-tip {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

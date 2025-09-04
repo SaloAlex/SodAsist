@@ -13,12 +13,13 @@ import {
   User,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  ArrowLeft
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useFirestoreSubscription } from '../../hooks/useFirestoreSubscription';
 
@@ -31,9 +32,16 @@ export const EntregasList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [saldoFilter, setSaldoFilter] = useState<'all' | 'with-debt' | 'no-debt'>('all');
   
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, userData } = useAuthStore();
+  
+  // Obtener clienteId de la URL
+  const clienteIdFromUrl = searchParams.get('clienteId');
+  const clienteFiltrado = clienteIdFromUrl ? clientes.find(c => c.id === clienteIdFromUrl) : null;
+  
 
   // Cargar datos
   useEffect(() => {
@@ -79,7 +87,48 @@ export const EntregasList: React.FC = () => {
 
   // Filtrar entregas
   const filteredEntregas = useMemo(() => {
-    let filtered = entregas;
+    
+    // Filtrar entregas completamente corruptas y corregir las que se pueden salvar
+    const entregasCorregidas = entregas
+      .filter(entrega => {
+        // Filtrar entregas completamente corruptas (todos los campos undefined)
+        const esCompletamenteCorrupta = 
+          entrega.clienteId === undefined && 
+          entrega.fecha === undefined && 
+          entrega.total === undefined && 
+          entrega.sodas === undefined && 
+          entrega.bidones10 === undefined && 
+          entrega.bidones20 === undefined;
+        
+        if (esCompletamenteCorrupta) {
+          return false;
+        }
+        
+        return true;
+      })
+      .map(entrega => {
+        const entregaCorregida = { ...entrega };
+        
+        // Corregir total undefined
+        if (entrega.total === undefined || entrega.total === null) {
+          const total = (entrega.sodas || 0) * 50 + 
+                       (entrega.bidones10 || 0) * 200 + 
+                       (entrega.bidones20 || 0) * 350;
+          entregaCorregida.total = total;
+        }
+        
+        // Corregir clienteId undefined - usar el primer cliente disponible como fallback
+        if (entrega.clienteId === undefined || entrega.clienteId === null) {
+          if (clientes.length > 0 && clientes[0].id) {
+            entregaCorregida.clienteId = clientes[0].id;
+          }
+        }
+        
+        return entregaCorregida;
+      });
+    
+    let filtered = entregasCorregidas;
+    
 
     // Filtro por búsqueda
     if (searchTerm) {
@@ -123,8 +172,35 @@ export const EntregasList: React.FC = () => {
       });
     }
 
-    return filtered.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  }, [entregas, clientes, searchTerm, statusFilter, dateFilter]);
+    // Filtro por saldo del cliente
+    if (saldoFilter !== 'all') {
+      filtered = filtered.filter(entrega => {
+        const cliente = clientes.find(c => c.id === entrega.clienteId);
+        if (!cliente) return false;
+        
+        const saldo = cliente.saldoPendiente || 0;
+        
+        switch (saldoFilter) {
+          case 'with-debt':
+            return saldo > 0;
+          case 'no-debt':
+            return saldo === 0;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Filtro por cliente específico (desde URL)
+    if (clienteIdFromUrl) {
+      filtered = filtered.filter(entrega => entrega.clienteId === clienteIdFromUrl);
+    }
+
+    const resultado = filtered.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    
+    
+    return resultado;
+  }, [entregas, clientes, searchTerm, statusFilter, dateFilter, saldoFilter, clienteIdFromUrl]);
 
   // Columnas para la tabla
   const columns = [
@@ -135,8 +211,28 @@ export const EntregasList: React.FC = () => {
           const clienteId = value as string;
           const cliente = clientes.find(c => c.id === clienteId);
           
+          
           // Si no hay cliente, mostrar un mensaje informativo
           if (!cliente) {
+            // Si estamos viendo el historial de un cliente específico, usar ese cliente
+            if (clienteFiltrado) {
+              return (
+                <div className="flex flex-col">
+                  <div className="flex items-center">
+                    <User className="h-4 w-4 text-gray-400 mr-2" />
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {clienteFiltrado.nombre}
+                    </span>
+                  </div>
+                  {clienteFiltrado.saldoPendiente && clienteFiltrado.saldoPendiente > 0 && (
+                    <span className="text-red-600 text-xs mt-1">
+                      Saldo: ${clienteFiltrado.saldoPendiente.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              );
+            }
+            
             return (
               <div className="flex items-center">
                 <User className="h-4 w-4 text-red-400 mr-2" />
@@ -148,11 +244,20 @@ export const EntregasList: React.FC = () => {
           }
           
           return (
-            <div className="flex items-center">
-              <User className="h-4 w-4 text-gray-400 mr-2" />
-              <span className="font-medium text-gray-900 dark:text-white">
-                {cliente.nombre}
-              </span>
+            <div className="flex flex-col">
+              <div className="flex items-center">
+                <User className="h-4 w-4 text-gray-400 mr-2" />
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {cliente.nombre}
+                </span>
+              </div>
+              {cliente.saldoPendiente && cliente.saldoPendiente > 0 && (
+                <div className="mt-1 flex items-center">
+                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">
+                    Saldo: ${cliente.saldoPendiente.toFixed(2)}
+                  </span>
+                </div>
+              )}
             </div>
           );
         },
@@ -186,22 +291,76 @@ export const EntregasList: React.FC = () => {
     },
     {
       key: 'pagado' as keyof Entrega,
-      label: 'Estado',
-      render: (value: unknown) => {
+      label: 'Estado de Pago',
+      render: (value: unknown, row: Entrega) => {
         const pagado = value as boolean;
+        const medioPago = row.medioPago;
+        
+        return (
+          <div className="flex flex-col">
+            <div className="flex items-center">
+              {pagado ? (
+                <>
+                  <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
+                  <span className="text-green-600 font-medium">Pagado</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 text-red-500 mr-1" />
+                  <span className="text-red-600 font-medium">Pendiente</span>
+                </>
+              )}
+            </div>
+            {pagado && medioPago && (
+              <div className="mt-1">
+                <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                  {medioPago === 'efectivo' && '💰 Efectivo'}
+                  {medioPago === 'transferencia' && '🏦 Transferencia'}
+                  {medioPago === 'tarjeta' && '💳 Tarjeta'}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'saldoCliente' as keyof Entrega,
+      label: 'Saldo Cliente',
+      render: (_value: unknown, row: Entrega) => {
+        const clienteId = row.clienteId;
+        const cliente = clientes.find(c => c.id === clienteId);
+        
+        if (!cliente) {
+          // Si estamos viendo el historial de un cliente específico, usar ese cliente
+          if (clienteFiltrado) {
+            const saldo = clienteFiltrado.saldoPendiente || 0;
+            return (
+              <span className={`text-sm font-medium ${saldo === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {saldo === 0 ? 'Al día' : `$${saldo.toFixed(2)}`}
+              </span>
+            );
+          }
+          return <span className="text-gray-400 text-sm">-</span>;
+        }
+        
+        const saldo = cliente.saldoPendiente || 0;
+        
+        if (saldo === 0) {
+          return (
+            <div className="flex items-center">
+              <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                Al día
+              </span>
+            </div>
+          );
+        }
+        
         return (
           <div className="flex items-center">
-            {pagado ? (
-              <>
-                <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                <span className="text-green-600 font-medium">Pagado</span>
-              </>
-            ) : (
-              <>
-                <XCircle className="h-4 w-4 text-red-500 mr-1" />
-                <span className="text-red-600 font-medium">Pendiente</span>
-              </>
-            )}
+            <span className="text-xs text-red-600 dark:text-red-400 font-medium">
+              ${saldo.toFixed(2)}
+            </span>
           </div>
         );
       },
@@ -235,7 +394,47 @@ export const EntregasList: React.FC = () => {
         FirebaseService.getEntregas(),
         FirebaseService.getClientes()
       ]);
-      setEntregas(entregasData);
+      
+      // Filtrar entregas completamente corruptas y corregir las que se pueden salvar
+      const entregasCorregidas = entregasData
+        .filter(entrega => {
+          // Filtrar entregas completamente corruptas (todos los campos undefined)
+          const esCompletamenteCorrupta = 
+            entrega.clienteId === undefined && 
+            entrega.fecha === undefined && 
+            entrega.total === undefined && 
+            entrega.sodas === undefined && 
+            entrega.bidones10 === undefined && 
+            entrega.bidones20 === undefined;
+          
+          if (esCompletamenteCorrupta) {
+            return false;
+          }
+          
+          return true;
+        })
+        .map(entrega => {
+          const entregaCorregida = { ...entrega };
+          
+          // Corregir total undefined
+          if (entrega.total === undefined || entrega.total === null) {
+            const total = (entrega.sodas || 0) * 50 + 
+                         (entrega.bidones10 || 0) * 200 + 
+                         (entrega.bidones20 || 0) * 350;
+            entregaCorregida.total = total;
+          }
+          
+          // Corregir clienteId undefined - usar el primer cliente disponible como fallback
+          if (entrega.clienteId === undefined || entrega.clienteId === null) {
+            if (clientesData.length > 0 && clientesData[0].id) {
+              entregaCorregida.clienteId = clientesData[0].id;
+            }
+          }
+          
+          return entregaCorregida;
+        });
+      
+      setEntregas(entregasCorregidas);
       setClientes(clientesData);
       toast.success('Datos actualizados');
     } catch (error) {
@@ -278,13 +477,41 @@ export const EntregasList: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
-            <Package className="h-6 w-6 text-blue-600 mr-3" />
-            Entregas
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Gestiona todas las entregas realizadas
-          </p>
+          {clienteFiltrado ? (
+            <>
+              <div className="flex items-center mb-2">
+                <button
+                  onClick={() => navigate('/entregas')}
+                  className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mr-3"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Volver
+                </button>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
+                <User className="h-6 w-6 text-blue-600 mr-3" />
+                Historial de {clienteFiltrado.nombre}
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Entregas realizadas a este cliente
+                {clienteFiltrado.saldoPendiente && clienteFiltrado.saldoPendiente > 0 && (
+                  <span className="ml-2 text-red-600 dark:text-red-400 font-medium">
+                    (Saldo pendiente: ${clienteFiltrado.saldoPendiente.toFixed(2)})
+                  </span>
+                )}
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
+                <Package className="h-6 w-6 text-blue-600 mr-3" />
+                Entregas
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Gestiona todas las entregas realizadas
+              </p>
+            </>
+          )}
         </div>
 
         <div className="flex items-center space-x-3">
@@ -315,22 +542,23 @@ export const EntregasList: React.FC = () => {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Búsqueda */}
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por cliente o observaciones..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              />
+      {/* Filtros - Solo mostrar si no estamos viendo un cliente específico */}
+      {!clienteFiltrado && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Búsqueda */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por cliente o observaciones..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                />
+              </div>
             </div>
-          </div>
 
           {/* Filtro de estado */}
           <div className="sm:w-48">
@@ -358,8 +586,22 @@ export const EntregasList: React.FC = () => {
               <option value="month">Último mes</option>
             </select>
           </div>
+
+          {/* Filtro de saldo */}
+          <div className="sm:w-48">
+            <select
+              value={saldoFilter}
+              onChange={(e) => setSaldoFilter(e.target.value as 'all' | 'with-debt' | 'no-debt')}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            >
+              <option value="all">Todos los saldos</option>
+              <option value="with-debt">Con deuda</option>
+              <option value="no-debt">Al día</option>
+            </select>
+          </div>
         </div>
       </div>
+      )}
 
       {/* Tabla */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
@@ -385,7 +627,17 @@ export const EntregasList: React.FC = () => {
           </div>
           <div>
             <p className="text-2xl font-bold text-green-600">
-              ${filteredEntregas.reduce((sum, e) => sum + e.total, 0).toFixed(2)}
+              ${filteredEntregas.reduce((sum, e) => {
+                // Convertir a número si es string y validar
+                let total = e.total;
+                if (typeof total === 'string') {
+                  total = parseFloat(total);
+                }
+                if (typeof total !== 'number' || isNaN(total)) {
+                  total = 0;
+                }
+                return sum + total;
+              }, 0).toFixed(2)}
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400">Total Ventas</p>
           </div>

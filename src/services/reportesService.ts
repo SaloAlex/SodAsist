@@ -15,6 +15,7 @@ export interface VentasReporte {
   topProductos: ProductoVenta[];
   ventasPorDia: VentaDiaria[];
   resumenGeneral: ResumenVentas;
+  metodosPago: MetodoPago[];
 }
 
 export interface CobranzasReporte {
@@ -71,11 +72,26 @@ export interface VentaDiaria {
   ticketPromedio: number;
 }
 
+export interface MetodoPago {
+  metodo: string;
+  cantidad: number;
+  monto: number;
+  porcentaje: number;
+}
+
 export interface ResumenVentas {
   totalVentas: number;
   totalEntregas: number;
   ticketPromedio: number;
   crecimientoMensual: number;
+  // Estadísticas de pago
+  entregasPagadas: number;
+  entregasPendientes: number;
+  ventasPagadas: number;
+  ventasPendientes: number;
+  pagosEfectivo: number;
+  pagosTransferencia: number;
+  pagosTarjeta: number;
 }
 
 export interface EstadoCuenta {
@@ -221,13 +237,15 @@ export class ReportesService {
       const topProductos = this.analizarProductos(entregas);
       const ventasPorDia = this.calcularVentasDiarias(entregas, fechaInicio, fechaFin);
       const resumenGeneral = this.generarResumenVentas(entregas, entregasAnterior);
+      const metodosPago = this.calcularMetodosPago(entregas);
 
       return {
         ventasMensuales,
         comparacionAnterior,
         topProductos,
         ventasPorDia,
-        resumenGeneral
+        resumenGeneral,
+        metodosPago
       };
     } catch (error) {
       console.error('Error generando reporte de ventas:', error);
@@ -240,7 +258,7 @@ export class ReportesService {
    */
   static async generarReporteCobranzas(filtros: FiltrosReporte): Promise<CobranzasReporte> {
     try {
-      const clientes = await FirebaseService.getCollection<Cliente>('clientes');
+      const clientes = await FirebaseService.getClientes();
       const entregas = await FirebaseService.getEntregasByDateRange(filtros.fechaInicio, filtros.fechaFin);
       
       const estadoCuentas = this.analizarEstadoCuentas(clientes);
@@ -258,6 +276,46 @@ export class ReportesService {
       };
     } catch (error) {
       console.error('Error generando reporte de cobranzas:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Genera reporte de clientes con saldos pendientes
+   */
+  static async generarReporteClientesConSaldo(): Promise<{
+    clientesDeudores: ClienteDeudor[];
+    totalDeuda: number;
+    promedioDeuda: number;
+    clientesAlDia: number;
+    cantidadClientesConDeuda: number;
+  }> {
+    try {
+      const clientes = await FirebaseService.getClientes();
+      const clientesConDeuda = clientes.filter(c => (c.saldoPendiente || 0) > 0);
+      const clientesAlDia = clientes.filter(c => (c.saldoPendiente || 0) === 0);
+      
+      const totalDeuda = clientesConDeuda.reduce((sum, c) => sum + (c.saldoPendiente || 0), 0);
+      const promedioDeuda = clientesConDeuda.length > 0 ? totalDeuda / clientesConDeuda.length : 0;
+
+      const clientesDeudoresDetalle: ClienteDeudor[] = clientesConDeuda.map(cliente => ({
+        id: cliente.id || '',
+        nombre: cliente.nombre,
+        deuda: cliente.saldoPendiente || 0,
+        diasVencimiento: this.calcularDiasVencimiento(cliente.ultimaEntregaFecha),
+        ultimaCompra: cliente.ultimaEntregaFecha || new Date(),
+        zona: cliente.zona
+      }));
+
+      return {
+        clientesDeudores: clientesDeudoresDetalle,
+        totalDeuda,
+        promedioDeuda,
+        clientesAlDia: clientesAlDia.length,
+        cantidadClientesConDeuda: clientesConDeuda.length
+      };
+    } catch (error) {
+      console.error('Error generando reporte de clientes con saldo:', error);
       throw error;
     }
   }
@@ -453,12 +511,65 @@ export class ReportesService {
     const ventasAnterior = entregasAnterior.reduce((sum, e) => sum + e.total, 0);
     const crecimientoMensual = ventasAnterior > 0 ? ((totalVentas - ventasAnterior) / ventasAnterior) * 100 : 0;
     
+    // Estadísticas de pago
+    const entregasPagadas = entregas.filter(e => e.pagado).length;
+    const entregasPendientes = entregas.filter(e => !e.pagado).length;
+    const ventasPagadas = entregas.filter(e => e.pagado).reduce((sum, e) => sum + e.total, 0);
+    const ventasPendientes = entregas.filter(e => !e.pagado).reduce((sum, e) => sum + e.total, 0);
+    
+    // Métodos de pago
+    const pagosEfectivo = entregas.filter(e => e.pagado && e.medioPago === 'efectivo').length;
+    const pagosTransferencia = entregas.filter(e => e.pagado && e.medioPago === 'transferencia').length;
+    const pagosTarjeta = entregas.filter(e => e.pagado && e.medioPago === 'tarjeta').length;
+    
     return {
       totalVentas,
       totalEntregas,
       ticketPromedio,
-      crecimientoMensual
+      crecimientoMensual,
+      // Estadísticas de pago
+      entregasPagadas,
+      entregasPendientes,
+      ventasPagadas,
+      ventasPendientes,
+      pagosEfectivo,
+      pagosTransferencia,
+      pagosTarjeta
     };
+  }
+
+  private static calcularMetodosPago(entregas: Entrega[]): MetodoPago[] {
+    const totalMontoPagado = entregas.filter(e => e.pagado).reduce((sum, e) => sum + e.total, 0);
+    
+    const metodos = [
+      {
+        metodo: 'Efectivo',
+        cantidad: entregas.filter(e => e.pagado && e.medioPago === 'efectivo').length,
+        monto: entregas.filter(e => e.pagado && e.medioPago === 'efectivo').reduce((sum, e) => sum + e.total, 0)
+      },
+      {
+        metodo: 'Transferencia',
+        cantidad: entregas.filter(e => e.pagado && e.medioPago === 'transferencia').length,
+        monto: entregas.filter(e => e.pagado && e.medioPago === 'transferencia').reduce((sum, e) => sum + e.total, 0)
+      },
+      {
+        metodo: 'Tarjeta',
+        cantidad: entregas.filter(e => e.pagado && e.medioPago === 'tarjeta').length,
+        monto: entregas.filter(e => e.pagado && e.medioPago === 'tarjeta').reduce((sum, e) => sum + e.total, 0)
+      }
+    ];
+
+    return metodos.map(metodo => ({
+      ...metodo,
+      porcentaje: totalMontoPagado > 0 ? (metodo.monto / totalMontoPagado) * 100 : 0
+    }));
+  }
+
+  private static calcularDiasVencimiento(ultimaEntrega?: Date): number {
+    if (!ultimaEntrega) return 0;
+    const hoy = new Date();
+    const diferencia = hoy.getTime() - ultimaEntrega.getTime();
+    return Math.floor(diferencia / (1000 * 60 * 60 * 24));
   }
 
   private static analizarEstadoCuentas(clientes: Cliente[]): EstadoCuenta {

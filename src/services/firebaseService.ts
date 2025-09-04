@@ -226,7 +226,14 @@ export class FirebaseService {
   }
 
   static async getEntregas(): Promise<Entrega[]> {
-    const collectionPath = getTenantCollectionPath('entregas');
+    // Obtener el usuario autenticado para usar su email como tenant ID
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      throw new Error('Usuario no autenticado');
+    }
+    
+    const collectionPath = `tenants/${user.email}/entregas`;
+    console.log('Loading entregas from path:', collectionPath);
     const q = query(
       collection(db, collectionPath),
       orderBy('fecha', 'desc')
@@ -246,7 +253,13 @@ export class FirebaseService {
   }
 
   static async getEntregasByCliente(clienteId: string): Promise<Entrega[]> {
-    const collectionPath = getTenantCollectionPath('entregas');
+    // Obtener el usuario autenticado para usar su email como tenant ID
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      throw new Error('Usuario no autenticado');
+    }
+    
+    const collectionPath = `tenants/${user.email}/entregas`;
     const q = query(
       collection(db, collectionPath),
       where('clienteId', '==', clienteId),
@@ -263,10 +276,16 @@ export class FirebaseService {
   }
 
   static async getEntregasHoy(): Promise<Entrega[]> {
+    // Obtener el usuario autenticado para usar su email como tenant ID
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      throw new Error('Usuario no autenticado');
+    }
+    
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
     
-    const collectionPath = getTenantCollectionPath('entregas');
+    const collectionPath = `tenants/${user.email}/entregas`;
     const q = query(
       collection(db, collectionPath),
       where('fecha', '>=', Timestamp.fromDate(hoy)),
@@ -283,7 +302,14 @@ export class FirebaseService {
   }
 
   static async getEntregasByDateRange(startDate: Date, endDate: Date): Promise<Entrega[]> {
-    const collectionPath = getTenantCollectionPath('entregas');
+    // Obtener el usuario autenticado para usar su email como tenant ID
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      throw new Error('Usuario no autenticado');
+    }
+    
+    const collectionPath = `tenants/${user.email}/entregas`;
+    console.log('Loading entregas by date range from path:', collectionPath);
     const q = query(
       collection(db, collectionPath),
       where('fecha', '>=', Timestamp.fromDate(startDate)),
@@ -548,7 +574,13 @@ export class FirebaseService {
   // Método para obtener la última entrega de un cliente
   static async getUltimaEntregaCliente(clienteId: string): Promise<Entrega | null> {
     try {
-      const collectionPath = getTenantCollectionPath('entregas');
+      // Obtener el usuario autenticado para usar su email como tenant ID
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        throw new Error('Usuario no autenticado');
+      }
+      
+      const collectionPath = `tenants/${user.email}/entregas`;
       const entregasRef = collection(db, collectionPath);
       const q = query(
         entregasRef,

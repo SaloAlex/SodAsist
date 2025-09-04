@@ -168,7 +168,8 @@ export const ClientesList: React.FC = () => {
 
   const handleVerHistorial = (cliente: Cliente) => {
     if (cliente.id) {
-      navigate(`${cliente.id}/historial`);
+      // Navegar a la lista de entregas con filtro para este cliente específico
+      navigate(`/entregas?clienteId=${cliente.id}`);
     }
   };
 

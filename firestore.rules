@@ -19,29 +19,63 @@ service cloud.firestore {
       return getUserRole(userId) == 'admin';
     }
 
-    // Reglas para usuarios - Simplificadas para permitir el primer registro
+    function isOwnerRole(userId) {
+      return getUserRole(userId) == 'owner';
+    }
+
+    function isSoderoRole(userId) {
+      return getUserRole(userId) == 'sodero';
+    }
+
+    function getUserTenantId(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return userDoc != null ? userDoc.data.tenantId : null;
+    }
+
+    function canAccessTenantData(tenantId) {
+      let userRole = getUserRole(request.auth.uid);
+      let userTenantId = getUserTenantId(request.auth.uid);
+      
+      return (userRole == 'owner' && userTenantId == tenantId) ||
+             (userRole == 'sodero' && userTenantId == tenantId) ||
+             (userRole == 'admin');
+    }
+
+    function canAccessUserData(targetUserId) {
+      let userRole = getUserRole(request.auth.uid);
+      let userTenantId = getUserTenantId(request.auth.uid);
+      let targetUserTenantId = getUserTenantId(targetUserId);
+      
+      return (userRole == 'owner' && userTenantId == targetUserTenantId) ||
+             (userRole == 'sodero' && request.auth.uid == targetUserId) ||
+             (userRole == 'admin');
+    }
+
+    // Reglas para usuarios - Con sistema de roles
     match /users/{userId} {
       allow create: if isAuthenticated() && 
         (request.auth.uid == userId || // Usuario creando su propio documento
-         request.resource.data.rol == 'admin'); // Permitir creación de admin
+         request.resource.data.rol == 'admin' || // Permitir creación de admin
+         (isOwnerRole(request.auth.uid) && request.resource.data.rol == 'sodero')); // Owner puede crear soderos
       allow read, update, delete: if isAuthenticated() && 
         (isOwner(userId) || // Usuario puede ver/editar sus propios datos
-         isAdmin(request.auth.uid)); // Admin puede ver/editar todos los usuarios
+         canAccessUserData(userId)); // Según rol y tenant
     }
 
-    // Reglas para tenants - Simplificadas
+    // Reglas para tenants - Con sistema de roles
     match /tenants/{tenantId} {
       allow create: if isAuthenticated() &&
-        request.auth.uid == tenantId; // Solo el usuario puede crear su propio tenant
+        (request.auth.uid == tenantId || // Usuario creando su propio tenant
+         isAdmin(request.auth.uid)); // Admin puede crear tenants
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == tenantId || // Owner del tenant (usando email)
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
-    // Reglas para datos de tenant
+    // Reglas para datos de tenant - Con separación por usuario
     match /tenants/{tenantId}/{collection}/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == tenantId || // Owner del tenant (usando email)
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
@@ -49,63 +83,63 @@ service cloud.firestore {
     match /{collection}/{document=**} {
       allow read, write: if isAuthenticated() && 
         (collection == 'users' || // Usuarios (manejado arriba)
-         collection == 'tenants'); // Tenants (manejado arriba)
+         collection == 'tenants' || // Tenants (manejado arriba)
+         collection == 'clientes'); // Permitir lectura de clientes globales para migración
     }
 
-    // Reglas específicas para colecciones comunes en tenants (backup)
+    // Reglas específicas para colecciones comunes en tenants - Con sistema de roles
     match /tenants/{tenantId}/clientes/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/entregas/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/inventario/{document=**} {
       allow read, write: if isAuthenticated() && 
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/productos/{document=**} {
       allow read, write: if isAuthenticated() &&
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/movimientosInventario/{document=**} {
       allow read, write: if isAuthenticated() &&
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/ajustesInventario/{document=**} {
       allow read, write: if isAuthenticated() &&
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
-    match /tenants/{tenantId}/inventarioVehicular/{document=**} {
+    match /tenants/{tenantId}/inventarioVehiculo/{document=**} {
       allow read, write: if isAuthenticated() &&
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     match /tenants/{tenantId}/categoriasProductos/{document=**} {
       allow read, write: if isAuthenticated() &&
-        (request.auth.uid == tenantId || // Owner del tenant
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
 
     // Regla específica para colección visitas - IMPORTANTE para RutaHoy
     match /tenants/{tenantId}/visitas/{document=**} {
       allow read, write: if isAuthenticated() &&
-        (request.auth.uid == tenantId || // Owner del tenant
-         getUserRole(request.auth.uid) in ['admin', 'sodero', 'manager', 'owner'] || // Roles permitidos
+        (canAccessTenantData(tenantId) || // Según rol y tenant
          isAdmin(request.auth.uid)); // Admin del sistema
     }
   }

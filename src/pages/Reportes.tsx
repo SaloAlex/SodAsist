@@ -114,8 +114,8 @@ export const Reportes: React.FC = () => {
       metricas: ventasReporte ? [
         { label: 'Total Ventas', valor: `$${ventasReporte.resumenGeneral.totalVentas.toLocaleString('es-AR')}` },
         { label: 'Entregas', valor: ventasReporte.resumenGeneral.totalEntregas },
-        { label: 'Ticket Promedio', valor: `$${ventasReporte.resumenGeneral.ticketPromedio.toFixed(2)}` },
-        { label: 'Crecimiento', valor: `${ventasReporte.resumenGeneral.crecimientoMensual.toFixed(1)}%` }
+        { label: 'Pagadas', valor: ventasReporte.resumenGeneral.entregasPagadas },
+        { label: 'Pendientes', valor: ventasReporte.resumenGeneral.entregasPendientes }
       ] : []
     },
     {
@@ -263,6 +263,18 @@ export const Reportes: React.FC = () => {
             cambio: 3.2,
             icono: <Target className="w-5 h-5 text-purple-600 dark:text-purple-400" />,
             color: 'bg-purple-100 dark:bg-purple-900'
+          },
+          {
+            titulo: 'Entregas Pagadas',
+            valor: ventasReporte ? `${ventasReporte.resumenGeneral.entregasPagadas}` : '0',
+            icono: <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />,
+            color: 'bg-green-100 dark:bg-green-900'
+          },
+          {
+            titulo: 'Pendientes de Pago',
+            valor: ventasReporte ? `${ventasReporte.resumenGeneral.entregasPendientes}` : '0',
+            icono: <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />,
+            color: 'bg-orange-100 dark:bg-orange-900'
           }
         ]}
       />
@@ -457,7 +469,20 @@ export const Reportes: React.FC = () => {
                     />
                   </div>
 
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 lg:col-span-2">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Métodos de Pago
+                    </h3>
+                    <GraficoPie
+                      data={ventasReporte.metodosPago as unknown as DatosGrafico[]}
+                      dataKey="porcentaje"
+                      nameKey="metodo"
+                      height={300}
+                      tema={configuracionPersonalizada.temaGraficos === 'oscuro' ? 'oscuro' : 'claro'}
+                    />
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       Ventas Mensuales
                     </h3>
@@ -465,7 +490,7 @@ export const Reportes: React.FC = () => {
                       data={ventasReporte.ventasMensuales as unknown as DatosGrafico[]}
                       dataKey="ventas"
                       xAxisKey="mes"
-                      height={400}
+                      height={300}
                       tema={configuracionPersonalizada.temaGraficos === 'oscuro' ? 'oscuro' : 'claro'}
                       mostrarValores={true}
                     />

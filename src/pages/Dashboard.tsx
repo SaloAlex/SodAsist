@@ -20,7 +20,10 @@ import {
   Settings,
   Grid,
   List,
-  Clock
+  Clock,
+  CheckCircle,
+  XCircle,
+  CreditCard
 } from 'lucide-react';
 import { FirebaseService } from '../services/firebaseService';
 import { Entrega, Cliente } from '../types';
@@ -177,6 +180,17 @@ export const Dashboard: React.FC = () => {
     );
     const ticketPromedio = entregasCount > 0 ? ventasHoy / entregasCount : 0;
 
+    // Estadísticas de pago
+    const entregasPagadas = entregas.filter(e => e.pagado).length;
+    const entregasPendientes = entregas.filter(e => !e.pagado).length;
+    const ventasPagadas = entregas.filter(e => e.pagado).reduce((sum, e) => sum + e.total, 0);
+    const ventasPendientes = entregas.filter(e => !e.pagado).reduce((sum, e) => sum + e.total, 0);
+    
+    // Métodos de pago
+    const pagosEfectivo = entregas.filter(e => e.pagado && e.medioPago === 'efectivo').length;
+    const pagosTransferencia = entregas.filter(e => e.pagado && e.medioPago === 'transferencia').length;
+    const pagosTarjeta = entregas.filter(e => e.pagado && e.medioPago === 'tarjeta').length;
+
     return {
       entregasHoy: entregasCount,
       entregasAyer: entregasAyerCount,
@@ -186,7 +200,15 @@ export const Dashboard: React.FC = () => {
       clientesConDeuda,
       litrosVendidos,
       ticketPromedio,
-      eficiencia: clientesTotal > 0 ? (entregasCount / clientesTotal) * 100 : 0
+      eficiencia: clientesTotal > 0 ? (entregasCount / clientesTotal) * 100 : 0,
+      // Estadísticas de pago
+      entregasPagadas,
+      entregasPendientes,
+      ventasPagadas,
+      ventasPendientes,
+      pagosEfectivo,
+      pagosTransferencia,
+      pagosTarjeta
     };
   }, [entregas, entregasAyer, clientes]);
 
@@ -252,15 +274,26 @@ export const Dashboard: React.FC = () => {
     },
     {
       key: 'pagado' as keyof Entrega,
-      label: 'Estado',
-      render: (value: unknown) => {
+      label: 'Estado de Pago',
+      render: (value: unknown, row: Entrega) => {
         const pagado = value as boolean;
+        const medioPago = row.medioPago;
+        
         return (
-          <span className={`px-2 py-1 rounded-full text-xs ${
-            pagado ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-          }`}>
-            {pagado ? 'Pagado' : 'Pendiente'}
-          </span>
+          <div className="flex flex-col">
+            <span className={`px-2 py-1 rounded-full text-xs ${
+              pagado ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+            }`}>
+              {pagado ? 'Pagado' : 'Pendiente'}
+            </span>
+            {pagado && medioPago && (
+              <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 capitalize">
+                {medioPago === 'efectivo' && '💰 Efectivo'}
+                {medioPago === 'transferencia' && '🏦 Transferencia'}
+                {medioPago === 'tarjeta' && '💳 Tarjeta'}
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -466,6 +499,61 @@ export const Dashboard: React.FC = () => {
           onAction={() => navigate('/inventario')}
           variant="default"
         />
+      </div>
+
+      {/* Estadísticas de pago */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Entregas Pagadas</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.entregasPagadas}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">${stats.ventasPagadas.toFixed(2)}</p>
+            </div>
+            <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
+              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pendientes de Pago</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.entregasPendientes}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">${stats.ventasPendientes.toFixed(2)}</p>
+            </div>
+            <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
+              <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pagos en Efectivo</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.pagosEfectivo}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">💰 Efectivo</p>
+            </div>
+            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+              <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pagos Digitales</p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.pagosTransferencia + stats.pagosTarjeta}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">🏦 {stats.pagosTransferencia} | 💳 {stats.pagosTarjeta}</p>
+            </div>
+            <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+              <CreditCard className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Sección de gráficos y widgets */}
