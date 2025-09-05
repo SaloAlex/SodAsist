@@ -26,7 +26,7 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { InventarioDashboard } from '../components/inventario/InventarioDashboard';
 import { ProductoForm } from '../components/inventario/ProductoForm';
 import { CategoriaManager } from '../components/inventario/CategoriaManager';
-import { InventarioVehiculoForm } from '../components/inventario/InventarioVehiculoForm';
+import { InventarioVehiculoFormDinamico } from '../components/inventario/InventarioVehiculoFormDinamico';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -286,7 +286,7 @@ export const Inventario: React.FC = () => {
   const [mostrandoFormProducto, setMostrandoFormProducto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<Producto | undefined>();
   const [mostrandoCategorias, setMostrandoCategorias] = useState(false);
-  const [inventarioVehiculo, setInventarioVehiculo] = useState<InventarioVehiculo | null>(null);
+  const [, setInventarioVehiculo] = useState<InventarioVehiculo | null>(null);
   
   // Estados para filtros
   const [filtros, setFiltros] = useState<FiltrosProductos>({});
@@ -355,9 +355,19 @@ export const Inventario: React.FC = () => {
   }, [searchParams]);
 
   // Manejar guardado del inventario del vehículo
-  const handleInventarioVehiculoSave = (inventario: InventarioVehiculo) => {
-    setInventarioVehiculo(inventario);
-    toast.success('Inventario del vehículo actualizado correctamente');
+  const handleInventarioVehiculoSave = (inventario: Record<string, number>) => {
+    // Convertir el inventario dinámico al formato esperado
+    const inventarioVehiculo: InventarioVehiculo = {
+      id: 'actual',
+      fecha: new Date(),
+      sodas: inventario['sodas'] || 0,
+      bidones10: inventario['bidones10'] || 0,
+      bidones20: inventario['bidones20'] || 0,
+      envasesDevueltos: inventario['envasesDevueltos'] || 0,
+      updatedAt: new Date()
+    };
+    setInventarioVehiculo(inventarioVehiculo);
+    toast.success('Inventario del vehículo cargado correctamente');
   };
 
   // Verificar autenticación
@@ -615,7 +625,7 @@ export const Inventario: React.FC = () => {
                     const [ordenarPor, orden] = e.target.value.split('-');
                     handleSortChange(ordenarPor, orden as 'asc' | 'desc');
                   }}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                  className="px-3 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm appearance-none bg-no-repeat bg-right bg-[length:16px] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQgNkw4IDEwTDEyIDYiIHN0cm9rZT0iIzM3NDE1MSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K')] dark:bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQgNkw4IDEwTDEyIDYiIHN0cm9rZT0iI0Y5RkFGQiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K')]"
                 >
                   <option value="nombre-asc">Nombre A-Z</option>
                   <option value="nombre-desc">Nombre Z-A</option>
@@ -732,11 +742,9 @@ export const Inventario: React.FC = () => {
       
       case 'vehiculo':
         return (
-          <InventarioVehiculoForm
-            inventarioActual={inventarioVehiculo}
+          <InventarioVehiculoFormDinamico
             onSave={handleInventarioVehiculoSave}
             onCancel={() => setVistaActual('dashboard')}
-            isLoading={procesando}
           />
         );
       

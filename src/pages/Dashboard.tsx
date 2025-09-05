@@ -4,6 +4,10 @@ import { ChartCard } from '../components/dashboard/ChartCard';
 import { ActivityWidget } from '../components/dashboard/ActivityWidget';
 import { NotificationsWidget } from '../components/dashboard/NotificationsWidget';
 import { DataTable } from '../components/common/DataTable';
+import { NotificationSettings } from '../components/common/NotificationSettings';
+import { ChartMaximizeModal } from '../components/common/ChartMaximizeModal';
+import { usePushNotifications } from '../hooks/usePushNotifications';
+import { ChartExportService } from '../services/chartExportService';
 import { 
   Package, 
   DollarSign, 
@@ -18,12 +22,11 @@ import {
   Eye,
   BarChart3,
   Settings,
-  Grid,
-  List,
   Clock,
   CheckCircle,
   XCircle,
-  CreditCard
+  CreditCard,
+  Bell
 } from 'lucide-react';
 import { FirebaseService } from '../services/firebaseService';
 import { Entrega, Cliente } from '../types';
@@ -32,9 +35,7 @@ import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { UserLimitReached } from '../components/common/UserLimitReached';
-import { PlanInfo } from '../components/common/PlanInfo';
 
-type ViewMode = 'grid' | 'list';
 type DateRange = 'today' | 'week' | 'month' | 'custom';
 
 export const Dashboard: React.FC = () => {
@@ -44,12 +45,16 @@ export const Dashboard: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [showChartModal, setShowChartModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'notificaciones' | 'acciones' | 'actividad' | 'ventas' | 'entregas'>('notificaciones');
   
   // Estados de UI
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dateRange, setDateRange] = useState<DateRange>('today');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  
+  // Hook de notificaciones push
+  const { initialize: initializePushNotifications } = usePushNotifications();
   
   const navigate = useNavigate();
 
@@ -95,7 +100,7 @@ export const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // Auto-refresh cada 5 minutos si está habilitado
+  // Función de actualización manual
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadDataByRange(dateRange, selectedDate);
@@ -103,15 +108,6 @@ export const Dashboard: React.FC = () => {
     toast.success('Datos actualizados');
   }, [dateRange, selectedDate, loadDataByRange]);
 
-  useEffect(() => {
-    if (!autoRefresh) return;
-    
-    const interval = setInterval(() => {
-      handleRefresh();
-    }, 5 * 60 * 1000); // 5 minutos
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, handleRefresh]);
 
   // Efecto para suscribirse a clientes
   useEffect(() => {
@@ -128,6 +124,11 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     loadDataByRange(dateRange, selectedDate);
   }, [selectedDate, dateRange, loadDataByRange]);
+
+  // Inicializar notificaciones push
+  useEffect(() => {
+    initializePushNotifications();
+  }, [initializePushNotifications]);
 
   // Funciones de navegación de fecha
   const handlePreviousDate = () => {
@@ -309,7 +310,7 @@ export const Dashboard: React.FC = () => {
   ];
 
   // Formatear título de fecha según el rango
-  const formatDateTitle = () => {
+  const formatDateTitle = useCallback(() => {
     switch (dateRange) {
       case 'today':
         return selectedDate.toDateString() === new Date().toDateString() ? 'Hoy' : format(selectedDate, 'd/MM/yyyy');
@@ -320,7 +321,62 @@ export const Dashboard: React.FC = () => {
       default:
         return format(selectedDate, 'd/MM/yyyy');
     }
-  };
+  }, [dateRange, selectedDate]);
+
+  // Función para exportar gráfico
+  const handleExportChart = useCallback(async (format: 'png' | 'pdf' | 'csv') => {
+    try {
+      const exportData = {
+        title: 'Ventas del Período',
+        subtitle: 'Evolución de ventas por hora',
+        data: chartData,
+        dataKey: 'total',
+        secondaryDataKey: 'litros',
+        xAxisKey: 'hora',
+        type: 'area' as const,
+        color: '#3B82F6',
+        dateRange: formatDateTitle()
+      };
+
+      let blob: Blob;
+      let filename: string;
+
+      switch (format) {
+        case 'png': {
+          // Para PNG necesitamos el elemento del gráfico
+          const chartElement = document.querySelector('[data-chart="ventas"]') as HTMLElement;
+          if (!chartElement) {
+            toast.error('No se pudo encontrar el gráfico para exportar');
+            return;
+          }
+          blob = await ChartExportService.exportChartAsPNG(chartElement, exportData);
+          filename = `grafico_ventas_${new Date().toISOString().split('T')[0]}.png`;
+          break;
+        }
+        case 'pdf': {
+          blob = await ChartExportService.exportChartAsPDF(exportData);
+          filename = `grafico_ventas_${new Date().toISOString().split('T')[0]}.pdf`;
+          break;
+        }
+        case 'csv': {
+          blob = await ChartExportService.exportChartAsCSV(exportData);
+          filename = `datos_ventas_${new Date().toISOString().split('T')[0]}.csv`;
+          break;
+        }
+      }
+
+      ChartExportService.downloadFile(blob, filename);
+      toast.success(`Gráfico exportado como ${format.toUpperCase()}`);
+    } catch (error) {
+      toast.error('Error al exportar el gráfico');
+      console.error('Error exportando gráfico:', error);
+    }
+  }, [chartData, formatDateTitle]);
+
+  // Función para maximizar gráfico
+  const handleMaximizeChart = useCallback(() => {
+    setShowChartModal(true);
+  }, []);
 
   if (loading && !refreshing) {
     return (
@@ -334,403 +390,594 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header mejorado */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-            <BarChart3 className="h-8 w-8 text-blue-600 mr-3" />
-            Dashboard Ejecutivo
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Resumen completo de tu negocio - {formatDateTitle()}
-          </p>
-        </div>
-
-        {/* Controles avanzados */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {/* Selector de rango */}
-          <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            {[
-              { key: 'today', label: 'Hoy', icon: Clock },
-              { key: 'week', label: 'Semana', icon: Calendar },
-              { key: 'month', label: 'Mes', icon: Calendar }
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setDateRange(key as DateRange)}
-                className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  dateRange === key
-                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <Icon className="h-4 w-4 mr-1.5" />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Navegación de fecha */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handlePreviousDate}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              aria-label="Período anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            
-            <div className="relative">
-              <input
-                type="date"
-                value={format(selectedDate, 'yyyy-MM-dd')}
-                onChange={(e) => handleDateChange(parseISO(e.target.value))}
-                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header simplificado y responsive */}
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            {/* Título y fecha */}
+            <div className="flex-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mr-2 sm:mr-3" />
+                <span className="hidden sm:inline">Dashboard Ejecutivo</span>
+                <span className="sm:hidden">Dashboard</span>
+              </h1>
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+                {formatDateTitle()}
+              </p>
             </div>
 
-            <button
-              onClick={handleNextDate}
-              disabled={selectedDate >= startOfDay(new Date())}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              aria-label="Período siguiente"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
+            {/* Controles principales */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Selector de período */}
+              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                {[
+                  { key: 'today', label: 'Hoy', icon: Clock },
+                  { key: 'week', label: 'Semana', icon: Calendar },
+                  { key: 'month', label: 'Mes', icon: Calendar }
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setDateRange(key as DateRange)}
+                    className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                      dateRange === key
+                        ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                ))}
+              </div>
 
-          {/* Controles adicionales */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
-              title="Actualizar datos"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Actualizar
-            </button>
+              {/* Navegación de fecha */}
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <button
+                  onClick={handlePreviousDate}
+                  className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
+                  aria-label="Período anterior"
+                >
+                  <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+                
+                <input
+                  type="date"
+                  value={format(selectedDate, 'yyyy-MM-dd')}
+                  onChange={(e) => handleDateChange(parseISO(e.target.value))}
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                />
 
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`p-2 rounded-lg transition-colors ${
-                autoRefresh 
-                  ? 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400' 
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-              title={`Auto-refresh ${autoRefresh ? 'activado' : 'desactivado'}`}
-            >
-              <RefreshCw className={`h-4 w-4 ${autoRefresh ? 'animate-pulse' : ''}`} />
-            </button>
+                <button
+                  onClick={handleNextDate}
+                  disabled={selectedDate >= startOfDay(new Date())}
+                  className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors text-gray-600 dark:text-gray-400"
+                  aria-label="Período siguiente"
+                >
+                  <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
+              </div>
 
-            <button
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              title={`Cambiar a vista ${viewMode === 'grid' ? 'lista' : 'cuadrícula'}`}
-            >
-              {viewMode === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-      </div>
+              {/* Acciones */}
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                  title="Actualizar datos"
+                >
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Actualizar</span>
+                </button>
 
-      {/* Alerta de límite de usuarios alcanzado */}
-      <UserLimitReached />
-
-      {/* Métricas principales mejoradas */}
-      <div className={`grid ${viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1'} gap-6`}>
-        <StatsCard
-          title={dateRange === 'today' ? "Entregas Hoy" : "Entregas"}
-          value={stats.entregasHoy}
-          icon={Package}
-          color="blue"
-          change={calcularCambio(stats.entregasHoy, stats.entregasAyer)}
-          subtitle="Entregas completadas"
-          showProgress={true}
-          progressValue={stats.entregasHoy}
-          target={50}
-          description="Número total de entregas realizadas en el período"
-          actionLabel="Ver entregas"
-          onAction={() => navigate('/entregas')}
-          variant="default"
-          trend={[stats.entregasAyer || 0, stats.entregasHoy || 0]}
-        />
-
-        <StatsCard
-          title={dateRange === 'today' ? "Ventas Hoy" : "Ventas"}
-          value={`$${stats.ventasHoy.toFixed(2)}`}
-          icon={DollarSign}
-          color="green"
-          change={calcularCambio(stats.ventasHoy, stats.ventasAyer)}
-          subtitle="Ingresos del período"
-          showProgress={true}
-          progressValue={stats.ventasHoy}
-          target={10000}
-          description="Total de ingresos generados"
-          actionLabel="Ver reportes"
-          onAction={() => navigate('/reportes')}
-          variant="gradient"
-        />
-
-        <StatsCard
-          title="Total Clientes"
-          value={stats.clientesTotal}
-          icon={Users}
-          color="purple"
-          subtitle={`${stats.clientesConDeuda} con deuda`}
-          description="Base total de clientes registrados"
-          actionLabel="Gestionar"
-          onAction={() => navigate('/clientes')}
-          variant="default"
-        />
-
-        <StatsCard
-          title="Litros Vendidos"
-          value={stats.litrosVendidos}
-          icon={TrendingUp}
-          color="orange"
-          subtitle="Volumen total"
-          showProgress={true}
-          progressValue={stats.litrosVendidos}
-          target={500}
-          description="Litros de agua vendidos"
-          actionLabel="Ver inventario"
-          onAction={() => navigate('/inventario')}
-          variant="default"
-        />
-      </div>
-
-      {/* Estadísticas de pago */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Entregas Pagadas</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.entregasPagadas}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">${stats.ventasPagadas.toFixed(2)}</p>
-            </div>
-            <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pendientes de Pago</p>
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.entregasPendientes}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">${stats.ventasPendientes.toFixed(2)}</p>
-            </div>
-            <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-              <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pagos en Efectivo</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.pagosEfectivo}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">💰 Efectivo</p>
-            </div>
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-              <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pagos Digitales</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.pagosTransferencia + stats.pagosTarjeta}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">🏦 {stats.pagosTransferencia} | 💳 {stats.pagosTarjeta}</p>
-            </div>
-            <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-              <CreditCard className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Sección de gráficos y widgets */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Gráfico principal */}
-        <div className="xl:col-span-2">
-          <ChartCard
-            title="Ventas del Período"
-            subtitle="Evolución de ventas por hora"
-            data={chartData}
-            type="area"
-            dataKey="total"
-            secondaryDataKey="litros"
-            xAxisKey="hora"
-            color="#3B82F6"
-            height={350}
-            loading={loading || refreshing}
-            showLegend={true}
-            gradient={true}
-            animated={true}
-            onRefresh={handleRefresh}
-            onExport={() => toast.success('Exportando gráfico...')}
-                         onMaximize={() => toast.success('Función de maximizar próximamente')}
-          />
-        </div>
-
-        {/* Widget de notificaciones */}
-        <div>
-          <NotificationsWidget
-            loading={loading}
-            maxItems={5}
-            onDismiss={(id) => toast.success(`Notificación ${id} descartada`)}
-            onDismissAll={() => toast.success('Todas las notificaciones descartadas')}
-            onMarkAllRead={() => toast.success('Notificaciones marcadas como leídas')}
-          />
-        </div>
-      </div>
-
-      {/* Sección de actividad y acciones */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Widget de actividad */}
-        <div className="xl:col-span-2">
-          <ActivityWidget
-            loading={loading}
-            maxItems={8}
-            onRefresh={handleRefresh}
-            onViewAll={() => navigate('/actividad')}
-          />
-        </div>
-
-        {/* Panel de acciones rápidas mejorado */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-              <Settings className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
-              Acciones Rápidas
-            </h3>
-            
-            {/* Información del Plan */}
-            <div className="mb-6">
-              <PlanInfo />
-            </div>
-            
-            <div className="space-y-3">
-              <button
-                onClick={() => navigate('/entregas/new')}
-                className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-800/30 dark:hover:to-blue-700/30 transition-all group"
-              >
-                <div className="p-2 bg-blue-600 text-white rounded-lg group-hover:scale-110 transition-transform">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="text-blue-700 dark:text-blue-300 font-medium">Nueva Entrega</span>
-                  <p className="text-xs text-blue-600 dark:text-blue-400">Registrar nueva entrega</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => navigate('/ruta-hoy')}
-                className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg hover:from-green-100 hover:to-green-200 dark:hover:from-green-800/30 dark:hover:to-green-700/30 transition-all group"
-              >
-                <div className="p-2 bg-green-600 text-white rounded-lg group-hover:scale-110 transition-transform">
-                  <MapPin className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="text-green-700 dark:text-green-300 font-medium">Ver Ruta</span>
-                  <p className="text-xs text-green-600 dark:text-green-400">Ruta optimizada del día</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => navigate('/clientes')}
-                className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg hover:from-purple-100 hover:to-purple-200 dark:hover:from-purple-800/30 dark:hover:to-purple-700/30 transition-all group"
-              >
-                <div className="p-2 bg-purple-600 text-white rounded-lg group-hover:scale-110 transition-transform">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="text-purple-700 dark:text-purple-300 font-medium">Gestionar Clientes</span>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">Administrar base de clientes</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => navigate('/reportes')}
-                className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-lg hover:from-orange-100 hover:to-orange-200 dark:hover:from-orange-800/30 dark:hover:to-orange-700/30 transition-all group"
-              >
-                <div className="p-2 bg-orange-600 text-white rounded-lg group-hover:scale-110 transition-transform">
-                  <BarChart3 className="h-5 w-5" />
-                </div>
-                <div className="text-left">
-                  <span className="text-orange-700 dark:text-orange-300 font-medium">Ver Reportes</span>
-                  <p className="text-xs text-orange-600 dark:text-orange-400">Análisis y estadísticas</p>
-                </div>
-              </button>
-            </div>
-
-            {/* Estadísticas rápidas */}
-            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Resumen Rápido</h4>
-              <div className="grid grid-cols-2 gap-3 text-center">
-                <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{stats.ticketPromedio.toFixed(0)}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Ticket Promedio</p>
-                </div>
-                <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{stats.eficiencia.toFixed(0)}%</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Eficiencia</p>
-                </div>
+                <button
+                  onClick={() => setShowNotificationSettings(true)}
+                  className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Configurar notificaciones"
+                >
+                  <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabla de entregas mejorada */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <Package className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
-              Entregas de {formatDateTitle()}
-              {stats.entregasHoy > 0 && (
-                <span className="ml-2 px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
-                  {stats.entregasHoy}
-                </span>
-              )}
-            </h3>
-            
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => navigate('/entregas')}
-                className="flex items-center px-3 py-1.5 text-sm text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-              >
-                <Eye className="h-4 w-4 mr-1" />
-                Ver todas
-              </button>
-              
-              <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <Download className="h-4 w-4" />
-              </button>
+      {/* Contenido principal */}
+      <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        {/* Alerta de límite de usuarios alcanzado */}
+        <UserLimitReached />
+
+        {/* Panel de Métricas Principales */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+              <BarChart3 className="h-5 w-5 text-blue-600 mr-2" />
+              Métricas Principales
+            </h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <StatsCard
+                title={dateRange === 'today' ? "Entregas Hoy" : "Entregas"}
+                value={stats.entregasHoy}
+                icon={Package}
+                color="blue"
+                change={calcularCambio(stats.entregasHoy, stats.entregasAyer)}
+                subtitle="Entregas completadas"
+                showProgress={true}
+                progressValue={stats.entregasHoy}
+                target={50}
+                description="Número total de entregas realizadas en el período"
+                actionLabel="Ver entregas"
+                onAction={() => navigate('/entregas')}
+                variant="default"
+                trend={[stats.entregasAyer || 0, stats.entregasHoy || 0]}
+              />
+
+              <StatsCard
+                title={dateRange === 'today' ? "Ventas Hoy" : "Ventas"}
+                value={`$${stats.ventasHoy.toFixed(2)}`}
+                icon={DollarSign}
+                color="green"
+                change={calcularCambio(stats.ventasHoy, stats.ventasAyer)}
+                subtitle="Ingresos del período"
+                showProgress={true}
+                progressValue={stats.ventasHoy}
+                target={10000}
+                description="Total de ingresos generados"
+                actionLabel="Ver reportes"
+                onAction={() => navigate('/reportes')}
+                variant="gradient"
+              />
+
+              <StatsCard
+                title="Total Clientes"
+                value={stats.clientesTotal}
+                icon={Users}
+                color="purple"
+                subtitle={`${stats.clientesConDeuda} con deuda`}
+                description="Base total de clientes registrados"
+                actionLabel="Gestionar"
+                onAction={() => navigate('/clientes')}
+                variant="default"
+              />
+
+              <StatsCard
+                title="Litros Vendidos"
+                value={stats.litrosVendidos}
+                icon={TrendingUp}
+                color="orange"
+                subtitle="Volumen total"
+                showProgress={true}
+                progressValue={stats.litrosVendidos}
+                target={500}
+                description="Litros de agua vendidos"
+                actionLabel="Ver inventario"
+                onAction={() => navigate('/inventario')}
+                variant="default"
+              />
             </div>
           </div>
         </div>
-        
-        <DataTable
-          data={entregas}
-          columns={entregasColumns}
-          searchable={true}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            pageSizeOptions: [5, 10, 20, 50]
-          }}
-          emptyMessage="No hay entregas registradas para este período"
-        />
+
+        {/* Panel de Análisis de Pagos */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+              <CreditCard className="h-5 w-5 text-green-600 mr-2" />
+              Análisis de Pagos
+            </h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-300">Entregas Pagadas</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.entregasPagadas}</p>
+                    <p className="text-xs text-green-600 dark:text-green-400">${stats.ventasPagadas.toFixed(2)}</p>
+                  </div>
+                  <div className="p-2 bg-green-200 dark:bg-green-800 rounded-lg">
+                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-300">Pendientes de Pago</p>
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.entregasPendientes}</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">${stats.ventasPendientes.toFixed(2)}</p>
+                  </div>
+                  <div className="p-2 bg-red-200 dark:bg-red-800 rounded-lg">
+                    <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Pagos en Efectivo</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.pagosEfectivo}</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">💰 Efectivo</p>
+                  </div>
+                  <div className="p-2 bg-blue-200 dark:bg-blue-800 rounded-lg">
+                    <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Pagos Digitales</p>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.pagosTransferencia + stats.pagosTarjeta}</p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400">🏦 {stats.pagosTransferencia} | 💳 {stats.pagosTarjeta}</p>
+                  </div>
+                  <div className="p-2 bg-purple-200 dark:bg-purple-800 rounded-lg">
+                    <CreditCard className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Panel Unificado con Tabs */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          {/* Header con tabs */}
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Panel de Control
+              </h2>
+              
+              {/* Tabs de navegación */}
+              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1 overflow-x-auto">
+                <button
+                  onClick={() => setActiveTab('notificaciones')}
+                  className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'notificaciones'
+                      ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-orange-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Notificaciones"
+                >
+                  <Bell className="h-4 w-4 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Notificaciones</span>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('acciones')}
+                  className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'acciones'
+                      ? 'bg-white dark:bg-gray-600 text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Acciones Rápidas"
+                >
+                  <Settings className="h-4 w-4 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Acciones</span>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('actividad')}
+                  className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'actividad'
+                      ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Actividad Reciente"
+                >
+                  <TrendingUp className="h-4 w-4 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Actividad</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('ventas')}
+                  className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'ventas'
+                      ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Análisis de Ventas"
+                >
+                  <BarChart3 className="h-4 w-4 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Ventas</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('entregas')}
+                  className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'entregas'
+                      ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Entregas de Hoy"
+                >
+                  <Package className="h-4 w-4 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Entregas</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Contenido del tab activo */}
+          <div className="p-6">
+            {activeTab === 'notificaciones' && (
+              <NotificationsWidget
+                maxItems={5}
+                showCreateSample={true}
+              />
+            )}
+
+            {activeTab === 'acciones' && (
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <button
+                    onClick={() => navigate('/entregas/new')}
+                    className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg hover:from-blue-100 hover:to-blue-200 dark:hover:from-blue-800/30 dark:hover:to-blue-700/30 transition-all group"
+                  >
+                    <div className="p-2 bg-blue-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                      <Package className="h-5 w-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-blue-700 dark:text-blue-300 font-medium">Nueva Entrega</span>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">Registrar nueva entrega</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigate('/ruta-hoy')}
+                    className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg hover:from-green-100 hover:to-green-200 dark:hover:from-green-800/30 dark:hover:to-green-700/30 transition-all group"
+                  >
+                    <div className="p-2 bg-green-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                      <MapPin className="h-5 w-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-green-700 dark:text-green-300 font-medium">Ver Ruta</span>
+                      <p className="text-xs text-green-600 dark:text-green-400">Ruta optimizada del día</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigate('/clientes')}
+                    className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg hover:from-purple-100 hover:to-purple-200 dark:hover:from-purple-800/30 dark:hover:to-purple-700/30 transition-all group"
+                  >
+                    <div className="p-2 bg-purple-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-purple-700 dark:text-purple-300 font-medium">Gestionar Clientes</span>
+                      <p className="text-xs text-purple-600 dark:text-purple-400">Administrar base de clientes</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigate('/reportes')}
+                    className="w-full flex items-center space-x-3 p-4 bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-lg hover:from-orange-100 hover:to-orange-200 dark:hover:from-orange-800/30 dark:hover:to-orange-700/30 transition-all group"
+                  >
+                    <div className="p-2 bg-orange-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                      <BarChart3 className="h-5 w-5" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-orange-700 dark:text-orange-300 font-medium">Ver Reportes</span>
+                      <p className="text-xs text-orange-600 dark:text-orange-400">Análisis y estadísticas</p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Estadísticas rápidas */}
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Resumen Rápido</h4>
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">${stats.ticketPromedio.toFixed(0)}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">Ticket Promedio</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">{stats.eficiencia.toFixed(0)}%</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">Eficiencia</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'actividad' && (
+              <ActivityWidget
+                loading={loading}
+                maxItems={8}
+                onRefresh={handleRefresh}
+                onViewAll={() => navigate('/actividad')}
+              />
+            )}
+
+            {activeTab === 'ventas' && (
+              <div className="space-y-4">
+                {/* Header del tab de ventas */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Análisis de Ventas
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Evolución de ventas por hora - {formatDateTitle()}
+                    </p>
+                  </div>
+                  
+                  {/* Acciones adicionales del tab */}
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => navigate('/reportes')}
+                      className="flex items-center px-3 py-1.5 text-sm text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                    >
+                      <BarChart3 className="h-4 w-4 mr-1" />
+                      Ver Reportes
+                    </button>
+                    
+                    <button
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      className="flex items-center px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                      Actualizar
+                    </button>
+                  </div>
+                </div>
+
+                {/* Gráfico con todas las acciones */}
+                <div data-chart="ventas">
+                  <ChartCard
+                    title="Ventas del Período"
+                    subtitle="Evolución de ventas por hora"
+                    data={chartData}
+                    type="area"
+                    dataKey="total"
+                    secondaryDataKey="litros"
+                    xAxisKey="hora"
+                    color="#3B82F6"
+                    height={300}
+                    loading={loading || refreshing}
+                    showLegend={true}
+                    gradient={true}
+                    animated={true}
+                    onRefresh={handleRefresh}
+                    onExport={() => handleExportChart('png')}
+                    onMaximize={handleMaximizeChart}
+                  />
+                </div>
+
+                {/* Estadísticas rápidas de ventas */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Ventas Totales</p>
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          ${stats.ventasHoy.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          {chartData.length} períodos
+                        </p>
+                      </div>
+                      <div className="p-2 bg-blue-200 dark:bg-blue-800 rounded-lg">
+                        <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-green-700 dark:text-green-300">Ticket Promedio</p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          ${stats.ticketPromedio.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          Por entrega
+                        </p>
+                      </div>
+                      <div className="p-2 bg-green-200 dark:bg-green-800 rounded-lg">
+                        <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Litros Vendidos</p>
+                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                          {stats.litrosVendidos}
+                        </p>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">
+                          Volumen total
+                        </p>
+                      </div>
+                      <div className="p-2 bg-purple-200 dark:bg-purple-800 rounded-lg">
+                        <Package className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'entregas' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Entregas de {formatDateTitle()}
+                    {stats.entregasHoy > 0 && (
+                      <span className="ml-2 px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
+                        {stats.entregasHoy}
+                      </span>
+                    )}
+                  </h3>
+                  
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => navigate('/entregas')}
+                      className="flex items-center px-3 py-1.5 text-sm text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Ver todas
+                    </button>
+                    
+                    <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                
+                <DataTable
+                  data={entregas}
+                  columns={entregasColumns}
+                  searchable={true}
+                  pagination={{
+                    pageSize: 8,
+                    showSizeChanger: true,
+                    pageSizeOptions: [5, 8, 10, 20]
+                  }}
+                  emptyMessage="No hay entregas registradas para este período"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
+
+      {/* Modal de configuración de notificaciones */}
+      <NotificationSettings
+        isOpen={showNotificationSettings}
+        onClose={() => setShowNotificationSettings(false)}
+      />
+
+      {/* Modal de gráfico maximizado */}
+      <ChartMaximizeModal
+        isOpen={showChartModal}
+        onClose={() => setShowChartModal(false)}
+        chartData={{
+          title: 'Ventas del Período',
+          subtitle: 'Evolución de ventas por hora',
+          data: chartData,
+          dataKey: 'total',
+          secondaryDataKey: 'litros',
+          xAxisKey: 'hora',
+          type: 'area',
+          color: '#3B82F6',
+          dateRange: formatDateTitle()
+        }}
+        onRefresh={handleRefresh}
+        loading={loading || refreshing}
+      />
     </div>
   );
 };

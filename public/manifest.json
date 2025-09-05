@@ -1,17 +1,19 @@
 {
-  "name": "VaListo",
-  "short_name": "VaListo",
+  "name": "SodAsist",
+  "short_name": "SodAsist",
   "description": "Sistema de gestión profesional para reparto de agua",
   "icons": [
     {
       "src": "/Logo.png",
-      "sizes": "any",
-      "type": "image/png"
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/Logo.png",
-      "sizes": "120x120",
-      "type": "image/png"
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
@@ -19,5 +21,8 @@
   "theme_color": "#2563eb",
   "background_color": "#ffffff",
   "categories": ["business", "productivity"],
-  "lang": "es"
+  "lang": "es",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "gcm_sender_id": "103953800507"
 }

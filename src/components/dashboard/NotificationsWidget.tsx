@@ -10,128 +10,56 @@ import {
   Users,
   Package,
   Settings,
-  MoreHorizontal
+  MoreHorizontal,
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useNotifications } from '../../hooks/useNotifications';
 
-interface Notification {
-  id: string;
-  type: 'alert' | 'info' | 'success' | 'warning';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  title: string;
-  message: string;
-  timestamp: Date;
-  category: 'sistema' | 'entrega' | 'cliente' | 'pago' | 'inventario';
-  actionLabel?: string;
-  onAction?: () => void;
-  dismissible?: boolean;
-  metadata?: {
-    [key: string]: string | number | boolean;
-  };
-}
+// Usar la interfaz del servicio de notificaciones
+import { SystemNotification } from '../../services/notificationService';
 
 interface NotificationsWidgetProps {
-  notifications?: Notification[];
-  loading?: boolean;
-  onDismiss?: (id: string) => void;
-  onDismissAll?: () => void;
-  onMarkAllRead?: () => void;
   showFilters?: boolean;
   maxItems?: number;
+  showCreateSample?: boolean; // Para testing
 }
 
 export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
-  notifications = [],
-  loading = false,
-  onDismiss,
-  onDismissAll,
-  onMarkAllRead,
   showFilters = true,
-  maxItems = 8
+  maxItems = 8,
+  showCreateSample = false
 }) => {
   const [filter, setFilter] = useState<'all' | 'alert' | 'info' | 'success' | 'warning'>('all');
+  
+  // Usar el hook de notificaciones
+  const {
+    notifications,
+    loading,
+    counts,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    deleteAllNotifications,
+    refreshNotifications,
+    createSampleNotifications
+  } = useNotifications();
 
-  // Notificaciones de ejemplo
-  const defaultNotifications: Notification[] = [
-    {
-      id: '1',
-      type: 'alert',
-      priority: 'urgent',
-      title: 'Pago vencido',
-      message: 'Cliente "Empresa ABC" tiene una factura vencida de $1,250.00 desde hace 15 días',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 min ago
-      category: 'pago',
-      actionLabel: 'Gestionar',
-      onAction: () => console.log('Gestionar pago vencido'),
-      dismissible: true,
-      metadata: { clienteId: '123', monto: 1250 }
-    },
-    {
-      id: '2',
-      type: 'warning',
-      priority: 'high',
-      title: 'Stock bajo',
-      message: 'Quedan menos de 10 bidones de 20L en inventario',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 1), // 1 hour ago
-      category: 'inventario',
-      actionLabel: 'Ver inventario',
-      onAction: () => console.log('Ver inventario'),
-      dismissible: true
-    },
-    {
-      id: '3',
-      type: 'info',
-      priority: 'medium',
-      title: 'Nueva ruta optimizada',
-      message: 'Se ha generado una nueva ruta para mañana con 15 clientes',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-      category: 'entrega',
-      actionLabel: 'Ver ruta',
-      onAction: () => console.log('Ver ruta'),
-      dismissible: true
-    },
-    {
-      id: '4',
-      type: 'success',
-      priority: 'low',
-      title: 'Backup completado',
-      message: 'Respaldo automático de datos completado exitosamente a las 03:00',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6), // 6 hours ago
-      category: 'sistema',
-      dismissible: true
-    },
-    {
-      id: '5',
-      type: 'info',
-      priority: 'medium',
-      title: 'Cliente nuevo',
-      message: 'Se registró un nuevo cliente: "Restaurante XYZ" en Zona Norte',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8), // 8 hours ago
-      category: 'cliente',
-      actionLabel: 'Ver cliente',
-      onAction: () => console.log('Ver cliente'),
-      dismissible: true
-    }
-  ];
-
-  const notificationData = notifications.length > 0 ? notifications : defaultNotifications;
+  // Usar notificaciones reales del hook
+  const notificationData = notifications;
 
   // Filtrar notificaciones
   const filteredNotifications = notificationData
     .filter(notif => filter === 'all' || notif.type === filter)
     .slice(0, maxItems);
 
-  // Contar notificaciones por prioridad
-  const priorityCounts = {
-    urgent: notificationData.filter(n => n.priority === 'urgent').length,
-    high: notificationData.filter(n => n.priority === 'high').length,
-    medium: notificationData.filter(n => n.priority === 'medium').length,
-    low: notificationData.filter(n => n.priority === 'low').length
-  };
+  // Usar contadores del hook
+  const priorityCounts = counts.byPriority;
 
   // Obtener icono por tipo
-  const getTypeIcon = (type: Notification['type']) => {
+  const getTypeIcon = (type: SystemNotification['type']) => {
     const iconProps = { className: 'h-4 w-4' };
     switch (type) {
       case 'alert':
@@ -147,7 +75,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
   };
 
   // Obtener icono por categoría
-  const getCategoryIcon = (category: Notification['category']) => {
+  const getCategoryIcon = (category: SystemNotification['category']) => {
     const iconProps = { className: 'h-3 w-3 text-gray-500 dark:text-gray-300' };
     switch (category) {
       case 'entrega':
@@ -165,7 +93,7 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
   };
 
   // Obtener color por prioridad
-  const getPriorityColor = (priority: Notification['priority']) => {
+  const getPriorityColor = (priority: SystemNotification['priority']) => {
     switch (priority) {
       case 'urgent':
         return 'border-l-red-600 bg-red-50/80 dark:bg-red-900/20';
@@ -179,12 +107,12 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
     }
   };
 
-  // Filtros de tipo
+  // Filtros de tipo usando contadores del hook
   const typeFilters = [
-    { key: 'all', label: 'Todo', count: notificationData.length },
-    { key: 'alert', label: 'Alertas', count: notificationData.filter(n => n.type === 'alert').length },
-    { key: 'warning', label: 'Avisos', count: notificationData.filter(n => n.type === 'warning').length },
-    { key: 'info', label: 'Info', count: notificationData.filter(n => n.type === 'info').length }
+    { key: 'all', label: 'Todo', count: counts.total },
+    { key: 'alert', label: 'Alertas', count: counts.byType.alert },
+    { key: 'warning', label: 'Avisos', count: counts.byType.warning },
+    { key: 'info', label: 'Info', count: counts.byType.info }
   ];
 
   return (
@@ -202,18 +130,37 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
-          {onMarkAllRead && (
+          {showCreateSample && (
             <button
-              onClick={onMarkAllRead}
+              onClick={createSampleNotifications}
+              className="px-3 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors duration-200"
+              title="Crear notificaciones de ejemplo"
+            >
+              <Plus className="h-3 w-3 mr-1 inline" />
+              Ejemplo
+            </button>
+          )}
+          
+          <button
+            onClick={refreshNotifications}
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+            title="Actualizar notificaciones"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+
+          {counts.unread > 0 && (
+            <button
+              onClick={markAllAsRead}
               className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors duration-200"
             >
               Marcar como leídas
             </button>
           )}
           
-          {onDismissAll && notificationData.length > 0 && (
+          {notificationData.length > 0 && (
             <button
-              onClick={onDismissAll}
+              onClick={deleteAllNotifications}
               className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200"
             >
               Descartar todas
@@ -335,25 +282,38 @@ export const NotificationsWidget: React.FC<NotificationsWidgetProps> = ({
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
                           <Clock className="h-3 w-3 mr-1" />
-                          {formatDistanceToNow(notification.timestamp, { 
+                          {formatDistanceToNow(notification.createdAt, { 
                             addSuffix: true, 
                             locale: es 
                           })}
                         </span>
                         
                         <div className="flex items-center space-x-2">
-                          {notification.onAction && notification.actionLabel && (
+                          {notification.actionLabel && notification.actionUrl && (
                             <button
-                              onClick={notification.onAction}
+                              onClick={() => {
+                                // Navegar a la URL de acción
+                                window.location.href = notification.actionUrl!;
+                              }}
                               className="px-3 py-1.5 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-all duration-200 shadow-sm"
                             >
                               {notification.actionLabel}
                             </button>
                           )}
                           
-                          {notification.dismissible && onDismiss && (
+                          {!notification.read && (
                             <button
-                              onClick={() => onDismiss(notification.id)}
+                              onClick={() => markAsRead(notification.id!)}
+                              className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-all duration-200"
+                              title="Marcar como leída"
+                            >
+                              ✓
+                            </button>
+                          )}
+                          
+                          {notification.dismissible && (
+                            <button
+                              onClick={() => deleteNotification(notification.id!)}
                               className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200"
                               title="Descartar notificación"
                             >

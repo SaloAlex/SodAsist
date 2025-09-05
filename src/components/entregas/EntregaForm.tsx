@@ -149,12 +149,7 @@ export const EntregaForm: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [inventarioVehiculo, setInventarioVehiculo] = useState<{
-    sodas: number;
-    bidones10: number;
-    bidones20: number;
-    envasesDevueltos: number;
-  } | null>(null);
+  const [inventarioVehiculo, setInventarioVehiculo] = useState<Record<string, number>>({});
   const [historialCliente, setHistorialCliente] = useState<HistorialEntrega[]>([]);
   const [clienteStats, setClienteStats] = useState<ClienteStats | null>(null);
   
@@ -173,6 +168,7 @@ export const EntregaForm: React.FC = () => {
     envasesDevueltos: number;
     total: number;
     pagado: boolean;
+    montoPagado?: number;
     medioPago?: string;
     observaciones?: string;
     cliente: Cliente;
@@ -250,11 +246,25 @@ export const EntregaForm: React.FC = () => {
     productos.forEach(producto => {
       const fieldName = `producto_${producto.id}`;
       const cantidad = allValues[fieldName] as number || 0;
-      total += cantidad * producto.precioVenta;
+      const precio = producto.precioVenta || 0;
+      
+      // Validar que tanto cantidad como precio sean números válidos
+      if (!isNaN(cantidad) && !isNaN(precio) && cantidad >= 0 && precio >= 0) {
+        total += cantidad * precio;
+      }
     });
     
-    return total;
+    // Asegurar que el total sea un número válido
+    return isNaN(total) ? 0 : total;
   }, [productos, allValues]);
+
+  // Función auxiliar para manejar valores NaN
+  const safeNumber = (value: number | undefined | null): number => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return 0;
+    }
+    return value;
+  };
 
   // No actualizar el campo total automáticamente para evitar bucles infinitos
   // El total se calcula dinámicamente y se usa directamente en la UI
@@ -276,11 +286,53 @@ export const EntregaForm: React.FC = () => {
   }, [allValues.tipoPago, allValues.montoPagado, setValue]);
 
   // Limpiar mensaje de validación cuando cambien los valores del formulario
+  // PERO solo si el mensaje ya se mostró por un tiempo
   useEffect(() => {
     if (validationMessage) {
-      setValidationMessage('');
+      const timer = setTimeout(() => {
+        setValidationMessage('');
+      }, 5000); // Limpiar después de 5 segundos
+      
+      return () => clearTimeout(timer);
     }
-  }, [allValues, validationMessage]);
+  }, [validationMessage]);
+
+  // Limpiar mensaje de validación cuando se corrijan los errores
+  useEffect(() => {
+    if (validationMessage) {
+      const values = getValues();
+      
+      // Verificar si se corrigieron los errores
+      let errorCorregido = false;
+      
+      if (currentStep === 1 && values.clienteId) {
+        errorCorregido = true;
+      } else if (currentStep === 2) {
+        const tieneProductos = productos.some(producto => {
+          const fieldName = `producto_${producto.id}`;
+          const cantidad = values[fieldName] as number || 0;
+          return cantidad > 0;
+        });
+        if (tieneProductos) {
+          errorCorregido = true;
+        }
+      } else if (currentStep === 3) {
+        if (values.tipoPago) {
+          if (values.tipoPago === 'no_pagado') {
+            errorCorregido = true;
+          } else if (values.tipoPago === 'pagado_completo' && values.medioPago) {
+            errorCorregido = true;
+          } else if (values.tipoPago === 'pago_parcial' && values.montoPagado && values.montoPagado > 0 && values.medioPago) {
+            errorCorregido = true;
+          }
+        }
+      }
+      
+      if (errorCorregido) {
+        setValidationMessage('');
+      }
+    }
+  }, [allValues, currentStep, validationMessage, productos, getValues]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -381,48 +433,21 @@ export const EntregaForm: React.FC = () => {
 
   const loadInventarioVehiculo = async () => {
     try {
-      const inventario = await FirebaseService.getInventarioActual();
+      const inventario = await FirebaseService.getInventarioActualDinamico();
       if (inventario) {
-        setInventarioVehiculo({
-          sodas: inventario.sodas,
-          bidones10: inventario.bidones10,
-          bidones20: inventario.bidones20,
-          envasesDevueltos: inventario.envasesDevueltos
-        });
+        setInventarioVehiculo(inventario);
       } else {
-        setInventarioVehiculo({
-          sodas: 0,
-          bidones10: 0,
-          bidones20: 0,
-          envasesDevueltos: 0
-        });
+        setInventarioVehiculo({});
       }
     } catch (err) {
       console.error('Error al cargar inventario del vehículo:', err);
-      setInventarioVehiculo({
-        sodas: 0,
-        bidones10: 0,
-        bidones20: 0,
-        envasesDevueltos: 0
-      });
+      setInventarioVehiculo({});
     }
   };
 
-  // Función para obtener el stock del vehículo basado en el nombre del producto
-  const getStockVehiculo = (nombreProducto: string): number => {
-    if (!inventarioVehiculo) return 0;
-    
-    const nombre = nombreProducto.toLowerCase();
-    
-    if (nombre.includes('soda') || nombre.includes('gaseosa')) {
-      return inventarioVehiculo.sodas;
-    } else if (nombre.includes('10') || (nombre.includes('bidón') && !nombre.includes('20'))) {
-      return inventarioVehiculo.bidones10;
-    } else if (nombre.includes('20')) {
-      return inventarioVehiculo.bidones20;
-    }
-    
-    return 0;
+  // Función para obtener el stock del vehículo basado en el ID del producto
+  const getStockVehiculo = (productoId: string): number => {
+    return inventarioVehiculo[productoId] || 0;
   };
 
   const loadClientes = async () => {
@@ -715,18 +740,26 @@ export const EntregaForm: React.FC = () => {
       let montoPagado = 0;
 
       // Calcular el nuevo saldo basado en el tipo de pago
+      // IMPORTANTE: Siempre se suma la nueva compra al saldo pendiente
+      const saldoAnterior = safeNumber(clienteData?.saldoPendiente);
+      const totalCalculadoValido = safeNumber(totalCalculado);
+      const totalConDeuda = saldoAnterior + totalCalculadoValido;
+      
       switch (data.tipoPago) {
         case 'no_pagado':
-          nuevoSaldo = nuevoSaldo + totalCalculado;
+          // No se paga nada, se suma toda la compra a la deuda
+          nuevoSaldo = totalConDeuda;
           montoPagado = 0;
           break;
         case 'pagado_completo':
-          nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
-          montoPagado = totalCalculado;
+          // Se paga todo (deuda anterior + nueva compra)
+          nuevoSaldo = 0;
+          montoPagado = totalConDeuda;
           break;
         case 'pago_parcial':
+          // Se paga un monto parcial, se resta del total (deuda + nueva compra)
           montoPagado = data.montoPagado || 0;
-          nuevoSaldo = Math.max(0, nuevoSaldo - montoPagado);
+          nuevoSaldo = Math.max(0, totalConDeuda - montoPagado);
           break;
       }
 
@@ -774,6 +807,7 @@ export const EntregaForm: React.FC = () => {
         envasesDevueltos: data.envasesDevueltos,
         total: totalCalculado,
         pagado: data.pagado,
+        montoPagado: montoPagado,
         medioPago: data.medioPago,
         observaciones: data.observaciones,
         cliente: clienteData as Cliente,
@@ -933,7 +967,7 @@ export const EntregaForm: React.FC = () => {
                   // Sugerir cantidades basadas en el stock del vehículo (máximo 50% del stock)
                   productos.forEach(producto => {
                     const fieldName = `producto_${producto.id}`;
-                    const stockVehiculo = getStockVehiculo(producto.nombre);
+                    const stockVehiculo = getStockVehiculo(producto.id);
                     const sugerencia = Math.floor(stockVehiculo * 0.5);
                     setValue(fieldName as string, sugerencia);
                   });
@@ -1146,7 +1180,7 @@ export const EntregaForm: React.FC = () => {
                 {/* Productos dinámicos */}
                 {productos.map((producto) => {
                   const fieldName = `producto_${producto.id}` as keyof EntregaFormData;
-                  const stockDisponible = getStockVehiculo(producto.nombre);
+                  const stockDisponible = getStockVehiculo(producto.id);
                   const cantidadSolicitada = allValues[fieldName] as number || 0;
                   const excedeStock = cantidadSolicitada > stockDisponible;
                   
@@ -1279,6 +1313,35 @@ export const EntregaForm: React.FC = () => {
                 Información de Pago
               </h3>
 
+              {/* Alerta específica para el paso de pago */}
+              {validationMessage && currentStep === 3 && (
+                <div className="mb-6 p-4 bg-gradient-to-r from-amber-400 to-orange-500 dark:from-amber-500 dark:to-orange-600 border-2 border-amber-300 dark:border-amber-400 rounded-xl shadow-lg">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <div className="flex items-center justify-center w-10 h-10 bg-white dark:bg-amber-100 rounded-full">
+                        <svg className="h-6 w-6 text-amber-600 dark:text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="ml-4 flex-1">
+                      <h4 className="text-lg font-bold text-white dark:text-amber-100 mb-1">
+                        💳 INFORMACIÓN DE PAGO INCOMPLETA
+                      </h4>
+                      <p className="text-base font-semibold text-white dark:text-amber-100">
+                        {validationMessage}
+                      </p>
+                      <p className="text-sm text-amber-100 dark:text-amber-200 mt-1">
+                        Selecciona una opción de pago y completa los campos requeridos.
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <div className="w-4 h-4 bg-white dark:bg-amber-200 rounded-full animate-ping"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1323,10 +1386,12 @@ export const EntregaForm: React.FC = () => {
                           value={value}
                           className="sr-only peer"
                         />
-                        <div className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                          color === 'red' ? 'border-gray-200 dark:border-gray-600 hover:border-red-300 peer-checked:border-red-500 peer-checked:bg-red-50 dark:peer-checked:bg-red-900/20' :
-                          color === 'green' ? 'border-gray-200 dark:border-gray-600 hover:border-green-300 peer-checked:border-green-500 peer-checked:bg-green-50 dark:peer-checked:bg-green-900/20' :
-                          'border-gray-200 dark:border-gray-600 hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20'
+                        <div className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all duration-300 ${
+                          validationMessage && currentStep === 3 && !allValues.tipoPago
+                            ? 'border-red-400 bg-red-50 dark:bg-red-900/20 animate-pulse shadow-lg'
+                            : color === 'red' ? 'border-gray-200 dark:border-gray-600 hover:border-red-300 peer-checked:border-red-500 peer-checked:bg-red-50 dark:peer-checked:bg-red-900/20' :
+                            color === 'green' ? 'border-gray-200 dark:border-gray-600 hover:border-green-300 peer-checked:border-green-500 peer-checked:bg-green-50 dark:peer-checked:bg-green-900/20' :
+                            'border-gray-200 dark:border-gray-600 hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20'
                         }`}>
                           <div className="flex-1">
                             <div className={`font-medium ${
@@ -1364,7 +1429,11 @@ export const EntregaForm: React.FC = () => {
                         step="0.01"
                         min="0.01"
                         max={totalCalculado + (clienteSeleccionado?.saldoPendiente || 0)}
-                        className="w-full pl-8 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        className={`w-full pl-8 pr-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all duration-300 ${
+                          validationMessage && currentStep === 3 && allValues.tipoPago === 'pago_parcial' && (!allValues.montoPagado || allValues.montoPagado <= 0)
+                            ? 'border-red-400 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 animate-pulse shadow-lg'
+                            : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                        }`}
                         placeholder="0.00"
                       />
                     </div>
@@ -1397,7 +1466,11 @@ export const EntregaForm: React.FC = () => {
                             value={value}
                             className="sr-only peer"
                           />
-                          <div className="flex flex-col sm:flex-row sm:items-center items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20 transition-colors">
+                          <div className={`flex flex-col sm:flex-row sm:items-center items-center p-3 border-2 rounded-lg cursor-pointer transition-all duration-300 ${
+                            validationMessage && currentStep === 3 && (allValues.tipoPago === 'pagado_completo' || allValues.tipoPago === 'pago_parcial') && !allValues.medioPago
+                              ? 'border-red-400 bg-red-50 dark:bg-red-900/20 animate-pulse shadow-lg'
+                              : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 dark:peer-checked:bg-blue-900/20'
+                          }`}>
                             <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-gray-400 peer-checked:text-blue-600 dark:peer-checked:text-blue-400" />
                             <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1 sm:mt-0 sm:ml-2">{label}</span>
                           </div>
@@ -1422,11 +1495,15 @@ export const EntregaForm: React.FC = () => {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Saldo actual:</span>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">${(clienteSeleccionado?.saldoPendiente || 0).toFixed(2)}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          ${safeNumber(clienteSeleccionado?.saldoPendiente).toFixed(2)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Entrega actual:</span>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">${totalCalculado.toFixed(2)}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                          ${safeNumber(totalCalculado).toFixed(2)}
+                        </span>
                       </div>
                       {allValues.tipoPago === 'pago_parcial' && allValues.montoPagado && !isNaN(allValues.montoPagado as number) && (
                         <div className="flex justify-between">
@@ -1437,20 +1514,27 @@ export const EntregaForm: React.FC = () => {
                       {allValues.tipoPago === 'pagado_completo' && (
                         <div className="flex justify-between">
                           <span className="text-gray-600 dark:text-gray-400">Monto pagado:</span>
-                          <span className="font-medium text-green-600 dark:text-green-400">-${totalCalculado.toFixed(2)}</span>
+                          <span className="font-medium text-green-600 dark:text-green-400">
+                            -${(safeNumber(totalCalculado) + safeNumber(clienteSeleccionado?.saldoPendiente)).toFixed(2)}
+                          </span>
                         </div>
                       )}
                       <div className="border-t border-gray-300 dark:border-gray-500 pt-2 flex justify-between font-semibold">
                         <span className="text-gray-900 dark:text-gray-100">Nuevo saldo:</span>
                         <span className={`${
                           (() => {
-                            let nuevoSaldo = (clienteSeleccionado?.saldoPendiente || 0);
+                            const saldoAnterior = safeNumber(clienteSeleccionado?.saldoPendiente);
+                            const totalCalculadoValido = safeNumber(totalCalculado);
+                            const totalConDeuda = saldoAnterior + totalCalculadoValido;
+                            let nuevoSaldo = 0;
+                            
                             if (allValues.tipoPago === 'no_pagado') {
-                              nuevoSaldo += totalCalculado;
+                              nuevoSaldo = totalConDeuda;
                             } else if (allValues.tipoPago === 'pagado_completo') {
-                              nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
+                              nuevoSaldo = 0;
                             } else if (allValues.tipoPago === 'pago_parcial' && allValues.montoPagado && !isNaN(allValues.montoPagado as number)) {
-                              nuevoSaldo = Math.max(0, nuevoSaldo - Number(allValues.montoPagado));
+                              const montoPagadoValido = Number(allValues.montoPagado);
+                              nuevoSaldo = Math.max(0, totalConDeuda - montoPagadoValido);
                             }
                             return nuevoSaldo;
                           })() > 0 
@@ -1458,15 +1542,20 @@ export const EntregaForm: React.FC = () => {
                             : 'text-green-600 dark:text-green-400'
                         }`}>
                           ${(() => {
-                            let nuevoSaldo = (clienteSeleccionado?.saldoPendiente || 0);
+                            const saldoAnterior = safeNumber(clienteSeleccionado?.saldoPendiente);
+                            const totalCalculadoValido = safeNumber(totalCalculado);
+                            const totalConDeuda = saldoAnterior + totalCalculadoValido;
+                            let nuevoSaldo = 0;
+                            
                             if (allValues.tipoPago === 'no_pagado') {
-                              nuevoSaldo += totalCalculado;
+                              nuevoSaldo = totalConDeuda;
                             } else if (allValues.tipoPago === 'pagado_completo') {
-                              nuevoSaldo = Math.max(0, nuevoSaldo - totalCalculado);
+                              nuevoSaldo = 0;
                             } else if (allValues.tipoPago === 'pago_parcial' && allValues.montoPagado && !isNaN(allValues.montoPagado as number)) {
-                              nuevoSaldo = Math.max(0, nuevoSaldo - Number(allValues.montoPagado));
+                              const montoPagadoValido = Number(allValues.montoPagado);
+                              nuevoSaldo = Math.max(0, totalConDeuda - montoPagadoValido);
                             }
-                            return nuevoSaldo.toFixed(2);
+                            return isNaN(nuevoSaldo) ? 0 : nuevoSaldo.toFixed(2);
                           })()}
                         </span>
                       </div>
@@ -1637,10 +1726,45 @@ export const EntregaForm: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pago</h4>
                   <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">${totalCalculado.toFixed(2)}</p>
-                    <p className={`text-sm ${allValues.pagado ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {allValues.pagado ? `Pagado - ${allValues.medioPago}` : 'Pendiente de pago'}
-                    </p>
+                    {(() => {
+                      const saldoAnterior = safeNumber(clienteSeleccionado?.saldoPendiente);
+                      const totalCalculadoValido = safeNumber(totalCalculado);
+                      const totalConDeuda = saldoAnterior + totalCalculadoValido;
+                      let montoMostrar = 0;
+                      let estadoPago = '';
+                      let colorClase = '';
+
+                      if (allValues.tipoPago === 'no_pagado') {
+                        montoMostrar = totalConDeuda;
+                        estadoPago = 'Pendiente de pago';
+                        colorClase = 'text-red-600 dark:text-red-400';
+                      } else if (allValues.tipoPago === 'pagado_completo') {
+                        montoMostrar = totalConDeuda;
+                        estadoPago = `Pagado completo - ${allValues.medioPago}`;
+                        colorClase = 'text-green-600 dark:text-green-400';
+                      } else if (allValues.tipoPago === 'pago_parcial') {
+                        const montoPagado = safeNumber(allValues.montoPagado);
+                        montoMostrar = Math.max(0, totalConDeuda - montoPagado);
+                        estadoPago = `Pago parcial - ${allValues.medioPago}`;
+                        colorClase = montoMostrar > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400';
+                      }
+
+                      return (
+                        <>
+                          <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            ${montoMostrar.toFixed(2)}
+                          </p>
+                          <p className={`text-sm ${colorClase}`}>
+                            {estadoPago}
+                          </p>
+                          {allValues.tipoPago === 'pago_parcial' && montoMostrar > 0 && (
+                            <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                              Saldo pendiente: ${montoMostrar.toFixed(2)}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1689,19 +1813,30 @@ export const EntregaForm: React.FC = () => {
       <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6"> {/* eslint-disable-line @typescript-eslint/no-explicit-any */}
         {renderCurrentStep()}
 
-        {/* Mensaje de validación */}
+        {/* Mensaje de validación - MUY NOTORIO */}
         {validationMessage && (
-          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="mb-6 p-4 bg-gradient-to-r from-red-500 to-red-600 dark:from-red-600 dark:to-red-700 border-2 border-red-400 dark:border-red-500 rounded-xl shadow-lg animate-pulse">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
+                <div className="flex items-center justify-center w-8 h-8 bg-white dark:bg-red-100 rounded-full animate-bounce">
+                  <svg className="h-5 w-5 text-red-600 dark:text-red-700" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
               </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-800 dark:text-red-200">
+              <div className="ml-4 flex-1">
+                <h3 className="text-lg font-bold text-white dark:text-red-100 mb-1">
+                  ⚠️ ATENCIÓN REQUERIDA
+                </h3>
+                <p className="text-base font-semibold text-white dark:text-red-100">
                   {validationMessage}
                 </p>
+                <p className="text-sm text-red-100 dark:text-red-200 mt-1">
+                  Por favor, completa la información requerida antes de continuar.
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <div className="w-3 h-3 bg-white dark:bg-red-200 rounded-full animate-ping"></div>
               </div>
             </div>
           </div>
@@ -1723,10 +1858,23 @@ export const EntregaForm: React.FC = () => {
               <button
                 type="button"
                 onClick={nextStep}
-                className="flex items-center justify-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full sm:w-auto"
+                className={`flex items-center justify-center px-6 py-3 rounded-lg transition-all duration-300 w-full sm:w-auto font-semibold ${
+                  validationMessage 
+                    ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg animate-pulse border-2 border-red-400' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
               >
+                {validationMessage ? (
+                  <>
+                    ⚠️ COMPLETAR PASO
+                    <ArrowRight className="h-4 w-4 ml-2 animate-bounce" />
+                  </>
+                ) : (
+                  <>
                 Siguiente
                 <ArrowRight className="h-4 w-4 ml-2" />
+                  </>
+                )}
               </button>
             ) : (
               <button
@@ -1918,12 +2066,12 @@ export const EntregaForm: React.FC = () => {
                               Cambio en saldo:
                             </span>
                             <span className={`font-bold ${
-                              entregaRegistrada.nuevoSaldo > estadoCliente.saldoPendiente 
-                                ? 'text-red-600 dark:text-red-400' 
-                                : 'text-green-600 dark:text-green-400'
+                              entregaRegistrada.nuevoSaldo < estadoCliente.saldoPendiente 
+                                ? 'text-green-600 dark:text-green-400' 
+                                : 'text-red-600 dark:text-red-400'
                             }`}>
-                              {entregaRegistrada.nuevoSaldo > estadoCliente.saldoPendiente ? '+' : ''}
-                              ${(entregaRegistrada.nuevoSaldo - estadoCliente.saldoPendiente).toFixed(2)}
+                              {entregaRegistrada.nuevoSaldo < estadoCliente.saldoPendiente ? '-' : '+'}
+                              ${Math.abs(entregaRegistrada.nuevoSaldo - estadoCliente.saldoPendiente).toFixed(2)}
                             </span>
                           </div>
                         </div>
@@ -1964,14 +2112,17 @@ export const EntregaForm: React.FC = () => {
                     <DollarSign className="h-4 w-4 mr-2" />
                     Información de Pago
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-purple-700 dark:text-purple-300 font-medium">Total:</span>
-                      <span className="ml-2 text-lg font-bold text-purple-900 dark:text-purple-100">${entregaRegistrada.total}</span>
+                  <div className="space-y-3 text-sm">
+                    {/* Nueva compra */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-purple-700 dark:text-purple-300 font-medium">Nueva compra:</span>
+                      <span className="text-lg font-bold text-purple-900 dark:text-purple-100">${entregaRegistrada.total.toFixed(2)}</span>
                     </div>
-                    <div>
+                    
+                    {/* Estado del pago */}
+                    <div className="flex justify-between items-center">
                       <span className="text-purple-700 dark:text-purple-300 font-medium">Estado:</span>
-                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                         entregaRegistrada.pagado 
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
                           : 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
@@ -1979,21 +2130,35 @@ export const EntregaForm: React.FC = () => {
                         {entregaRegistrada.pagado ? 'Pagado' : 'Pendiente'}
                       </span>
                     </div>
+                    
+                    {/* Método de pago si aplica */}
                     {entregaRegistrada.pagado && entregaRegistrada.medioPago && (
-                      <div>
+                      <div className="flex justify-between items-center">
                         <span className="text-purple-700 dark:text-purple-300 font-medium">Método:</span>
-                        <span className="ml-2 text-purple-900 dark:text-purple-100 capitalize">{entregaRegistrada.medioPago}</span>
+                        <span className="text-purple-900 dark:text-purple-100 capitalize font-medium">{entregaRegistrada.medioPago}</span>
                       </div>
                     )}
-                    <div>
-                      <span className="text-purple-700 dark:text-purple-300 font-medium">Nuevo Saldo:</span>
-                      <span className={`ml-2 font-bold ${
-                        entregaRegistrada.nuevoSaldo > 0 
-                          ? 'text-orange-600 dark:text-orange-400'
-                          : 'text-green-600 dark:text-green-400'
-                      }`}>
-                        ${entregaRegistrada.nuevoSaldo}
-                      </span>
+                    
+                    {/* Monto pagado si aplica */}
+                    {entregaRegistrada.pagado && entregaRegistrada.montoPagado && entregaRegistrada.montoPagado > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-purple-700 dark:text-purple-300 font-medium">Monto pagado:</span>
+                        <span className="text-green-600 dark:text-green-400 font-bold">${entregaRegistrada.montoPagado.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Saldo pendiente */}
+                    <div className="border-t border-purple-200 dark:border-purple-700 pt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-purple-700 dark:text-purple-300 font-medium">Saldo pendiente:</span>
+                        <span className={`text-lg font-bold ${
+                          entregaRegistrada.nuevoSaldo > 0 
+                            ? 'text-orange-600 dark:text-orange-400'
+                            : 'text-green-600 dark:text-green-400'
+                        }`}>
+                          ${entregaRegistrada.nuevoSaldo.toFixed(2)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

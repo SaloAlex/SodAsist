@@ -652,4 +652,43 @@ export class FirebaseService {
       throw error;
     }
   }
+
+  // Método para obtener el inventario actual en formato dinámico
+  static async getInventarioActualDinamico(): Promise<Record<string, number> | null> {
+    try {
+      const user = auth.currentUser;
+      if (!user?.email) {
+        console.warn('Usuario no autenticado para obtener inventario');
+        return null;
+      }
+
+      const inventarioRef = doc(db, `tenants/${user.email}/inventarioVehiculo`, 'actual');
+      const inventarioDoc = await getDoc(inventarioRef);
+      
+      if (inventarioDoc.exists()) {
+        const data = inventarioDoc.data();
+        
+        if (!data) {
+          console.warn('Inventario actual no tiene datos');
+          return null;
+        }
+        
+        const inventario: Record<string, number> = {};
+        
+        // Mapear todos los campos numéricos (excluyendo metadatos)
+        Object.keys(data).forEach(key => {
+          if (key !== 'updatedAt' && key !== 'fecha' && typeof data[key] === 'number') {
+            inventario[key] = data[key];
+          }
+        });
+        
+        return inventario;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error al obtener inventario dinámico:', error);
+      throw error;
+    }
+  }
 }

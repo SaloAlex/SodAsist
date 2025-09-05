@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
+import { getMessaging, isSupported } from 'firebase/messaging';
 import { getTenantFirebaseConfig, getCurrentTenant } from './tenantConfig';
 
 // Obtener configuración del tenant actual
@@ -33,6 +34,14 @@ export const app = initializeApp(firebaseConfig, currentTenant.id);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
+
+// Initialize Firebase Cloud Messaging (solo si está soportado)
+export const messaging = isSupported().then((supported) => {
+  if (supported) {
+    return getMessaging(app);
+  }
+  return null;
+});
 
 // Exportar información del tenant
 export { currentTenant };
