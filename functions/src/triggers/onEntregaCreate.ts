@@ -1,6 +1,51 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 
+// Enum para tipos de movimiento
+enum TipoMovimiento {
+  ENTRADA = 'entrada',
+  SALIDA = 'salida',
+  VENTA = 'venta',
+  AJUSTE = 'ajuste',
+  TRANSFERENCIA = 'transferencia',
+  MERMA = 'merma',
+  DEVOLUCION = 'devolucion',
+  INICIAL = 'inicial'
+}
+
+// Función para registrar movimiento de inventario
+async function registrarMovimiento(
+  db: admin.firestore.Firestore,
+  tenantId: string,
+  productoId: string,
+  tipo: TipoMovimiento,
+  cantidad: number,
+  motivo: string,
+  usuario: string,
+  referencia?: string,
+  observaciones?: string
+): Promise<void> {
+  try {
+    const movimientosRef = db.collection(`tenants/${tenantId}/movimientosInventario`);
+    
+    await movimientosRef.add({
+      productoId,
+      tipo,
+      cantidad: Math.abs(cantidad),
+      motivo,
+      referencia,
+      observaciones,
+      fecha: admin.firestore.FieldValue.serverTimestamp(),
+      usuario,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`✅ Movimiento registrado: ${tipo} - ${cantidad} unidades de ${productoId}`);
+  } catch (error) {
+    console.error('❌ Error al registrar movimiento:', error);
+  }
+}
+
 export const onEntregaCreate = onDocumentCreated('tenants/{tenantId}/entregas/{entregaId}', async (event) => {
     const entrega = event.data?.data();
     const db = admin.firestore();
@@ -61,13 +106,33 @@ export const onEntregaCreate = onDocumentCreated('tenants/{tenantId}/entregas/{e
         // Calcular nuevo stock basado en los productos entregados
         const nuevoStock = { ...inventoryData };
         
+        // Array para almacenar promesas de movimientos
+        const movimientosPromises: Promise<void>[] = [];
+        
         // Si la entrega tiene productos dinámicos, usarlos
         if (entrega.productos && Array.isArray(entrega.productos)) {
           console.log('🔄 Procesando productos dinámicos:', entrega.productos);
           
-          entrega.productos.forEach((producto: { nombre: string; cantidad: number }) => {
+          entrega.productos.forEach((producto: { id?: string; nombre: string; cantidad: number }) => {
             const nombre = producto.nombre?.toLowerCase() || '';
             console.log(`📦 Procesando: ${producto.nombre} (${producto.cantidad} unidades)`);
+            
+            // Registrar movimiento de venta del vehículo
+            if (producto.id) {
+              movimientosPromises.push(
+                registrarMovimiento(
+                  db,
+                  tenantId,
+                  producto.id,
+                  TipoMovimiento.VENTA,
+                  producto.cantidad,
+                  'Entrega a cliente',
+                  entrega.usuario || 'sistema',
+                  entrega.id || 'entrega',
+                  `Venta a cliente: ${producto.nombre} - ${producto.cantidad} unidades`
+                )
+              );
+            }
             
             if (nombre.includes('soda') || nombre.includes('gaseosa')) {
               const stockAnterior = nuevoStock.sodas || 0;
@@ -99,6 +164,10 @@ export const onEntregaCreate = onDocumentCreated('tenants/{tenantId}/entregas/{e
         });
         
         console.log('✅ Inventario del vehículo actualizado exitosamente');
+        
+        // Registrar todos los movimientos
+        await Promise.all(movimientosPromises);
+        console.log('✅ Movimientos de inventario registrados exitosamente');
       } else {
         console.warn('⚠️ No se encontró inventario del vehículo para el tenant:', tenantId);
       }

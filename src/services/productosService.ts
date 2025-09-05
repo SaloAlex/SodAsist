@@ -28,6 +28,7 @@ import {
   UnidadMedida,
   TipoMovimiento
 } from '../types';
+import { InventarioService } from './inventarioService';
 
 export class ProductosService {
 
@@ -260,6 +261,24 @@ export class ProductosService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
+      // Registrar movimiento inicial si el producto tiene stock
+      if (producto.stock && producto.stock > 0) {
+        try {
+          await InventarioService.registrarMovimiento(
+            docRef.id,
+            TipoMovimiento.INICIAL,
+            producto.stock,
+            'Stock inicial del producto',
+            auth.currentUser?.email || 'sistema',
+            'creacion_producto',
+            `Producto creado con stock inicial: ${producto.stock} unidades`
+          );
+        } catch (error) {
+          console.error('Error al registrar movimiento inicial:', error);
+          // No lanzar error para no interrumpir la creación del producto
+        }
+      }
 
       return docRef.id;
     } catch (error) {

@@ -37,10 +37,10 @@ export class InventarioService {
    */
   private static getTenantPath(collectionName: string): string {
     const user = auth.currentUser;
-    if (!user || !user.uid) {
-      throw new Error('Usuario no autenticado');
+    if (!user || !user.email) {
+      throw new Error('Usuario no autenticado o sin email');
     }
-    return `tenants/${user.uid}/${collectionName}`;
+    return `tenants/${user.email}/${collectionName}`;
   }
 
   /**
@@ -237,8 +237,8 @@ export class InventarioService {
       const resultado = await runTransaction(db, async (transaction) => {
         // Obtener producto actual dentro de la transacción
         const user = auth.currentUser;
-        if (!user) throw new Error('Usuario no autenticado');
-        const productoRef = doc(db, `tenants/${user.uid}/productos`, productoId);
+        if (!user || !user.email) throw new Error('Usuario no autenticado o sin email');
+        const productoRef = doc(db, `tenants/${user.email}/productos`, productoId);
         const productoDoc = await transaction.get(productoRef);
         
         if (!productoDoc.exists()) {
@@ -341,10 +341,10 @@ export class InventarioService {
       await runTransaction(db, async (transaction) => {
         // Validar todos los movimientos primero
         const user = auth.currentUser;
-        if (!user) throw new Error('Usuario no autenticado');
+        if (!user || !user.email) throw new Error('Usuario no autenticado o sin email');
         
         for (const mov of movimientos) {
-          const productoRef = doc(db, `tenants/${user.uid}/productos`, mov.productoId);
+          const productoRef = doc(db, `tenants/${user.email}/productos`, mov.productoId);
           const productoDoc = await transaction.get(productoRef);
           
           if (!productoDoc.exists()) {

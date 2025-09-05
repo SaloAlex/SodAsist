@@ -27,6 +27,7 @@ import { InventarioDashboard } from '../components/inventario/InventarioDashboar
 import { ProductoForm } from '../components/inventario/ProductoForm';
 import { CategoriaManager } from '../components/inventario/CategoriaManager';
 import { InventarioVehiculoFormDinamico } from '../components/inventario/InventarioVehiculoFormDinamico';
+import { MovimientosInventario } from '../components/inventario/MovimientosInventario';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -726,19 +727,7 @@ export const Inventario: React.FC = () => {
         );
       
       case 'movimientos':
-        return (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <div className="text-center py-12">
-              <Upload className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-white">
-                Movimientos de Inventario
-              </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Esta funcionalidad estará disponible próximamente
-              </p>
-            </div>
-          </div>
-        );
+        return <MovimientosInventario />;
       
       case 'vehiculo':
         return (

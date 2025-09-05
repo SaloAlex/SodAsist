@@ -14,9 +14,11 @@ import { Producto } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuthStore } from '../../store/authStore';
 import { ProductosService } from '../../services/productosService';
+import { InventarioService } from '../../services/inventarioService';
 import toast from 'react-hot-toast';
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { TipoMovimiento } from '../../types';
 
 // Schema dinámico basado en productos disponibles
 const createSchema = (productos: Producto[]) => {
@@ -171,7 +173,9 @@ export const InventarioVehiculoFormDinamico: React.FC<InventarioVehiculoFormDina
         fecha: serverTimestamp()
       });
 
-      // 2. Descontar del inventario del depósito
+      // 2. Descontar del inventario del depósito y registrar movimientos
+      const movimientosPromises: Promise<string>[] = [];
+      
       productos.forEach(producto => {
         const cantidadCargada = data[`producto_${producto.id}`] || 0;
         if (cantidadCargada > 0) {
@@ -182,10 +186,26 @@ export const InventarioVehiculoFormDinamico: React.FC<InventarioVehiculoFormDina
             stock: nuevoStock,
             updatedAt: serverTimestamp()
           });
+
+          // Registrar movimiento de salida del depósito
+          movimientosPromises.push(
+            InventarioService.registrarMovimiento(
+              producto.id,
+              TipoMovimiento.SALIDA,
+              cantidadCargada,
+              'Carga de vehículo',
+              user.email || 'sistema',
+              'carga_vehiculo',
+              `Transferencia al vehículo: ${cantidadCargada} unidades`
+            )
+          );
         }
       });
 
       await batch.commit();
+
+      // Registrar todos los movimientos después del commit del batch
+      await Promise.all(movimientosPromises);
 
       toast.success('Inventario del vehículo cargado correctamente');
       onSave?.(inventarioVehiculoData);

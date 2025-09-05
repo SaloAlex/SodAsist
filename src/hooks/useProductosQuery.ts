@@ -300,7 +300,7 @@ export const useRegistrarMovimientoAtomico = () => {
         tipo,
         cantidad,
         motivo,
-        user.uid,
+        user.email || user.uid,
         referencia,
         observaciones
       );
@@ -349,7 +349,7 @@ export const useRegistrarMovimientosMultiples = () => {
       if (!user) throw new Error('Usuario no autenticado');
       return InventarioService.registrarMovimientosMultiples(
         movimientos,
-        user.uid,
+        user.email || user.uid,
         referencia
       );
     },
