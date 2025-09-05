@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ProductosService } from '../services/productosService';
 import { InventarioService } from '../services/inventarioService';
-import { Producto, CategoriaProducto, FiltrosProductos, PaginacionProductos, ResultadoPaginado, TipoMovimiento, ResultadoTransaccion } from '../types';
+import { Producto, CategoriaProducto, FiltrosProductos, PaginacionProductos, TipoMovimiento, ResultadoTransaccion } from '../types';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 
@@ -53,7 +53,7 @@ export const useProductosPaginados = (
     queryFn: () => ProductosService.getProductosPaginados(filtros, paginacion),
     enabled: !!user,
     staleTime: 2 * 60 * 1000, // 2 minutos para productos paginados
-    keepPreviousData: true, // Mantener datos anteriores mientras carga la nueva página
+    placeholderData: (previousData) => previousData, // Mantener datos anteriores mientras carga la nueva página
   });
 };
 
@@ -102,7 +102,7 @@ export const useCrearProducto = () => {
   return useMutation({
     mutationFn: (producto: Partial<Producto>) => {
       if (!user) throw new Error('Usuario no autenticado');
-      return ProductosService.crearProducto(producto, user.uid);
+      return ProductosService.crearProducto(producto as Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>);
     },
     onSuccess: (nuevoProducto) => {
       // Invalidar queries relacionadas
@@ -110,7 +110,10 @@ export const useCrearProducto = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.categorias });
       
       // Agregar el nuevo producto al cache
-      queryClient.setQueryData(queryKeys.producto(nuevoProducto.id), nuevoProducto);
+      if (nuevoProducto && typeof nuevoProducto === 'object' && 'id' in nuevoProducto) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        queryClient.setQueryData(queryKeys.producto((nuevoProducto as any).id), nuevoProducto);
+      }
       
       toast.success('Producto creado exitosamente');
     },
@@ -129,7 +132,7 @@ export const useActualizarProducto = () => {
   return useMutation({
     mutationFn: ({ id, producto }: { id: string; producto: Partial<Producto> }) => {
       if (!user) throw new Error('Usuario no autenticado');
-      return ProductosService.actualizarProducto(id, producto, user.uid);
+      return ProductosService.actualizarProducto(id, producto);
     },
     onSuccess: (productoActualizado, { id }) => {
       // Actualizar el producto específico en el cache
@@ -155,7 +158,7 @@ export const useEliminarProducto = () => {
   return useMutation({
     mutationFn: (id: string) => {
       if (!user) throw new Error('Usuario no autenticado');
-      return ProductosService.eliminarProducto(id, user.uid);
+      return ProductosService.eliminarProducto(id);
     },
     onSuccess: (_, id) => {
       // Remover el producto del cache
@@ -181,14 +184,17 @@ export const useCrearCategoria = () => {
   return useMutation({
     mutationFn: (categoria: Partial<CategoriaProducto>) => {
       if (!user) throw new Error('Usuario no autenticado');
-      return ProductosService.crearCategoria(categoria, user.uid);
+      return ProductosService.crearCategoria(categoria as Omit<CategoriaProducto, 'id' | 'createdAt' | 'updatedAt'>);
     },
     onSuccess: (nuevaCategoria) => {
       // Invalidar categorías
       queryClient.invalidateQueries({ queryKey: queryKeys.categorias });
       
       // Agregar la nueva categoría al cache
-      queryClient.setQueryData(queryKeys.categoria(nuevaCategoria.id), nuevaCategoria);
+      if (nuevaCategoria && typeof nuevaCategoria === 'object' && 'id' in nuevaCategoria) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        queryClient.setQueryData(queryKeys.categoria((nuevaCategoria as any).id), nuevaCategoria);
+      }
       
       toast.success('Categoría creada exitosamente');
     },
@@ -207,7 +213,7 @@ export const useActualizarCategoria = () => {
   return useMutation({
     mutationFn: ({ id, categoria }: { id: string; categoria: Partial<CategoriaProducto> }) => {
       if (!user) throw new Error('Usuario no autenticado');
-      return ProductosService.actualizarCategoria(id, categoria, user.uid);
+      return ProductosService.actualizarCategoria(id, categoria);
     },
     onSuccess: (categoriaActualizada, { id }) => {
       // Actualizar la categoría específica en el cache
@@ -233,7 +239,7 @@ export const useEliminarCategoria = () => {
   return useMutation({
     mutationFn: (id: string) => {
       if (!user) throw new Error('Usuario no autenticado');
-      return ProductosService.eliminarCategoria(id, user.uid);
+      return ProductosService.eliminarCategoria(id);
     },
     onSuccess: (_, id) => {
       // Remover la categoría del cache

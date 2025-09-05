@@ -349,7 +349,7 @@ export const Dashboard: React.FC = () => {
             toast.error('No se pudo encontrar el gráfico para exportar');
             return;
           }
-          blob = await ChartExportService.exportChartAsPNG(chartElement, exportData);
+          blob = await ChartExportService.exportChartAsPNG(chartElement);
           filename = `grafico_ventas_${new Date().toISOString().split('T')[0]}.png`;
           break;
         }

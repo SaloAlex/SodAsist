@@ -36,7 +36,7 @@ export const TransaccionModal: React.FC<TransaccionModalProps> = ({
   if (!isOpen) return null;
 
   const calcularStockResultante = () => {
-    const { stock, stockMinimo, stockMaximo } = producto;
+    const { stock } = producto;
     const { tipo, cantidad } = movimiento;
     
     let stockResultante = stock;

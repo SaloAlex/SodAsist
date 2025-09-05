@@ -6,7 +6,6 @@ import {
   VolumeX,
   Vibrate,
   Smartphone,
-  Settings,
   TestTube,
   Check,
   X,

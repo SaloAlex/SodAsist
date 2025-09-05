@@ -13,7 +13,8 @@ import {
   onSnapshot,
   DocumentData,
   QuerySnapshot,
-  Unsubscribe
+  Unsubscribe,
+  WhereFilterOp
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { getTenantCollectionPath, getCurrentTenantId } from '../config/tenantConfig';
@@ -24,7 +25,7 @@ export interface TenantDocument {
   tenantId: string;
   createdAt: Date;
   updatedAt: Date;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Clase para manejar operaciones de Firestore con tenant
@@ -157,7 +158,7 @@ export class TenantFirebaseService {
   // Buscar documentos con filtros
   async queryDocuments<T extends TenantDocument>(
     collectionName: string,
-    filters: Array<{ field: string; operator: any; value: any }>,
+    filters: Array<{ field: string; operator: WhereFilterOp; value: unknown }>,
     orderByField?: string,
     orderDirection: 'asc' | 'desc' = 'desc',
     limitCount?: number

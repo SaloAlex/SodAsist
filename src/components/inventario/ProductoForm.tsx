@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { 
   Producto, 
-  CategoriaProducto, 
   UnidadMedida
 } from '../../types';
 import { ProductosService } from '../../services/productosService';
@@ -62,8 +61,7 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   const { 
     data: categorias = [], 
     isLoading: loadingCategorias, 
-    error: errorCategorias,
-    refetch: refetchCategorias 
+    error: errorCategorias
   } = useCategorias();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [margenCalculado, setMargenCalculado] = useState({ pesos: 0, porcentaje: 0 });
@@ -108,55 +106,15 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
   const watchPrecioVenta = watch('precioVenta') || 0;
   const watchCategoria = watch('categoria');
 
-  // Función para cargar categorías con retry
-  const cargarCategorias = async () => {
-    setLoadingCategorias(true);
-    setErrorCategorias(null);
-    
-    try {
-      const categoriasData = await ProductosService.getCategorias();
-      
-      // Filtrar duplicados por nombre (mantener el más reciente)
-      const categoriasUnicas = categoriasData.reduce((acc, categoria) => {
-        const existente = acc.find(cat => cat.nombre.toLowerCase() === categoria.nombre.toLowerCase());
-        if (!existente) {
-          acc.push(categoria);
-        } else if (categoria.updatedAt > existente.updatedAt) {
-          // Reemplazar con el más reciente
-          const index = acc.indexOf(existente);
-          acc[index] = categoria;
-        }
-        return acc;
-      }, [] as CategoriaProducto[]);
-      
-      setCategorias(categoriasUnicas);
-    } catch (error) {
-      console.error('Error al cargar categorías:', error);
-      
-      // Manejo específico de errores
-      let errorMessage = 'Error al cargar categorías';
-      if (error && typeof error === 'object' && 'code' in error) {
-        if (error.code === 'permission-denied') {
-          errorMessage = 'Sin permisos para acceder a las categorías';
-        } else if (error.code === 'unavailable') {
-          errorMessage = 'Servicio temporalmente no disponible';
-        }
-      } else if (error && typeof error === 'object' && 'message' in error && 
-                 typeof error.message === 'string' && error.message.includes('network')) {
-        errorMessage = 'Error de conexión. Verifica tu internet';
-      }
-      
-      setErrorCategorias(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setLoadingCategorias(false);
-    }
+  // Función para recargar categorías (usando React Query)
+  const recargarCategorias = () => {
+    // React Query maneja automáticamente el estado de loading y error
+    window.location.reload(); // Recarga simple para refrescar datos
   };
 
-  // Cargar categorías al montar el componente
-  useEffect(() => {
-    cargarCategorias();
-  }, []);
+  // React Query maneja automáticamente la carga de categorías
+
+  // Ya no necesitamos useEffect para cargar categorías - React Query lo maneja
 
   // Calcular margen cuando cambien los precios
   useEffect(() => {
@@ -295,10 +253,10 @@ export const ProductoForm: React.FC<ProductoFormProps> = ({
               {errorCategorias && (
                 <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                   <div className="flex items-center justify-between">
-                    <p className="text-red-600 dark:text-red-400 text-sm">{errorCategorias}</p>
+                    <p className="text-red-600 dark:text-red-400 text-sm">{String(errorCategorias)}</p>
                     <button
                       type="button"
-                      onClick={cargarCategorias}
+                      onClick={recargarCategorias}
                       className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 text-sm font-medium"
                     >
                       Reintentar

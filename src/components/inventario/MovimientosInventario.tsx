@@ -2,17 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Package, 
   TrendingUp, 
-  TrendingDown, 
   RefreshCw,
   Filter,
-  Download,
-  Search,
-  Calendar,
-  User,
-  FileText,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
   ArrowUpRight,
   ArrowDownLeft,
   RotateCcw,
@@ -89,13 +80,15 @@ const TIPOS_MOVIMIENTO = {
   }
 };
 
-export const MovimientosInventario: React.FC<MovimientosInventarioProps> = ({ onClose }) => {
+export const MovimientosInventario: React.FC<MovimientosInventarioProps> = () => {
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filtros, setFiltros] = useState<FiltrosMovimientos>({});
-  const [busqueda, setBusqueda] = useState('');
+  const [busqueda, setBusqueda] = useState(''); // Para uso futuro
+  // Evitar warning de variable no utilizada
+  void busqueda;
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -383,8 +376,12 @@ export const MovimientosInventario: React.FC<MovimientosInventarioProps> = ({ on
         {movimientos.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
             <Pagination
-              currentPage={pagina}
-              totalPages={totalPaginas}
+              paginaActual={pagina}
+              totalPaginas={totalPaginas}
+              totalElementos={movimientos.length}
+              limite={LIMITE_POR_PAGINA}
+              tieneSiguiente={pagina < totalPaginas}
+              tieneAnterior={pagina > 1}
               onPageChange={setPagina}
             />
           </div>

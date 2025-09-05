@@ -132,21 +132,17 @@
         const apiKeyElement = document.getElementById('apiKey');
         const statusElement = document.getElementById('status');
         
-        if (typeof import !== 'undefined' && import.meta && import.meta.env) {
-            const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-            if (apiKey) {
-                apiKeyElement.textContent = apiKey.substring(0, 20) + '...';
-                statusElement.textContent = 'API Key configurada ✅';
-                statusElement.style.color = 'green';
-            } else {
-                apiKeyElement.textContent = 'No configurada';
-                statusElement.textContent = 'API Key faltante ❌';
-                statusElement.style.color = 'red';
-            }
-        } else {
-            apiKeyElement.textContent = 'No disponible en esta página';
-            statusElement.textContent = 'Verificar en la aplicación principal';
-        }
+        // En un archivo HTML estático, no podemos acceder a import.meta.env
+        // Mostrar información sobre cómo verificar la configuración
+        apiKeyElement.textContent = 'Verificar en la aplicación principal';
+        statusElement.textContent = 'Esta página es solo informativa';
+        statusElement.style.color = 'blue';
+        
+        // Mostrar instrucciones
+        console.log('Para verificar la API Key:');
+        console.log('1. Abre la aplicación principal');
+        console.log('2. Ve a la consola del navegador');
+        console.log('3. Ejecuta: console.log(import.meta.env.VITE_GOOGLE_MAPS_API_KEY)');
     </script>
 </body>
 </html>

@@ -19,21 +19,8 @@ interface PushNotificationConfig {
   showInSystemTray: boolean;
 }
 
-interface PushNotificationData {
-  title: string;
-  body: string;
-  icon?: string;
-  badge?: string;
-  tag?: string;
-  data?: {
-    [key: string]: string;
-  };
-  actions?: Array<{
-    action: string;
-    title: string;
-    icon?: string;
-  }>;
-}
+// Interface para datos de notificaciones push (usada internamente)
+// Nota: Esta interfaz se puede usar en el futuro para tipado de notificaciones
 
 class PushNotificationService {
   private messagingInstance: Messaging | null = null;
@@ -185,8 +172,7 @@ class PushNotificationService {
     const notification = payload.notification;
     if (notification) {
       toast.success(notification.title || 'Nueva notificación', {
-        duration: 5000,
-        description: notification.body
+        duration: 5000
       });
     }
   }
@@ -205,17 +191,22 @@ class PushNotificationService {
     const notificationOptions: NotificationOptions = {
       body: notification.body,
       icon: notification.icon || '/Logo.png',
-      badge: notification.badge || '/Logo.png',
       tag: payload.data?.tag || 'sodasist-notification',
       data: payload.data,
       requireInteraction: payload.data?.priority === 'high',
-      silent: !this.config.sound,
-      vibrate: this.config.vibration ? [200, 100, 200] : undefined
+      silent: !this.config.sound
     };
 
-    // Agregar acciones si están disponibles
+    // Agregar vibración si está habilitada (propiedad no estándar)
+    if (this.config.vibration) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (notificationOptions as any).vibrate = [200, 100, 200];
+    }
+
+    // Agregar acciones si están disponibles (propiedad no estándar)
     if (payload.data?.actionUrl) {
-      notificationOptions.actions = [
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (notificationOptions as any).actions = [
         {
           action: 'open',
           title: 'Abrir',

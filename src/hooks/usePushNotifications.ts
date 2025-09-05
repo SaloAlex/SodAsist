@@ -16,7 +16,7 @@ interface UsePushNotificationsReturn {
   requestPermission: () => Promise<boolean>;
   subscribe: () => Promise<boolean>;
   unsubscribe: () => Promise<void>;
-  updateConfig: (config: Partial<typeof pushNotificationService.config>) => Promise<void>;
+  updateConfig: (config: Partial<ReturnType<typeof pushNotificationService.getConfig>>) => Promise<void>;
   sendTestNotification: () => Promise<void>;
   initialize: () => Promise<boolean>;
 }
@@ -108,7 +108,7 @@ export const usePushNotifications = (): UsePushNotificationsReturn => {
   }, []);
 
   // Actualizar configuración
-  const updateConfig = useCallback(async (newConfig: Partial<typeof pushNotificationService.config>): Promise<void> => {
+  const updateConfig = useCallback(async (newConfig: Partial<ReturnType<typeof pushNotificationService.getConfig>>): Promise<void> => {
     try {
       await pushNotificationService.updateConfig(newConfig);
       setConfig(pushNotificationService.getConfig());

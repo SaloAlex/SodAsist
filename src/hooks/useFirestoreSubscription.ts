@@ -3,12 +3,12 @@ import { FirebaseService } from '../services/firebaseService';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 
-interface UseFirestoreSubscriptionOptions {
+interface UseFirestoreSubscriptionOptions<T = unknown> {
   collectionName: string;
-  onData: (data: any[]) => void;
+  onData: (data: T[]) => void;
   onError?: (error: Error) => void;
   enabled?: boolean;
-  dependencies?: any[];
+  dependencies?: unknown[];
 }
 
 export const useFirestoreSubscription = <T>({
@@ -17,7 +17,7 @@ export const useFirestoreSubscription = <T>({
   onError,
   enabled = true,
   dependencies = []
-}: UseFirestoreSubscriptionOptions) => {
+}: UseFirestoreSubscriptionOptions<T>) => {
   const { user, userData } = useAuthStore();
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const isSubscribedRef = useRef(false);
@@ -84,7 +84,7 @@ export const useFirestoreSubscription = <T>({
     return () => {
       unsubscribe();
     };
-  }, [subscribe, unsubscribe, ...dependencies]);
+  }, [subscribe, unsubscribe, ...dependencies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Limpiar suscripción cuando el usuario se desautentica
   useEffect(() => {

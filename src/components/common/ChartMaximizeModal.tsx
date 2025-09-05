@@ -59,7 +59,7 @@ export const ChartMaximizeModal: React.FC<ChartMaximizeModalProps> = ({
 
     setExporting(true);
     try {
-      const blob = await ChartExportService.exportChartAsPNG(chartRef.current, chartData);
+      const blob = await ChartExportService.exportChartAsPNG(chartRef.current);
       const filename = `grafico_${chartData.title.toLowerCase().replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.png`;
       ChartExportService.downloadFile(blob, filename);
       toast.success('Gráfico exportado como PNG');

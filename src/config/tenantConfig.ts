@@ -39,7 +39,7 @@ export const TENANTS: Record<string, TenantConfig> = {
     projectId: 'cristian-reparto-123456',
     domain: 'cristian.valisto.app',
     firebaseConfig: {
-      apiKey: 'AIzaSyCristianApiKey',
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY_CRISTIAN || import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: 'cristian-reparto-123456.firebaseapp.com',
       projectId: 'cristian-reparto-123456',
       storageBucket: 'cristian-reparto-123456.appspot.com',
@@ -54,7 +54,7 @@ export const TENANTS: Record<string, TenantConfig> = {
     projectId: 'agua-pura-sa-789012',
     domain: 'agua-pura.valisto.app',
     firebaseConfig: {
-      apiKey: 'AIzaSyAguaPuraApiKey',
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY_AGUA_PURA || import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: 'agua-pura-sa-789012.firebaseapp.com',
       projectId: 'agua-pura-sa-789012',
       storageBucket: 'agua-pura-sa-789012.appspot.com',
@@ -69,7 +69,7 @@ export const TENANTS: Record<string, TenantConfig> = {
     projectId: 'sodas-express-345678',
     domain: 'sodas-express.valisto.app',
     firebaseConfig: {
-      apiKey: 'AIzaSySodasExpressApiKey',
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY_SODAS_EXPRESS || import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: 'sodas-express-345678.firebaseapp.com',
       projectId: 'sodas-express-345678',
       storageBucket: 'sodas-express-345678.appspot.com',

@@ -19,8 +19,7 @@ export class ChartExportService {
    * Exporta el gráfico como imagen PNG
    */
   static async exportChartAsPNG(
-    chartElement: HTMLElement, 
-    data: ChartExportData
+    chartElement: HTMLElement
   ): Promise<Blob> {
     try {
       // Capturar el elemento del gráfico como imagen
@@ -125,7 +124,7 @@ export class ChartExportService {
     yPosition += 5;
 
     // Datos de la tabla
-    data.data.forEach((row, index) => {
+    data.data.forEach((row) => {
       if (yPosition > pageHeight - 30) {
         pdf.addPage();
         yPosition = 20;
@@ -211,20 +210,28 @@ export class ChartExportService {
    * Calcula estadísticas básicas del gráfico
    */
   private static calculateChartStats(data: ChartExportData) {
-    const values = data.data.map(d => typeof d[data.dataKey] === 'number' ? d[data.dataKey] : 0);
+    const values = data.data.map(d => {
+      const value = d[data.dataKey];
+      return typeof value === 'number' ? value : 0;
+    });
+    
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const total = values.reduce((sum, val) => sum + val, 0);
+    const average = Math.round(total / values.length);
     
     return {
-      max: Math.max(...values).toLocaleString(),
-      min: Math.min(...values).toLocaleString(),
-      average: Math.round(values.reduce((sum, val) => sum + val, 0) / values.length).toLocaleString(),
-      total: values.reduce((sum, val) => sum + val, 0).toLocaleString()
+      max: max.toLocaleString(),
+      min: min.toLocaleString(),
+      average: average.toLocaleString(),
+      total: total.toLocaleString()
     };
   }
 
   /**
    * Formatea valores para exportación
    */
-  private static formatValue(value: any): string {
+  private static formatValue(value: string | number): string {
     if (typeof value === 'number') {
       return value.toLocaleString('es-AR');
     }

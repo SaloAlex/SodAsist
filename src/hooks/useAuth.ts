@@ -158,7 +158,7 @@ export const useAuth = () => {
       toast.error('Error al cargar datos del usuario');
       setError('Error al cargar datos del usuario');
     }
-  }, [setUser, setUserData, setError]);
+  }, [setUser, setUserData, setError, setInitialized]);
 
   useEffect(() => {
     if (initialized) {
