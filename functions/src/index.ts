@@ -1,17 +1,23 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { onEntregaCreate } from './triggers/onEntregaCreate';
+import { onProductoUpdate } from './triggers/onProductoUpdate';
+import { onUserCreate } from './triggers/onUserCreate';
 import { genFacturaPdf } from './functions/genFacturaPdf';
 import { getKpisDaily } from './functions/getKpisDaily';
+import { syncIndividualInventory } from './functions/syncIndividualInventory';
 
 admin.initializeApp();
 
 // Triggers
 export const onEntregaCreated = onEntregaCreate;
+export const onProductoUpdated = onProductoUpdate;
+export const onUserCreated = onUserCreate;
 
 // Callable functions
 export const generateFacturaPdf = genFacturaPdf;
 export const getKpisDailyData = getKpisDaily;
+export const syncIndividualInventoryData = syncIndividualInventory;
 
 // Scheduled functions
 export const generateDailyKpis = onSchedule({

@@ -26,6 +26,39 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onEntregaCreate = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const admin = __importStar(require("firebase-admin"));
+// Enum para tipos de movimiento
+var TipoMovimiento;
+(function (TipoMovimiento) {
+    TipoMovimiento["ENTRADA"] = "entrada";
+    TipoMovimiento["SALIDA"] = "salida";
+    TipoMovimiento["VENTA"] = "venta";
+    TipoMovimiento["AJUSTE"] = "ajuste";
+    TipoMovimiento["TRANSFERENCIA"] = "transferencia";
+    TipoMovimiento["MERMA"] = "merma";
+    TipoMovimiento["DEVOLUCION"] = "devolucion";
+    TipoMovimiento["INICIAL"] = "inicial";
+})(TipoMovimiento || (TipoMovimiento = {}));
+// Función para registrar movimiento de inventario
+async function registrarMovimiento(db, tenantId, productoId, tipo, cantidad, motivo, usuario, referencia, observaciones) {
+    try {
+        const movimientosRef = db.collection(`tenants/${tenantId}/movimientosInventario`);
+        await movimientosRef.add({
+            productoId,
+            tipo,
+            cantidad: Math.abs(cantidad),
+            motivo,
+            referencia,
+            observaciones,
+            fecha: admin.firestore.FieldValue.serverTimestamp(),
+            usuario,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`✅ Movimiento registrado: ${tipo} - ${cantidad} unidades de ${productoId}`);
+    }
+    catch (error) {
+        console.error('❌ Error al registrar movimiento:', error);
+    }
+}
 exports.onEntregaCreate = (0, firestore_1.onDocumentCreated)('tenants/{tenantId}/entregas/{entregaId}', async (event) => {
     var _a;
     const entrega = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
@@ -69,7 +102,23 @@ exports.onEntregaCreate = (0, firestore_1.onDocumentCreated)('tenants/{tenantId}
             });
             console.log('✅ Cliente actualizado exitosamente');
         }
-        // Update vehicle inventory - usar la misma estructura que el frontend
+        // Array para almacenar promesas de movimientos
+        const movimientosPromises = [];
+        // Si la entrega tiene productos dinámicos, procesarlos
+        if (entrega.productos && Array.isArray(entrega.productos)) {
+            console.log('🔄 Procesando productos dinámicos:', entrega.productos);
+            entrega.productos.forEach((producto) => {
+                console.log(`📦 Procesando: ${producto.nombre} (${producto.cantidad} unidades)`);
+                // Registrar movimiento de venta (siempre actualizar stock de productos)
+                if (producto.id) {
+                    movimientosPromises.push(registrarMovimiento(db, tenantId, producto.id, TipoMovimiento.VENTA, producto.cantidad, 'Entrega a cliente', entrega.usuario || 'sistema', entrega.id || 'entrega', `Venta a cliente: ${producto.nombre} - ${producto.cantidad} unidades`));
+                }
+            });
+        }
+        // Registrar todos los movimientos (esto actualiza el stock de productos)
+        await Promise.all(movimientosPromises);
+        console.log('✅ Movimientos de inventario registrados exitosamente');
+        // Update vehicle inventory - solo si existe (para usuarios business/enterprise)
         const inventoryRef = db.collection(`tenants/${tenantId}/inventarioVehiculo`).doc('actual');
         const inventoryDoc = await inventoryRef.get();
         if (inventoryDoc.exists) {
@@ -77,13 +126,12 @@ exports.onEntregaCreate = (0, firestore_1.onDocumentCreated)('tenants/{tenantId}
             console.log('📊 Inventario actual del vehículo:', inventoryData);
             // Calcular nuevo stock basado en los productos entregados
             const nuevoStock = Object.assign({}, inventoryData);
-            // Si la entrega tiene productos dinámicos, usarlos
+            // Si la entrega tiene productos dinámicos, actualizar inventario del vehículo
             if (entrega.productos && Array.isArray(entrega.productos)) {
-                console.log('🔄 Procesando productos dinámicos:', entrega.productos);
                 entrega.productos.forEach((producto) => {
                     var _a;
                     const nombre = ((_a = producto.nombre) === null || _a === void 0 ? void 0 : _a.toLowerCase()) || '';
-                    console.log(`📦 Procesando: ${producto.nombre} (${producto.cantidad} unidades)`);
+                    console.log(`📦 Actualizando inventario vehículo: ${producto.nombre} (${producto.cantidad} unidades)`);
                     if (nombre.includes('soda') || nombre.includes('gaseosa')) {
                         const stockAnterior = nuevoStock.sodas || 0;
                         nuevoStock.sodas = Math.max(0, stockAnterior - producto.cantidad);
@@ -113,7 +161,7 @@ exports.onEntregaCreate = (0, firestore_1.onDocumentCreated)('tenants/{tenantId}
             console.log('✅ Inventario del vehículo actualizado exitosamente');
         }
         else {
-            console.warn('⚠️ No se encontró inventario del vehículo para el tenant:', tenantId);
+            console.log('ℹ️ No se encontró inventario del vehículo (usuario individual)');
         }
         console.log('🎉 Entrega procesada exitosamente');
     }

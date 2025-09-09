@@ -19,7 +19,9 @@ import {
 import { InventarioService } from '../../services/inventarioService';
 import { ProductosService } from '../../services/productosService';
 import { PreciosService } from '../../services/preciosService';
+import { IndividualInventoryService } from '../../services/individualInventoryService';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -44,10 +46,17 @@ export const InventarioDashboard: React.FC<InventarioDashboardProps> = ({
   onVerProductos,
   onVerMovimientos
 }) => {
+  const { userData } = useAuthStore();
   const [metricas, setMetricas] = useState<MetricasInventario | null>(null);
   const [reporte, setReporte] = useState<ReporteInventario | null>(null);
   const [productosStockBajo, setProductosStockBajo] = useState<Producto[]>([]);
   const [productosAgotados, setProductosAgotados] = useState<Producto[]>([]);
+  const [syncStatus, setSyncStatus] = useState<{
+    isSynced: boolean;
+    lastSync?: Date;
+    productosCount?: number;
+  }>({ isSynced: true });
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actualizando, setActualizando] = useState(false);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
@@ -73,17 +82,45 @@ export const InventarioDashboard: React.FC<InventarioDashboardProps> = ({
       setReporte(reporteData);
       setProductosStockBajo(productosStockBajoData);
       setProductosAgotados(productosAgotadosData);
+      
+      // Verificar estado de sincronización para usuarios individuales
+      if (userData?.plan === 'individual') {
+        const status = await IndividualInventoryService.getSyncStatus();
+        setSyncStatus(status);
+      }
     } catch (error) {
       console.error('Error al cargar datos del dashboard:', error);
       toast.error('Error al cargar datos del inventario');
     } finally {
       setLoading(false);
     }
-  }, [fechaSeleccionada]);
+  }, [fechaSeleccionada, userData?.plan]);
 
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+
+  const handleSyncInventory = async () => {
+    if (userData?.plan !== 'individual') return;
+    
+    setSyncing(true);
+    try {
+      const result = await IndividualInventoryService.syncInventory();
+      toast.success(result.message);
+      
+      // Actualizar el estado de sincronización
+      const status = await IndividualInventoryService.getSyncStatus();
+      setSyncStatus(status);
+      
+      // Recargar datos
+      await cargarDatos();
+    } catch (error) {
+      console.error('Error al sincronizar inventario:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al sincronizar inventario');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const actualizarDatos = async () => {
     setActualizando(true);
@@ -189,6 +226,27 @@ export const InventarioDashboard: React.FC<InventarioDashboardProps> = ({
               className="flex-1 sm:flex-none px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-white"
             />
           </div>
+          
+          {/* Botón de sincronización para usuarios individuales */}
+          {userData?.plan === 'individual' && (
+            <button
+              onClick={handleSyncInventory}
+              disabled={syncing}
+              className={clsx(
+                'flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                syncStatus.isSynced
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800'
+                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300 dark:hover:bg-amber-800',
+                syncing && 'opacity-50 cursor-not-allowed'
+              )}
+              title={syncStatus.isSynced ? 'Inventario sincronizado' : 'Sincronizar inventario del vehículo'}
+            >
+              <RefreshCw className={clsx('h-4 w-4', syncing && 'animate-spin')} />
+              <span className="hidden sm:inline">
+                {syncing ? 'Sincronizando...' : syncStatus.isSynced ? 'Sincronizado' : 'Sincronizar'}
+              </span>
+            </button>
+          )}
           
           <button
             onClick={actualizarDatos}

@@ -22,18 +22,31 @@ export const useAuth = () => {
       
       if (!firebaseUser) {
         setUserData(null);
-        setInitialized(true); // ✅ Marcar como inicializado
+        setInitialized(true);
         return;
       }
 
-      // Try to get user data from Firestore
+      // Try to get user data from Firestore by UID first
       let userData = await FirebaseService.getDocument<User>('users', firebaseUser.uid);
+      
+      // If user doesn't exist by UID, check if there's an existing user with the same email
+      if (!userData && firebaseUser.email) {
+        const existingUserByEmail = await FirebaseService.getUserByEmail(firebaseUser.email);
+        if (existingUserByEmail) {
+          // User exists with same email but different UID - this means they're trying to create a new account
+          // We need to prevent this and show an error
+          setError(`Ya existe una cuenta registrada con el email ${firebaseUser.email}. Por favor, inicia sesión con tu cuenta existente.`);
+          setLoading(false);
+          setInitialized(true);
+          
+          // Sign out the user to prevent confusion
+          await auth.signOut();
+          return;
+        }
+      }
       
       // If user doesn't exist in Firestore, create it
       if (!userData) {
-        console.log('🔄 Creando nuevo usuario en Firestore...');
-        console.log('👤 Usuario Firebase:', firebaseUser);
-        
         try {
           // Verificar que el usuario tenga email
           if (!firebaseUser.email) {
@@ -42,28 +55,14 @@ export const useAuth = () => {
 
           // Verificar si es el primer usuario (colección users vacía)
           const isFirstUser = await FirebaseService.isFirstUser();
-          console.log('👥 Es primer usuario:', isFirstUser);
 
-          // Determinar el rol del usuario según el plan
-          let userRole: 'owner' | 'admin' | 'manager' | 'sodero';
-          if (isFirstUser) {
-            // El primer usuario es siempre 'owner' del plan individual
-            userRole = 'owner';
-            console.log('👑 Asignando rol OWNER al primer usuario');
-          } else {
-            // Para usuarios adicionales, el rol se determina por el tenant
-            userRole = 'sodero';
-            console.log('👤 Asignando rol SODERO al usuario');
-          }
-
-          // Determinar el plan del usuario
+          // Determinar el plan del usuario primero
           let userPlan: 'individual' | 'business' | 'enterprise';
           if (isFirstUser) {
             // El primer usuario puede elegir su plan durante el registro
             // Intentar obtener el plan del localStorage (se establece en PlanSelection)
             const selectedPlan = localStorage.getItem('selectedPlan') as 'individual' | 'business' | 'enterprise' | null;
             userPlan = selectedPlan || 'individual';
-            console.log('📋 Plan seleccionado durante registro:', userPlan);
             
             // Limpiar el localStorage después de usarlo
             if (selectedPlan) {
@@ -72,16 +71,20 @@ export const useAuth = () => {
           } else {
             // Para usuarios adicionales, el plan se determina por el tenant
             userPlan = 'individual'; // Por defecto, se puede cambiar después
-            console.log('📋 Asignando plan por defecto al usuario');
           }
 
-          console.log('📋 Datos del usuario a crear:', {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: userRole,
-            plan: userPlan,
-            isFirstUser: isFirstUser
-          });
+          // Determinar el rol del usuario según el plan
+          let userRole: 'owner' | 'admin' | 'manager' | 'sodero';
+          if (userPlan === 'individual') {
+            // En el plan Individual, todos los usuarios son 'owner'
+            userRole = 'owner';
+          } else if (isFirstUser) {
+            // El primer usuario de otros planes es 'owner'
+            userRole = 'owner';
+          } else {
+            // Para usuarios adicionales en otros planes, el rol se determina por el tenant
+            userRole = 'sodero';
+          }
 
           const newUserData: Omit<User, 'id'> = {
             uid: firebaseUser.uid,
@@ -93,11 +96,8 @@ export const useAuth = () => {
             createdAt: new Date(),
           };
           
-          console.log('📝 Datos del nuevo usuario:', newUserData);
-          
           // Crear documento de usuario
           await FirebaseService.createUserDocument(newUserData);
-          console.log('✅ Documento de usuario creado');
           
           // Si es el primer usuario, crear también el documento del tenant
           if (isFirstUser) {
@@ -140,12 +140,7 @@ export const useAuth = () => {
           userData = { ...newUserData, id: firebaseUser.uid };
           toast.success('Usuario creado correctamente');
         } catch (err) {
-          console.error('❌ Error creating user document:', err);
-          console.error('❌ Error details:', {
-            message: err instanceof Error ? err.message : 'Unknown error',
-            stack: err instanceof Error ? err.stack : undefined,
-            user: firebaseUser
-          });
+          console.error('Error creating user document:', err);
           toast.error('Error al crear el usuario en la base de datos');
           setError('Error al crear el usuario en la base de datos');
           return;
@@ -158,7 +153,7 @@ export const useAuth = () => {
       toast.error('Error al cargar datos del usuario');
       setError('Error al cargar datos del usuario');
     }
-  }, [setUser, setUserData, setError, setInitialized]);
+  }, [setUser, setUserData, setError, setInitialized, setLoading]);
 
   useEffect(() => {
     if (initialized) {

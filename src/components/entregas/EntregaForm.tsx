@@ -8,6 +8,7 @@ import { ProductosService } from '../../services/productosService';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { EmptyDeliveryState } from './EmptyDeliveryState';
 import { 
   Package, 
   DollarSign,
@@ -145,7 +146,7 @@ interface ClienteStats {
 export const EntregaForm: React.FC = () => {
   // Estados principales
   const [loading, setLoading] = useState(false);
-  const { user } = useAuthStore();
+  const { user, userData } = useAuthStore();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -334,12 +335,32 @@ export const EntregaForm: React.FC = () => {
     }
   }, [allValues, currentStep, validationMessage, productos, getValues]);
 
+  const loadInventarioVehiculo = useCallback(async () => {
+    // Para usuarios individuales, no necesitamos cargar el inventario del vehículo
+    if (userData?.plan === 'individual') {
+      setInventarioVehiculo({});
+      return;
+    }
+    
+    try {
+      const inventario = await FirebaseService.getInventarioActualDinamico();
+      if (inventario) {
+        setInventarioVehiculo(inventario);
+      } else {
+        setInventarioVehiculo({});
+      }
+    } catch (err) {
+      console.error('Error al cargar inventario del vehículo:', err);
+      setInventarioVehiculo({});
+    }
+  }, [userData?.plan]);
+
   // Cargar datos iniciales
   useEffect(() => {
     loadClientes();
     loadProductos();
     loadInventarioVehiculo();
-  }, []);
+  }, [loadInventarioVehiculo]);
 
   // Recargar productos e inventario cuando el usuario regresa a la página
   useEffect(() => {
@@ -362,7 +383,7 @@ export const EntregaForm: React.FC = () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [loadInventarioVehiculo]);
 
   // Cerrar dropdown cuando se hace clic fuera
   useEffect(() => {
@@ -404,7 +425,10 @@ export const EntregaForm: React.FC = () => {
 
   const loadProductos = async () => {
     try {
+      console.log('📦 Cargando productos...');
       const productosData = await ProductosService.getProductos({ activo: true });
+      console.log('📦 Productos obtenidos del servicio:', productosData.length);
+      
       // Filtrar productos duplicados - agrupar por nombre y tomar el que tenga mayor stock
       const productosUnicos = productosData.reduce((acc, producto) => {
         const nombreNormalizado = producto.nombre.toLowerCase().trim();
@@ -422,6 +446,11 @@ export const EntregaForm: React.FC = () => {
       }, {} as Record<string, Producto>);
       
       const productosFiltrados = Object.values(productosUnicos);
+      console.log('📦 Productos filtrados:', productosFiltrados.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        stock: p.stock
+      })));
       
       setProductos(productosFiltrados);
     } catch (err) {
@@ -431,22 +460,16 @@ export const EntregaForm: React.FC = () => {
     }
   };
 
-  const loadInventarioVehiculo = async () => {
-    try {
-      const inventario = await FirebaseService.getInventarioActualDinamico();
-      if (inventario) {
-        setInventarioVehiculo(inventario);
-      } else {
-        setInventarioVehiculo({});
-      }
-    } catch (err) {
-      console.error('Error al cargar inventario del vehículo:', err);
-      setInventarioVehiculo({});
-    }
-  };
 
-  // Función para obtener el stock del vehículo basado en el ID del producto
+  // Función para obtener el stock disponible basado en el plan del usuario
   const getStockVehiculo = (productoId: string): number => {
+    // Para usuarios individuales, usar el stock del depósito directamente
+    if (userData?.plan === 'individual') {
+      const producto = productos.find(p => p.id === productoId);
+      return producto?.stock || 0;
+    }
+    
+    // Para otros planes, usar el inventario del vehículo
     return inventarioVehiculo[productoId] || 0;
   };
 
@@ -1790,6 +1813,36 @@ export const EntregaForm: React.FC = () => {
         return null;
     }
   };
+
+  // Mostrar estado vacío si no hay productos o clientes
+  const hasProducts = productos.length > 0;
+  const hasClients = clientes.length > 0;
+  
+  if (!hasProducts || !hasClients) {
+    return (
+      <div className="max-w-4xl mx-auto p-4 sm:p-6">
+        {/* Header simplificado - Responsive */}
+        <div className="mb-6 sm:mb-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+              <Package className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mr-2 sm:mr-3" />
+              Nueva Entrega
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+              Registra una nueva entrega de productos
+            </p>
+          </div>
+        </div>
+        
+        <EmptyDeliveryState
+          onCreateProduct={() => navigate('/inventario')}
+          onCreateClient={() => navigate('/clientes')}
+          hasProducts={hasProducts}
+          hasClients={hasClients}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6">

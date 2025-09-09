@@ -391,91 +391,116 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header simplificado y responsive */}
-      <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            {/* Título y fecha */}
-            <div className="flex-1">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mr-2 sm:mr-3" />
-                <span className="hidden sm:inline">Dashboard Ejecutivo</span>
-                <span className="sm:hidden">Dashboard</span>
-              </h1>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
+      {/* Header mejorado con mejor UX/UI */}
+      <div className="bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-lg border-b border-gray-200 dark:border-gray-700">
+        <div className="px-4 sm:px-6 lg:px-8 py-6">
+          {/* Título principal */}
+          <div className="mb-6">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white flex items-center mb-2">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl mr-3 shadow-lg">
+                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+              </div>
+              <span className="hidden sm:inline">Dashboard Ejecutivo</span>
+              <span className="sm:hidden">Dashboard</span>
+            </h1>
+            <div className="flex items-center space-x-2">
+              <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+              <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
                 {formatDateTitle()}
               </p>
             </div>
+          </div>
 
-            {/* Controles principales */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* Selector de período */}
-              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-                {[
-                  { key: 'today', label: 'Hoy', icon: Clock },
-                  { key: 'week', label: 'Semana', icon: Calendar },
-                  { key: 'month', label: 'Mes', icon: Calendar }
-                ].map(({ key, label, icon: Icon }) => (
+          {/* Panel de controles mejorado */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+              
+              {/* Selector de período mejorado */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Período:</span>
+                </div>
+                <div className="flex items-center bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-1 shadow-inner">
+                  {[
+                    { key: 'today', label: 'Hoy', icon: Clock, color: 'blue' },
+                    { key: 'week', label: 'Semana', icon: Calendar, color: 'green' },
+                    { key: 'month', label: 'Mes', icon: Calendar, color: 'purple' }
+                  ].map(({ key, label, icon: Icon, color }) => (
+                    <button
+                      key={key}
+                      onClick={() => setDateRange(key as DateRange)}
+                      className={`flex items-center px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                        dateRange === key
+                          ? `bg-white dark:bg-gray-600 text-${color}-600 dark:text-${color}-400 shadow-md transform scale-105`
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-gray-500/50'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 mr-2 ${
+                        dateRange === key
+                          ? `text-${color}-600 dark:text-${color}-400`
+                          : 'text-gray-600 dark:text-gray-400'
+                      }`} />
+                      <span className="hidden sm:inline">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Navegación de fecha mejorada */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Fecha:</span>
+                </div>
+                <div className="flex items-center bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-1 shadow-inner">
                   <button
-                    key={key}
-                    onClick={() => setDateRange(key as DateRange)}
-                    className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                      dateRange === key
-                        ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
+                    onClick={handlePreviousDate}
+                    className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-500 transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:shadow-md"
+                    aria-label="Período anterior"
                   >
-                    <Icon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
-                    <span className="hidden sm:inline">{label}</span>
+                    <ChevronLeft className="h-5 w-5" />
                   </button>
-                ))}
+                  
+                  <div className="px-3 py-2 flex items-center">
+                    <input
+                      type="date"
+                      value={format(selectedDate, 'yyyy-MM-dd')}
+                      onChange={(e) => handleDateChange(parseISO(e.target.value))}
+                      className="px-3 py-2 text-sm border-0 bg-transparent focus:ring-0 focus:outline-none dark:text-white font-medium [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                    />
+                    <Calendar className="h-4 w-4 ml-2 text-gray-500 dark:text-gray-300" />
+                  </div>
+
+                  <button
+                    onClick={handleNextDate}
+                    disabled={selectedDate >= startOfDay(new Date())}
+                    className="p-2 rounded-lg hover:bg-white dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:shadow-md"
+                    aria-label="Período siguiente"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
 
-              {/* Navegación de fecha */}
-              <div className="flex items-center space-x-1 sm:space-x-2">
-                <button
-                  onClick={handlePreviousDate}
-                  className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
-                  aria-label="Período anterior"
-                >
-                  <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-                </button>
-                
-                <input
-                  type="date"
-                  value={format(selectedDate, 'yyyy-MM-dd')}
-                  onChange={(e) => handleDateChange(parseISO(e.target.value))}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                />
-
-                <button
-                  onClick={handleNextDate}
-                  disabled={selectedDate >= startOfDay(new Date())}
-                  className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors text-gray-600 dark:text-gray-400"
-                  aria-label="Período siguiente"
-                >
-                  <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
-                </button>
-              </div>
-
-              {/* Acciones */}
-              <div className="flex items-center space-x-1 sm:space-x-2">
+              {/* Acciones mejoradas */}
+              <div className="flex items-center space-x-3">
                 <button
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  className="flex items-center px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                  className="flex items-center px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-blue-400 disabled:to-blue-500 text-white rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
                   title="Actualizar datos"
                 >
-                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                   <span className="hidden sm:inline">Actualizar</span>
                 </button>
 
                 <button
                   onClick={() => setShowNotificationSettings(true)}
-                  className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  className="p-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
                   title="Configurar notificaciones"
                 >
-                  <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <Bell className="h-5 w-5" />
                 </button>
               </div>
             </div>
@@ -498,7 +523,7 @@ export const Dashboard: React.FC = () => {
             </h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
               <StatsCard
                 title={dateRange === 'today' ? "Entregas Hoy" : "Entregas"}
                 value={stats.entregasHoy}
@@ -571,7 +596,7 @@ export const Dashboard: React.FC = () => {
             </h2>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
                 <div className="flex items-center justify-between">
                   <div>
@@ -630,14 +655,14 @@ export const Dashboard: React.FC = () => {
         {/* Panel Unificado con Tabs */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           {/* Header con tabs */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Panel de Control
               </h2>
               
               {/* Tabs de navegación */}
-              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1 overflow-x-auto">
+              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1 overflow-x-auto min-w-0">
                 <button
                   onClick={() => setActiveTab('notificaciones')}
                   className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
@@ -707,7 +732,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Contenido del tab activo */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {activeTab === 'notificaciones' && (
               <NotificationsWidget
                 maxItems={5}
@@ -774,7 +799,7 @@ export const Dashboard: React.FC = () => {
                 {/* Estadísticas rápidas */}
                 <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Resumen Rápido</h4>
-                  <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-center">
                     <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                       <p className="text-lg font-bold text-gray-900 dark:text-white">${stats.ticketPromedio.toFixed(0)}</p>
                       <p className="text-xs text-gray-600 dark:text-gray-400">Ticket Promedio</p>
@@ -800,7 +825,7 @@ export const Dashboard: React.FC = () => {
             {activeTab === 'ventas' && (
               <div className="space-y-4">
                 {/* Header del tab de ventas */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                       Análisis de Ventas
@@ -854,7 +879,7 @@ export const Dashboard: React.FC = () => {
                 </div>
 
                 {/* Estadísticas rápidas de ventas */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
                     <div className="flex items-center justify-between">
                       <div>
@@ -911,8 +936,8 @@ export const Dashboard: React.FC = () => {
 
             {activeTab === 'entregas' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
                     Entregas de {formatDateTitle()}
                     {stats.entregasHoy > 0 && (
                       <span className="ml-2 px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">

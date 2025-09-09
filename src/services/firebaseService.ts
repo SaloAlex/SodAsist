@@ -384,6 +384,43 @@ export class FirebaseService {
     }
   }
 
+  /**
+   * Verificar si ya existe un usuario con el mismo email
+   */
+  static async checkEmailExists(email: string): Promise<boolean> {
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+      
+      return !querySnapshot.empty;
+    } catch (error) {
+      console.error('Error al verificar email existente:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener usuario por email
+   */
+  static async getUserByEmail(email: string): Promise<User | null> {
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        return null;
+      }
+      
+      const userDoc = querySnapshot.docs[0];
+      return { id: userDoc.id, ...userDoc.data() } as User;
+    } catch (error) {
+      console.error('Error al obtener usuario por email:', error);
+      throw error;
+    }
+  }
+
   static async createUserDocument(userData: Omit<User, 'id'>): Promise<void> {
     try {
       // Verificar que tenemos los datos necesarios
@@ -392,6 +429,12 @@ export class FirebaseService {
       }
       if (!userData.email) {
         throw new Error('Email del usuario es requerido');
+      }
+
+      // Verificar si ya existe un usuario con el mismo email
+      const emailExists = await this.checkEmailExists(userData.email);
+      if (emailExists) {
+        throw new Error(`Ya existe una cuenta registrada con el email ${userData.email}. Por favor, inicia sesión con tu cuenta existente.`);
       }
 
       // Crear documento de usuario

@@ -95,7 +95,40 @@ export const onEntregaCreate = onDocumentCreated('tenants/{tenantId}/entregas/{e
         console.log('✅ Cliente actualizado exitosamente');
       }
       
-      // Update vehicle inventory - usar la misma estructura que el frontend
+      // Array para almacenar promesas de movimientos
+      const movimientosPromises: Promise<void>[] = [];
+      
+      // Si la entrega tiene productos dinámicos, procesarlos
+      if (entrega.productos && Array.isArray(entrega.productos)) {
+        console.log('🔄 Procesando productos dinámicos:', entrega.productos);
+        
+        entrega.productos.forEach((producto: { id?: string; nombre: string; cantidad: number }) => {
+          console.log(`📦 Procesando: ${producto.nombre} (${producto.cantidad} unidades)`);
+          
+          // Registrar movimiento de venta (siempre actualizar stock de productos)
+          if (producto.id) {
+            movimientosPromises.push(
+              registrarMovimiento(
+                db,
+                tenantId,
+                producto.id,
+                TipoMovimiento.VENTA,
+                producto.cantidad,
+                'Entrega a cliente',
+                entrega.usuario || 'sistema',
+                entrega.id || 'entrega',
+                `Venta a cliente: ${producto.nombre} - ${producto.cantidad} unidades`
+              )
+            );
+          }
+        });
+      }
+      
+      // Registrar todos los movimientos (esto actualiza el stock de productos)
+      await Promise.all(movimientosPromises);
+      console.log('✅ Movimientos de inventario registrados exitosamente');
+      
+      // Update vehicle inventory - solo si existe (para usuarios business/enterprise)
       const inventoryRef = db.collection(`tenants/${tenantId}/inventarioVehiculo`).doc('actual');
       const inventoryDoc = await inventoryRef.get();
       
@@ -106,33 +139,11 @@ export const onEntregaCreate = onDocumentCreated('tenants/{tenantId}/entregas/{e
         // Calcular nuevo stock basado en los productos entregados
         const nuevoStock = { ...inventoryData };
         
-        // Array para almacenar promesas de movimientos
-        const movimientosPromises: Promise<void>[] = [];
-        
-        // Si la entrega tiene productos dinámicos, usarlos
+        // Si la entrega tiene productos dinámicos, actualizar inventario del vehículo
         if (entrega.productos && Array.isArray(entrega.productos)) {
-          console.log('🔄 Procesando productos dinámicos:', entrega.productos);
-          
           entrega.productos.forEach((producto: { id?: string; nombre: string; cantidad: number }) => {
             const nombre = producto.nombre?.toLowerCase() || '';
-            console.log(`📦 Procesando: ${producto.nombre} (${producto.cantidad} unidades)`);
-            
-            // Registrar movimiento de venta del vehículo
-            if (producto.id) {
-              movimientosPromises.push(
-                registrarMovimiento(
-                  db,
-                  tenantId,
-                  producto.id,
-                  TipoMovimiento.VENTA,
-                  producto.cantidad,
-                  'Entrega a cliente',
-                  entrega.usuario || 'sistema',
-                  entrega.id || 'entrega',
-                  `Venta a cliente: ${producto.nombre} - ${producto.cantidad} unidades`
-                )
-              );
-            }
+            console.log(`📦 Actualizando inventario vehículo: ${producto.nombre} (${producto.cantidad} unidades)`);
             
             if (nombre.includes('soda') || nombre.includes('gaseosa')) {
               const stockAnterior = nuevoStock.sodas || 0;
@@ -164,12 +175,8 @@ export const onEntregaCreate = onDocumentCreated('tenants/{tenantId}/entregas/{e
         });
         
         console.log('✅ Inventario del vehículo actualizado exitosamente');
-        
-        // Registrar todos los movimientos
-        await Promise.all(movimientosPromises);
-        console.log('✅ Movimientos de inventario registrados exitosamente');
       } else {
-        console.warn('⚠️ No se encontró inventario del vehículo para el tenant:', tenantId);
+        console.log('ℹ️ No se encontró inventario del vehículo (usuario individual)');
       }
       
       console.log('🎉 Entrega procesada exitosamente');

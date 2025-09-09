@@ -20,7 +20,6 @@ import {
   ResultadoPaginado,
   InventarioVehiculo
 } from '../types';
-import { ProductosService } from '../services/productosService';
 import { FirebaseService } from '../services/firebaseService';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { InventarioDashboard } from '../components/inventario/InventarioDashboard';
@@ -28,6 +27,7 @@ import { ProductoForm } from '../components/inventario/ProductoForm';
 import { CategoriaManager } from '../components/inventario/CategoriaManager';
 import { InventarioVehiculoFormDinamico } from '../components/inventario/InventarioVehiculoFormDinamico';
 import { MovimientosInventario } from '../components/inventario/MovimientosInventario';
+import { EmptyInventoryState } from '../components/inventario/EmptyInventoryState';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -275,13 +275,20 @@ const ProductoTable: React.FC<ProductoTableProps> = ({ productos, onEdit, onDele
 };
 
 export const Inventario: React.FC = () => {
-  const { user } = useAuthStore();
+  const { user, userData } = useAuthStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
   // Estados principales
   const [vistaActual, setVistaActual] = useState<VistaInventario>('dashboard');
   const [procesando, setProcesando] = useState(false);
+
+  // Redirigir usuarios individuales si están en vista de vehículo
+  useEffect(() => {
+    if (userData?.plan === 'individual' && vistaActual === 'vehiculo') {
+      setVistaActual('dashboard');
+    }
+  }, [userData?.plan, vistaActual]);
   
   // Estados para formularios y modales
   const [mostrandoFormProducto, setMostrandoFormProducto] = useState(false);
@@ -403,24 +410,6 @@ export const Inventario: React.FC = () => {
     }));
   }, []);
 
-  // Crear productos iniciales si no hay productos
-  useEffect(() => {
-    const crearProductosIniciales = async () => {
-      if (productos.length === 0 && user && !loadingProductos && !errorProductos) {
-        try {
-          toast.loading('Creando productos iniciales...', { id: 'productos-iniciales' });
-          await ProductosService.crearProductosIniciales(user.uid);
-          refetchProductos();
-          toast.success('Productos iniciales creados', { id: 'productos-iniciales' });
-        } catch (error) {
-          console.error('Error al crear productos iniciales:', error);
-          toast.error('Error al crear productos iniciales', { id: 'productos-iniciales' });
-        }
-      }
-    };
-
-    crearProductosIniciales();
-  }, [productos.length, user, loadingProductos, errorProductos, refetchProductos]);
 
 
   const handleCrearProducto = () => {
@@ -511,18 +500,20 @@ export const Inventario: React.FC = () => {
             <span className="hidden sm:inline">Productos</span>
           </button>
           
-          <button
-            onClick={() => setVistaActual('vehiculo')}
-            className={clsx(
-              'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
-              vistaActual === 'vehiculo'
-                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            )}
-          >
-            <Truck className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Vehículo</span>
-          </button>
+          {userData?.plan !== 'individual' && (
+            <button
+              onClick={() => setVistaActual('vehiculo')}
+              className={clsx(
+                'flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap',
+                vistaActual === 'vehiculo'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              )}
+            >
+              <Truck className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Vehículo</span>
+            </button>
+          )}
           
           <button
             onClick={() => setVistaActual('movimientos')}
@@ -689,8 +680,19 @@ export const Inventario: React.FC = () => {
       );
     }
 
+    // Mostrar estado vacío si no hay productos
+    const showEmptyState = productos.length === 0 && !loadingProductos && !errorProductos;
+    
     switch (vistaActual) {
       case 'dashboard':
+        if (showEmptyState) {
+          return (
+            <EmptyInventoryState
+              onCreateProduct={handleCrearProducto}
+              showSampleDataOption={false}
+            />
+          );
+        }
         return (
           <InventarioDashboard
             onVerProductos={() => setVistaActual('productos')}
@@ -699,6 +701,15 @@ export const Inventario: React.FC = () => {
         );
       
       case 'productos':
+        if (showEmptyState) {
+          return (
+            <EmptyInventoryState
+              onCreateProduct={handleCrearProducto}
+              showSampleDataOption={false}
+            />
+          );
+        }
+        
         return (
           <div className="space-y-6">
             <ProductoTable

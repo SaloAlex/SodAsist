@@ -46,33 +46,21 @@ export const LoginForm: React.FC = () => {
 
   // Redirigir automáticamente cuando el usuario se autentica exitosamente
   useEffect(() => {
-    console.log('🔄 LoginForm - Estado de redirección:', { 
-      user: !!user, 
-      loginSuccess, 
-      userEmail: user?.email,
-      currentPath: window.location.pathname,
-      currentUrl: window.location.href
-    });
-    
     // Para registro exitoso, redirigir inmediatamente cuando se tenga el usuario
     if (user && loginSuccess && isRegistering) {
-      console.log('✅ LoginForm - Usuario registrado, redirigiendo al dashboard...');
       toast.success('¡Bienvenido! Redirigiendo al dashboard...', { duration: 2000 });
       
       // Redirección simple y directa para usuarios registrados
       setTimeout(() => {
-        console.log('🚀 Redirección para usuario registrado');
         window.location.href = '/';
       }, 1500);
     }
     // Para login exitoso, redirigir cuando se tenga el usuario
     else if (user && loginSuccess && !isRegistering) {
-      console.log('✅ LoginForm - Usuario autenticado, redirigiendo al dashboard...');
       toast.success('Sesión iniciada correctamente', { duration: 2000 });
       
       // Redirección simple y directa para usuarios que inician sesión
       setTimeout(() => {
-        console.log('🚀 Redirección para usuario autenticado');
         window.location.href = '/';
       }, 1000);
     }
@@ -83,24 +71,23 @@ export const LoginForm: React.FC = () => {
     setLoginSuccess(false);
     try {
       if (isRegistering) {
-        console.log('🔄 Iniciando registro de usuario...');
-        console.log('📋 Plan seleccionado:', selectedPlan);
-        
         // Guardar el plan seleccionado en localStorage para que useAuth lo pueda usar
         localStorage.setItem('selectedPlan', selectedPlan);
-        console.log('💾 Plan guardado en localStorage:', selectedPlan);
         
         // Registrar nuevo usuario en Firebase Auth
         await createUserWithEmailAndPassword(auth, data.email, data.password);
-        console.log('✅ Usuario creado en Firebase Auth');
         
         // El listener de useAuth se encargará de crear el documento con el plan seleccionado
-        // El plan se obtiene del localStorage
         toast.success(`Usuario registrado correctamente con plan ${selectedPlan}. Redirigiendo...`, { duration: 3000 });
         setLoginSuccess(true);
-        
-        // Mostrar mensaje adicional para el usuario
-        console.log('🎯 Usuario registrado exitosamente, esperando redirección automática...');
+
+        // Timeout de respaldo para redirección (en caso de que useAuth no funcione)
+        setTimeout(() => {
+          if (!user) {
+            toast.success('Redirigiendo al dashboard...', { duration: 2000 });
+            window.location.href = '/';
+          }
+        }, 5000);
       } else {
         // Iniciar sesión
         await signInWithEmailAndPassword(auth, data.email, data.password);
@@ -109,29 +96,37 @@ export const LoginForm: React.FC = () => {
         
         // Redirección inmediata para login
         setTimeout(() => {
-          console.log('🚀 Redirección inmediata - Login');
           window.location.href = '/';
         }, 1000);
       }
     } catch (err: unknown) {
       let errorMessage = 'Error en la autenticación';
       
-      if (err instanceof Error && 'code' in err) {
-        const authError = err as AuthError;
-        
-        switch (authError.code) {
-          case AuthErrorCodes.EMAIL_EXISTS:
-            errorMessage = 'Este email ya está registrado';
-            break;
-          case AuthErrorCodes.USER_DELETED:
-            errorMessage = 'Usuario no encontrado';
-            break;
-          case AuthErrorCodes.INVALID_PASSWORD:
-            errorMessage = 'Contraseña incorrecta';
-            break;
-          case AuthErrorCodes.INVALID_EMAIL:
-            errorMessage = 'Email inválido';
-            break;
+      if (err instanceof Error) {
+        // Verificar si es un error de email duplicado de nuestro sistema
+        if (err.message.includes('Ya existe una cuenta registrada con el email')) {
+          errorMessage = err.message;
+        } else if ('code' in err) {
+          const authError = err as AuthError;
+          
+          switch (authError.code) {
+            case AuthErrorCodes.EMAIL_EXISTS:
+              errorMessage = 'Este email ya está registrado. Por favor, inicia sesión con tu cuenta existente.';
+              break;
+            case AuthErrorCodes.USER_DELETED:
+              errorMessage = 'Usuario no encontrado';
+              break;
+            case AuthErrorCodes.INVALID_PASSWORD:
+              errorMessage = 'Contraseña incorrecta';
+              break;
+            case AuthErrorCodes.INVALID_EMAIL:
+              errorMessage = 'Email inválido';
+              break;
+            default:
+              errorMessage = err.message;
+          }
+        } else {
+          errorMessage = err.message;
         }
       }
       

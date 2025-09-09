@@ -5,7 +5,7 @@ export const AVAILABLE_PLANS: Plan[] = [
   {
     id: 'individual',
     name: 'Plan Individual',
-    price: 'Gratis',
+    price: 'USD 2/mes',
     maxUsers: 1,
     features: [
       'Gestión completa de clientes',
@@ -20,7 +20,7 @@ export const AVAILABLE_PLANS: Plan[] = [
   {
     id: 'business',
     name: 'Plan Business',
-    price: '$29/mes',
+    price: 'Pronto',
     maxUsers: 11,
     features: [
       'Gestión completa de clientes',
@@ -36,7 +36,7 @@ export const AVAILABLE_PLANS: Plan[] = [
   {
     id: 'enterprise',
     name: 'Plan Enterprise',
-    price: '$99/mes',
+    price: 'Pronto',
     maxUsers: null, // Ilimitado
     features: [
       'Gestión completa de clientes',
@@ -83,7 +83,7 @@ export const getUpgradeOptions = (currentPlanId: string): UpgradeOption[] => {
       {
         planId: 'business',
         name: 'Plan Business',
-        price: '$29/mes',
+        price: 'Pronto',
         maxUsers: 11,
         features: [
           'Hasta 10 empleados',
@@ -95,7 +95,7 @@ export const getUpgradeOptions = (currentPlanId: string): UpgradeOption[] => {
       {
         planId: 'enterprise',
         name: 'Plan Enterprise',
-        price: '$99/mes',
+        price: 'Pronto',
         maxUsers: null,
         features: [
           'Empleados ilimitados',
@@ -110,7 +110,7 @@ export const getUpgradeOptions = (currentPlanId: string): UpgradeOption[] => {
     upgradeOptions.push({
       planId: 'enterprise',
       name: 'Plan Enterprise',
-      price: '$99/mes',
+      price: 'Pronto',
       maxUsers: null,
       features: [
         'Empleados ilimitados',
@@ -131,12 +131,13 @@ export const calculateUpgradePrice = (fromPlanId: string, toPlanId: string): str
   
   if (!fromPlan || !toPlan) return 'Precio no disponible';
   
+  // Solo el plan Individual tiene precio definido
   if (fromPlanId === 'individual' && toPlanId === 'business') {
-    return '$29/mes';
+    return 'Pronto';
   } else if (fromPlanId === 'individual' && toPlanId === 'enterprise') {
-    return '$99/mes';
+    return 'Pronto';
   } else if (fromPlanId === 'business' && toPlanId === 'enterprise') {
-    return '$70/mes (diferencia)';
+    return 'Pronto';
   }
   
   return 'Precio no disponible';

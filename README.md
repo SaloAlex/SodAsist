@@ -1,225 +1,237 @@
-# Sistema Sodero - Gestión de Reparto de Agua
+# 🚀 SodAsist - Sistema Integral de Distribución de Bebidas
 
-Un sistema completo de gestión para empresas de reparto de agua y sodas, construido con React, Firebase y TailwindCSS.
+**Sistema web avanzado para la gestión integral de empresas distribuidoras de agua y bebidas, construido con tecnologías modernas y arquitectura escalable.**
 
-## ✨ Características
+## 🎯 Descripción del Proyecto
 
-- **Gestión de Clientes**: CRUD completo con geolocalización y seguimiento de deudas
-- **Optimización de Rutas**: Algoritmo de optimización con integración a Mapbox
-- **Registro de Entregas**: Formularios rápidos con firma digital y fotografías
-- **Inventario en Tiempo Real**: Control de stock del vehículo
-- **Reportes y KPIs**: Dashboard con métricas de negocio
-- **PWA**: Funcionalidad offline y instalable
-- **Autenticación**: Login con email/password y Google
-- **Responsive**: Diseño optimizado para móviles
+SodAsist es una aplicación web completa que combina gestión de inventario dinámico, optimización de rutas inteligente, análisis de datos en tiempo real y arquitectura multi-tenant. Diseñado para digitalizar y optimizar completamente el negocio de distribución de bebidas.
 
-## 🚀 Tecnologías
+## ✨ Características Principales
 
-- **Frontend**: React 18, TypeScript, Vite
-- **UI**: TailwindCSS, Lucide Icons, Recharts
-- **Estado**: Zustand con persistencia
-- **Backend**: Firebase (Firestore, Auth, Functions, Storage, Hosting)
-- **Mapas**: Mapbox para optimización de rutas
-- **PWA**: Service Worker, Web App Manifest
+### 🏢 **Sistema Multi-Tenant**
+- **Arquitectura escalable** para múltiples clientes simultáneos
+- **Aislamiento completo** de datos por tenant
+- **Configuración por dominio** para cada empresa
+- **Planes flexibles** (Individual, Business, Enterprise)
 
-## 📦 Instalación
+### 📦 **Inventario Dinámico**
+- **Productos configurables** con categorías personalizables
+- **Control de stock** en tiempo real con alertas automáticas
+- **Movimientos de inventario** con trazabilidad completa
+- **Inventario vehicular** para control de productos en ruta
+- **Validaciones automáticas** de stock mínimo/máximo
 
-### 1. Clonar el repositorio
+### 🗺️ **Optimización de Rutas Inteligente**
+- **Algoritmo de optimización** con Google Maps API
+- **Geocodificación masiva** con rate limiting
+- **Cálculo de distancias y tiempos** con tráfico en tiempo real
+- **Agrupación por zonas** para rutas grandes (>25 puntos)
+- **Navegación integrada** con Google Maps
 
-```bash
-git clone <repository-url>
-cd sistema-sodero
+### 📊 **Dashboard Ejecutivo**
+- **Métricas en tiempo real**: ventas, entregas, eficiencia
+- **Gráficos interactivos** con exportación (PNG, PDF, CSV)
+- **Análisis de pagos** por método y estado
+- **Widgets configurables** con pestañas dinámicas
+- **Comparativas temporales** (hoy vs ayer, semana, mes)
+
+### 👥 **Gestión de Clientes Avanzada**
+- **Geolocalización automática** con validación de direcciones
+- **Frecuencias de visita** configurables
+- **Historial completo** de entregas y pagos
+- **Cálculo automático** de saldos pendientes
+- **Segmentación por zonas** geográficas
+
+### 📱 **Sistema de Entregas**
+- **Formularios dinámicos** adaptables por producto
+- **Firma digital** y fotografías de entrega
+- **Múltiples métodos de pago** (efectivo, transferencia, tarjeta)
+- **Actualización automática** de inventario y saldos
+- **Notificaciones push** al cliente
+
+## 🚀 Stack Tecnológico
+
+### **Frontend**
+- **React 18.3.1** con TypeScript 5.5.3
+- **Vite 6.3.5** como build tool optimizado
+- **TailwindCSS 3.4.1** para UI responsiva
+- **Zustand 4.4.7** para estado global con persistencia
+- **React Router DOM 6.20.1** para navegación
+- **Lucide React 0.344.0** para iconografía (2000+ iconos)
+
+### **Backend & Base de Datos**
+- **Firebase 12.1.0** (Firestore, Auth, Functions, Storage, Hosting)
+- **Cloud Functions** con Node.js y TypeScript
+- **Firebase Auth** con roles multi-nivel
+- **Firestore** con estructura multi-tenant
+- **Firebase Storage** para archivos e imágenes
+
+### **Servicios Externos**
+- **Google Maps API** con optimización de rutas
+- **Firebase Cloud Messaging** + Service Workers
+- **jsPDF + html2canvas** para exportación de reportes
+- **Recharts 2.15.4** para gráficos interactivos
+
+### **Herramientas de Desarrollo**
+- **ESLint** con configuración estricta
+- **TypeScript** con tipado estricto
+- **Vitest** para testing
+- **Testing Library** para componentes React
+
+## 🏗️ Arquitectura y Componentes
+
+### **Hooks Personalizados**
+```typescript
+// Hook para React Query optimizado
+export const useProductosQuery = () => {
+  return useQuery({
+    queryKey: ['productos', 'paginados', filtros, paginacion],
+    queryFn: () => ProductosService.getProductosPaginados(filtros, paginacion),
+    placeholderData: (previousData) => previousData, // React Query v5
+    gcTime: 10 * 60 * 1000
+  });
+};
 ```
 
-### 2. Instalar dependencias
+### **Servicios Especializados**
+- **FirebaseService**: CRUD genérico con multi-tenancy
+- **InventarioService**: Transacciones atómicas con validaciones
+- **RouteOptimizer**: Algoritmos de optimización avanzados
+- **ChartExportService**: Exportación de gráficos en múltiples formatos
+- **PushNotificationService**: Notificaciones push con FCM
 
-```bash
-npm install
-```
-
-### 3. Configurar Firebase
-
-1. Crear un nuevo proyecto en [Firebase Console](https://console.firebase.google.com/)
-2. Habilitar Authentication (Email/Password y Google)
-3. Crear base de datos Firestore
-4. Habilitar Storage
-5. Copiar la configuración de Firebase
-
-### 4. Configurar variables de entorno
-
-```bash
-cp .env.example .env
-```
-
-Editar `.env` con tus credenciales de Firebase:
-
-```env
-VITE_FIREBASE_API_KEY=tu_api_key
-VITE_FIREBASE_AUTH_DOMAIN=tu_proyecto.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=tu_proyecto
-VITE_FIREBASE_STORAGE_BUCKET=tu_proyecto.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=tu_sender_id
-VITE_FIREBASE_APP_ID=tu_app_id
-
-# Opcional: Token de Mapbox para optimización de rutas
-VITE_MAPBOX_ACCESS_TOKEN=tu_mapbox_token
-```
-
-### 5. Configurar Firebase Functions
-
-```bash
-cd functions
-npm install
-cd ..
-```
-
-### 6. Inicializar Firebase
-
-```bash
-npm install -g firebase-tools
-firebase login
-firebase init
-```
-
-## 🛠️ Desarrollo
-
-### Ejecutar en desarrollo
-
-```bash
-# Frontend
-npm run dev
-
-# Emuladores de Firebase (en otra terminal)
-firebase emulators:start
-```
-
-### Construir para producción
-
-```bash
-npm run build
-```
-
-### Ejecutar tests
-
-```bash
-npm test
-```
-
-## 🚀 Despliegue
-
-### Desplegar a Firebase Hosting
-
-```bash
-# Construir y desplegar
-npm run build
-firebase deploy
-
-# Solo hosting
-firebase deploy --only hosting
-
-# Solo functions
-firebase deploy --only functions
-```
-
-## 📱 Uso
-
-### Primer Uso
-
-1. Acceder a la aplicación
-2. Registrarse con email/password o Google
-3. Completar el perfil de usuario
-4. Comenzar a agregar clientes
-5. Registrar entregas
-
-### Funcionalidades Principales
-
-- **Dashboard**: Vista general con KPIs y acciones rápidas
-- **Clientes**: Gestión completa de la base de clientes
-- **Ruta de Hoy**: Optimización automática de rutas diarias
-- **Entregas**: Registro rápido con firma y fotos
-- **Inventario**: Control de stock en tiempo real
-- **Reportes**: Análisis de ventas y tendencias
+### **Componentes UI Reutilizables**
+- **DataTable**: Tabla avanzada con paginación, búsqueda y ordenamiento
+- **ChartCard**: Gráficos interactivos con exportación
+- **GoogleMapsErrorBoundary**: Manejo de errores de Google Maps
+- **NotificationSettings**: Configuración de notificaciones push
+- **Pagination**: Paginación completa con controles avanzados
 
 ## 📊 Estructura de Datos
 
-### Clientes
+### **Modelo de Datos Principal**
 ```typescript
-{
+interface Producto {
   id: string;
   nombre: string;
-  direccion: string;
-  telefono: string;
-  lat?: number;
-  lng?: number;
-  frecuenciaVisita: 'diaria' | 'semanal' | 'bisemanal' | 'mensual';
-  saldoPendiente: number;
-  observaciones?: string;
+  categoria: string;
+  precioCompra: number;
+  precioVenta: number;
+  stock: number;
+  stockMinimo: number;
+  unidadMedida: UnidadMedida;
+  activo: boolean;
 }
-```
 
-### Entregas
-```typescript
-{
+interface Entrega {
   id: string;
   clienteId: string;
-  fecha: Date;
-  sodas: number;
-  bidones10: number;
-  bidones20: number;
+  productos?: ProductoEntrega[]; // Sistema dinámico
   total: number;
   pagado: boolean;
-  medioPago?: string;
+  medioPago?: 'efectivo' | 'transferencia' | 'tarjeta';
   firmaURL?: string;
   fotoEntregaURL?: string;
 }
 ```
 
-## 🔧 Configuración Avanzada
+### **Multi-Tenancy**
+- **Estructura**: `tenants/{email}/{collection}/{document}`
+- **Aislamiento**: Datos completamente separados por tenant
+- **Escalabilidad**: Soporte para múltiples clientes simultáneos
 
-### Reglas de Firestore
-Las reglas de seguridad están configuradas para:
-- Usuarios autenticados pueden leer/escribir sus datos
-- Acceso controlado por roles (admin/sodero)
-- Validación de datos en el servidor
+## 🔒 Seguridad y Configuración
 
-### Cloud Functions
-- **onEntregaCreate**: Actualiza saldos e inventario automáticamente
-- **genFacturaPdf**: Genera facturas en PDF
-- **getKpisDaily**: Calcula KPIs diarios
-- **generateDailyKpis**: Tarea programada para generar KPIs
+### **Variables de Entorno**
+```env
+VITE_FIREBASE_API_KEY=tu_api_key
+VITE_FIREBASE_AUTH_DOMAIN=tu_proyecto.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=tu_proyecto
+VITE_GOOGLE_MAPS_API_KEY=tu_google_maps_key
+VITE_FIREBASE_VAPID_KEY=tu_vapid_key
+```
 
-### PWA
-- Funcionalidad offline básica
-- Instalable en dispositivos móviles
-- Caché de recursos críticos
+### **Reglas de Seguridad Firestore**
+- **Autenticación requerida** para todas las operaciones
+- **Aislamiento por tenant** usando el email del usuario
+- **Validación de datos** en el servidor
+- **Control de acceso** basado en roles
 
-## 🤝 Contribuir
+## 🚀 Características Avanzadas
 
-1. Fork el proyecto
-2. Crear una rama para tu feature (`git checkout -b feature/amazing-feature`)
-3. Commit tus cambios (`git commit -m 'Add amazing feature'`)
-4. Push a la rama (`git push origin feature/amazing-feature`)
-5. Abrir un Pull Request
+### **PWA (Progressive Web App)**
+- **Service Worker** con caché inteligente
+- **Instalable** en dispositivos móviles
+- **Funcionalidad offline** básica
+- **Notificaciones push** nativas
 
-## 📄 Licencia
+### **Optimizaciones de Rendimiento**
+- **Code splitting** automático con Vite
+- **Tree shaking** para reducir bundle size
+- **Lazy loading** de componentes pesados
+- **Memoización** de cálculos complejos
+- **Virtual scrolling** para listas grandes
 
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
+### **Internacionalización**
+- **Configuración en español** para todas las librerías
+- **Formatos locales** para fechas y números
+- **Zona horaria** configurada para Argentina
 
-## 🆘 Soporte
+## 🔄 Flujos de Trabajo
 
-Para reportar bugs o solicitar features, por favor abrir un [issue](https://github.com/tu-usuario/sistema-sodero/issues).
+### **Proceso de Entrega**
+1. **Selección de cliente** desde la ruta optimizada
+2. **Registro de productos** entregados
+3. **Captura de firma** digital del cliente
+4. **Fotografía de entrega** (opcional)
+5. **Procesamiento de pago** inmediato o diferido
+6. **Actualización automática** de inventario y saldos
+7. **Generación de comprobante** digital
 
-## 📈 Roadmap
+### **Optimización de Rutas**
+1. **Selección de clientes** para el día
+2. **Geocodificación** de direcciones
+3. **Cálculo de matriz** de distancias
+4. **Aplicación de algoritmo** de optimización
+5. **Generación de ruta** con estadísticas
+6. **Navegación integrada** con Google Maps
 
-- [ ] Notificaciones push
-- [ ] Integración con sistemas de facturación
-- [ ] Análisis predictivo de demanda
-- [ ] Integración con GPS del vehículo
-- [ ] App móvil nativa
-- [ ] Integración con sistemas de pago
-- [ ] Módulo de empleados y turnos
-- [ ] Exportación de datos
+## 📈 Métricas y KPIs
+
+- **Entregas por día/semana/mes**
+- **Ventas totales y por producto**
+- **Eficiencia de ruta** (tiempo/distancia)
+- **Tasa de cobranza** y morosidad
+- **Rotación de inventario**
+- **Satisfacción del cliente**
+
+## 🎯 Casos de Uso Principales
+
+1. **Distribuidor Individual**: Gestión personal de ruta diaria
+2. **Empresa Pequeña**: Equipo de 2-10 repartidores
+3. **Empresa Grande**: Múltiples rutas y supervisores
+4. **Franquicia**: Gestión multi-tenant con reportes centralizados
+
+## 💡 Valor Diferencial
+
+1. **Multi-tenancy nativo**: Escalabilidad empresarial
+2. **Inventario dinámico**: Adaptable a cualquier tipo de producto
+3. **Optimización de rutas**: Ahorro real de tiempo y combustible
+4. **PWA completa**: Experiencia nativa en web
+5. **Arquitectura moderna**: Tecnologías de vanguardia
+6. **Exportación avanzada**: Reportes profesionales en múltiples formatos
+
+## 🔮 Roadmap Futuro
+
+- [ ] **Integración con sistemas de facturación**
+- [ ] **Análisis predictivo** de demanda
+- [ ] **App móvil nativa** (React Native)
+- [ ] **Integración con GPS** del vehículo
+- [ ] **Sistema de empleados** y turnos avanzado
+- [ ] **Integración con pasarelas** de pago
 
 ---
 
-Desarrollado con ❤️ para optimizar el negocio de reparto de agua.
+**SodAsist representa una solución integral, escalable y moderna para la digitalización completa de empresas distribuidoras, con un enfoque especial en la experiencia del usuario y la eficiencia operacional.**
+
+*Desarrollado con tecnologías de vanguardia para optimizar el negocio de distribución de bebidas.*

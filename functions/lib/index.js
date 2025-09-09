@@ -23,18 +23,24 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateDailyKpis = exports.getKpisDailyData = exports.generateFacturaPdf = exports.onEntregaCreated = void 0;
+exports.generateDailyKpis = exports.syncIndividualInventoryData = exports.getKpisDailyData = exports.generateFacturaPdf = exports.onUserCreated = exports.onProductoUpdated = exports.onEntregaCreated = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
 const onEntregaCreate_1 = require("./triggers/onEntregaCreate");
+const onProductoUpdate_1 = require("./triggers/onProductoUpdate");
+const onUserCreate_1 = require("./triggers/onUserCreate");
 const genFacturaPdf_1 = require("./functions/genFacturaPdf");
 const getKpisDaily_1 = require("./functions/getKpisDaily");
+const syncIndividualInventory_1 = require("./functions/syncIndividualInventory");
 admin.initializeApp();
 // Triggers
 exports.onEntregaCreated = onEntregaCreate_1.onEntregaCreate;
+exports.onProductoUpdated = onProductoUpdate_1.onProductoUpdate;
+exports.onUserCreated = onUserCreate_1.onUserCreate;
 // Callable functions
 exports.generateFacturaPdf = genFacturaPdf_1.genFacturaPdf;
 exports.getKpisDailyData = getKpisDaily_1.getKpisDaily;
+exports.syncIndividualInventoryData = syncIndividualInventory_1.syncIndividualInventory;
 // Scheduled functions
 exports.generateDailyKpis = (0, scheduler_1.onSchedule)({
     schedule: '0 1 * * *',
