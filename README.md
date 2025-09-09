@@ -1,4 +1,4 @@
-# Sistema Sodero - Gestión de Reparto de Agua
+# VaListo - Gestión de Reparto de Agua
 
 Un sistema completo de gestión para empresas de reparto de agua y sodas, construido con React, Firebase y TailwindCSS.
 
